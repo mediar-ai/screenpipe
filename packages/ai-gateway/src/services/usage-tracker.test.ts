@@ -4,7 +4,7 @@ import { TIER_CONFIG, isModelAllowed } from './usage-tracker';
 describe('TIER_CONFIG', () => {
   it('should have correct limits for anonymous tier', () => {
     expect(TIER_CONFIG.anonymous.dailyQueries).toBe(25);
-    expect(TIER_CONFIG.anonymous.rpm).toBeLessThanOrEqual(10);
+    expect(TIER_CONFIG.anonymous.rpm).toBeLessThanOrEqual(15);
     expect(TIER_CONFIG.anonymous.allowedModels).toContain('claude-haiku-4-5');
   });
 

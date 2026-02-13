@@ -7,6 +7,7 @@
 //! All routes expect [`AppState`] to contain a `pipe_manager` field.
 
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::Json;
 use screenpipe_core::pipes::PipeManager;
 use serde::Deserialize;
@@ -98,11 +99,14 @@ pub async fn update_pipe_config(
     State(pm): State<SharedPipeManager>,
     Path(id): Path<String>,
     Json(body): Json<ConfigUpdateRequest>,
-) -> Json<Value> {
+) -> (StatusCode, Json<Value>) {
     let mgr = pm.lock().await;
     match mgr.update_config(&id, body.config).await {
-        Ok(()) => Json(json!({ "success": true })),
-        Err(e) => Json(json!({ "error": e.to_string() })),
+        Ok(()) => (StatusCode::OK, Json(json!({ "success": true }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": e.to_string() })),
+        ),
     }
 }
 

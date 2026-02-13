@@ -704,7 +704,6 @@ export default function Timeline() {
 		getStartDateAndSet();
 	}, []);
 
-	const dateRetryCountRef = useRef(0);
 	const MAX_DATE_RETRIES = 7; // Don't walk back more than 7 days
 
 	useEffect(() => {
@@ -713,49 +712,61 @@ export default function Timeline() {
 			return;
 		}
 
-		let currentDateEffect = new Date(currentDate);
-		const isToday = isSameDay(currentDateEffect, new Date());
-		const checkIfThereAreFrames = async () => {
+		let cancelled = false;
+
+		const findDateWithFrames = async () => {
+			let dateToCheck = new Date(currentDate);
+			const isToday = isSameDay(dateToCheck, new Date());
+
 			// For today, always fetch — live polling will push new frames.
-			// The 5-minute buffer in hasFramesForDate can falsely return false
-			// when the user just started recording or recently opened the app.
-			if (!isToday) {
-				const checkFramesForDate = await hasFramesForDate(currentDateEffect);
-				console.log("checkFramesForDate", currentDateEffect, checkFramesForDate);
-				// Only auto-navigate to previous day if NOT during intentional navigation
-				// (e.g., user clicking day arrows). During navigation, handleDateChange
-				// already handles finding dates with frames.
-				if (!checkFramesForDate && !isNavigatingRef.current) {
-					// Prevent infinite loop: stop walking back after MAX_DATE_RETRIES days
-					if (dateRetryCountRef.current >= MAX_DATE_RETRIES) {
-						console.warn("no frames found after checking", MAX_DATE_RETRIES, "days back, stopping");
-						dateRetryCountRef.current = 0;
-						return;
-					}
-					dateRetryCountRef.current += 1;
-					setCurrentDate(subDays(currentDateEffect, 1));
-					return; // Don't fetch frames for a date we're leaving
+			// For other dates, walk back to find a date with frames.
+			if (!isToday && !isNavigatingRef.current) {
+				let retries = 0;
+				while (retries < MAX_DATE_RETRIES) {
+					if (cancelled) return;
+					const checkFramesForDate = await hasFramesForDate(dateToCheck);
+					if (cancelled) return;
+					console.log("checkFramesForDate", dateToCheck, checkFramesForDate);
+					if (checkFramesForDate) break;
+					retries++;
+					dateToCheck = subDays(dateToCheck, 1);
+				}
+
+				if (cancelled) return;
+
+				if (retries > 0 && retries < MAX_DATE_RETRIES) {
+					// Found frames on a different date — update once
+					// The effect will re-run with the new date, find frames immediately,
+					// and proceed to fetchTimeRange below.
+					setCurrentDate(dateToCheck);
+					return;
+				}
+				if (retries >= MAX_DATE_RETRIES) {
+					console.warn("no frames found after checking", MAX_DATE_RETRIES, "days back, stopping");
+					return;
 				}
 			}
 
-			// Found frames (or today) — reset retry counter
-			dateRetryCountRef.current = 0;
+			if (cancelled) return;
 
-			const startTime = new Date(currentDateEffect);
-			startTime.setHours(0, 0, 0, 0);
-
-			const endTime = new Date(currentDateEffect);
-			// Always set endTime to end of day (23:59:59) so server can poll for new frames
-			// Server checks `now <= end_time` to decide whether to continue polling
-			endTime.setHours(23, 59, 59, 999);
+			const startTime = startOfDay(dateToCheck);
+			const endTime = endOfDay(dateToCheck);
 			fetchTimeRange(startTime, endTime);
-		}
-		checkIfThereAreFrames();
+		};
+
+		findDateWithFrames();
+
+		return () => {
+			cancelled = true;
+		};
 	}, [currentDate, websocket]); // Re-run when websocket connects or date changes
 
 	// Sync currentDate to frame's date - but NOT during intentional navigation
 	// This effect helps when scrolling across day boundaries, but must not fight
-	// with explicit day changes from the controls
+	// with explicit day changes from the controls.
+	// IMPORTANT: We read currentDate from the store snapshot (not a React dep)
+	// to break the circular dependency: this effect sets currentDate, which would
+	// re-trigger this effect if currentDate were in the dep array.
 	useEffect(() => {
 		// Skip if we're in the middle of intentional navigation
 		if (isNavigatingRef.current) {
@@ -763,11 +774,12 @@ export default function Timeline() {
 		}
 		if (currentFrame) {
 			const frameDate = new Date(currentFrame.timestamp);
-			if (!isSameDay(frameDate, currentDate)) {
+			const storeDate = useTimelineStore.getState().currentDate;
+			if (!isSameDay(frameDate, storeDate)) {
 				setCurrentDate(frameDate);
 			}
 		}
-	}, [currentFrame, currentDate]);
+	}, [currentFrame]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const handleScroll = useMemo(
 		() =>

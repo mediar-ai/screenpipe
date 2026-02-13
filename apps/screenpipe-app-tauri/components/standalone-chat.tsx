@@ -21,6 +21,7 @@ import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
 import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
 // OpenAI SDK no longer used directly — all providers route through Pi agent
+import posthog from "posthog-js";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -137,7 +138,8 @@ interface ToolCall {
 
 type ContentBlock =
   | { type: "text"; text: string }
-  | { type: "tool"; toolCall: ToolCall };
+  | { type: "tool"; toolCall: ToolCall }
+  | { type: "thinking"; text: string; isThinking: boolean; durationMs?: number };
 
 interface Message {
   id: string;
@@ -161,14 +163,46 @@ const TOOL_ICONS: Record<string, string> = {
 // Grid dissolve loading indicator — 5x4 grid of cells that randomly toggle
 // black/white like pixels being scanned. Geometric, screen-capture themed.
 function GridDissolveLoader({ label = "analyzing..." }: { label?: string }) {
+  const ROWS = 4;
+  const COLS = 5;
+  const TOTAL = ROWS * COLS;
+  const [cells, setCells] = useState<boolean[]>(() =>
+    Array.from({ length: TOTAL }, () => Math.random() > 0.5)
+  );
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setCells((prev) => {
+        const next = [...prev];
+        const count = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(Math.random() * TOTAL);
+          next[idx] = !next[idx];
+        }
+        return next;
+      });
+    }, 120);
+    return () => window.clearInterval(id);
+  }, []);
+
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1">
-        {[0, 1, 2].map((i) => (
-          <span
+      <div
+        className="grid shrink-0"
+        style={{
+          gridTemplateColumns: `repeat(${COLS}, 8px)`,
+          gridTemplateRows: `repeat(${ROWS}, 8px)`,
+          gap: "2px",
+        }}
+      >
+        {cells.map((on, i) => (
+          <div
             key={i}
-            className="block h-1.5 w-1.5 rounded-full bg-current opacity-40 animate-pulse"
-            style={{ animationDelay: `${i * 200}ms`, animationDuration: "1s" }}
+            className={cn(
+              "border transition-colors duration-[120ms]",
+              on ? "bg-foreground border-foreground" : "bg-transparent border-border"
+            )}
+            style={{ width: 8, height: 8 }}
           />
         ))}
       </div>
@@ -233,6 +267,42 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
               </pre>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ThinkingBlock({ text, isThinking, durationMs }: { text: string; isThinking: boolean; durationMs?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!isThinking) return;
+    const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [isThinking]);
+
+  const seconds = isThinking ? elapsed : durationMs ? Math.round(durationMs / 1000) : 0;
+
+  return (
+    <div className="rounded-lg border border-border/30 bg-muted/20 text-xs overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/40 transition-colors text-left"
+      >
+        <div className={cn("h-2 w-2 rounded-full", isThinking ? "bg-foreground/60 animate-pulse" : "bg-foreground/30")} />
+        <span className="font-mono text-muted-foreground">
+          {isThinking ? `thinking... (${seconds}s)` : `thought for ${seconds}s`}
+        </span>
+        <span className="ml-auto text-muted-foreground">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && text.trim() && (
+        <div className="px-3 py-2 border-t border-border/30">
+          <div className="pl-3 border-l-2 border-border/40 text-muted-foreground font-mono whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto text-[11px] leading-relaxed">
+            {text}
+          </div>
         </div>
       )}
     </div>
@@ -362,6 +432,9 @@ function MessageContent({ message }: { message: Message }) {
           if (block.type === "tool") {
             return <ToolCallBlock key={block.toolCall.id} toolCall={block.toolCall} />;
           }
+          if (block.type === "thinking") {
+            return <ThinkingBlock key={`thinking-${i}`} text={block.text} isThinking={block.isThinking} durationMs={block.durationMs} />;
+          }
           return null;
         })}
       </>
@@ -412,6 +485,7 @@ export function StandaloneChat() {
   const piStartInFlightRef = useRef(false);
   const piRestartCountRef = useRef(0);
   const piStoppedIntentionallyRef = useRef(false);
+  const piThinkingStartRef = useRef<number | null>(null);
 
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1089,6 +1163,46 @@ export function StandaloneChat() {
                 prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m)
               );
             }
+          } else if (evt.type === "thinking_start") {
+            piThinkingStartRef.current = Date.now();
+            const blocks = piContentBlocksRef.current;
+            blocks.push({ type: "thinking", text: "", isThinking: true });
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              const contentBlocks = [...blocks];
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: m.content === "Processing..." ? "" : m.content, contentBlocks } : m)
+              );
+            }
+          } else if (evt.type === "thinking_delta" && evt.delta) {
+            const blocks = piContentBlocksRef.current;
+            const thinkingBlock = blocks[blocks.length - 1];
+            if (thinkingBlock && thinkingBlock.type === "thinking") {
+              thinkingBlock.text += evt.delta;
+            }
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              const contentBlocks = [...blocks];
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: m.content === "Processing..." ? "" : m.content, contentBlocks } : m)
+              );
+            }
+          } else if (evt.type === "thinking_end") {
+            const blocks = piContentBlocksRef.current;
+            const thinkingBlock = blocks[blocks.length - 1];
+            if (thinkingBlock && thinkingBlock.type === "thinking") {
+              thinkingBlock.isThinking = false;
+              thinkingBlock.durationMs = piThinkingStartRef.current ? Date.now() - piThinkingStartRef.current : undefined;
+              if (evt.content) thinkingBlock.text = evt.content;
+            }
+            piThinkingStartRef.current = null;
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              const contentBlocks = [...blocks];
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, contentBlocks } : m)
+              );
+            }
           }
         } else if (data.type === "tool_execution_start") {
           if (piMessageIdRef.current) {
@@ -1141,6 +1255,7 @@ export function StandaloneChat() {
               if (match) setUpgradeResetsAt(match[1]);
             } catch {}
             setUpgradeReason("daily_limit");
+            posthog.capture("wall_hit", { reason: "daily_limit", source: "chat" });
 
             if (piMessageIdRef.current) {
               const msgId = piMessageIdRef.current;
@@ -1204,6 +1319,11 @@ export function StandaloneChat() {
                   .map((c: any) => c.text))
                 .join("\n\n");
             }
+            // Snapshot refs BEFORE setMessages — React's batching may defer the
+            // functional updater until after the refs are cleared below.
+            const blocksSnapshot = [...piContentBlocksRef.current];
+            const streamedText = piStreamingTextRef.current;
+
             // Check if content was already set by error handlers above
             setMessages((prev) => {
               const existing = prev.find((m) => m.id === msgId);
@@ -1218,15 +1338,17 @@ export function StandaloneChat() {
               if (existing && existing.content !== "Processing..." && !content) {
                 return prev;
               }
-              const contentBlocks = [...piContentBlocksRef.current];
-              // If no text content but we have tool calls, don't show "Done" — the tool blocks speak for themselves
-              const hasToolBlocks = contentBlocks.some((b) => b.type === "tool");
-              if (!content && hasToolBlocks) {
-                content = ""; // empty — tool blocks will render
+              const contentBlocks = [...blocksSnapshot];
+              // If no text content but we have tool/thinking blocks, don't show "no response"
+              const hasNonTextBlocks = contentBlocks.some((b) => b.type === "tool" || b.type === "thinking");
+              if (!content && hasNonTextBlocks) {
+                content = ""; // empty — tool/thinking blocks will render
               } else if (!content) {
                 content = "no response from model — try a different prompt or model";
               }
-              if (!piStreamingTextRef.current && content && contentBlocks.length === 0) {
+              // Add text as a content block if no text block exists yet
+              const hasTextBlock = contentBlocks.some((b) => b.type === "text");
+              if (!streamedText && content && !hasTextBlock) {
                 contentBlocks.push({ type: "text", text: content });
               }
               return prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m);
@@ -1235,6 +1357,7 @@ export function StandaloneChat() {
           piStreamingTextRef.current = "";
           piMessageIdRef.current = null;
           piContentBlocksRef.current = [];
+          piThinkingStartRef.current = null;
           setIsLoading(false);
           setIsStreaming(false);
         } else if (data.type === "response" && data.success === false) {
@@ -2168,6 +2291,7 @@ export function StandaloneChat() {
         onOpenChange={setShowUpgradeDialog}
         reason={upgradeReason}
         resetsAt={upgradeResetsAt}
+        source="chat"
       />
     </div>
   );

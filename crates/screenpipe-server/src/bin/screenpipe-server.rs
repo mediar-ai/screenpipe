@@ -895,6 +895,13 @@ async fn main() -> anyhow::Result<()> {
     agent_executors.insert("pi".to_string(), pi_executor.clone());
 
     let mut pipe_manager = screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
+    pipe_manager.set_on_run_complete(std::sync::Arc::new(|pipe_name, success, duration_secs| {
+        analytics::capture_event_nonblocking("pipe_scheduled_run", serde_json::json!({
+            "pipe": pipe_name,
+            "success": success,
+            "duration_secs": duration_secs,
+        }));
+    }));
     pipe_manager.install_builtin_pipes().ok();
     if let Err(e) = pipe_manager.load_pipes().await {
         tracing::warn!("failed to load pipes: {}", e);

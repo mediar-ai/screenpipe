@@ -12,8 +12,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Settings } from "@/lib/hooks/use-settings";
 import { open } from "@tauri-apps/plugin-shell";
-import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
+import { commands } from "@/lib/utils/tauri";
 import { UpdateBanner } from "@/components/update-banner";
 
 export default function GeneralSettings() {
@@ -89,7 +89,8 @@ export default function GeneralSettings() {
         description: `installing v${version}. this is at your own risk — db migrations are not reversed.`,
         duration: 10000,
       });
-      await invoke("rollback_to_version", { version });
+      const result = await commands.rollbackToVersion(version);
+      if (result.status === "error") throw new Error(result.error);
     } catch (e: any) {
       setIsRollingBack(false);
       toast({

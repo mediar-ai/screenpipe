@@ -16,8 +16,8 @@ use oasgen::{oasgen, OaSchema, Server};
 
 use chrono::TimeZone;
 use screenpipe_db::{
-    ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
-    TagContentType, TextPosition,
+    ContentType, DatabaseManager, FrameData, Order, SearchResult, Speaker, TagContentType,
+    TextPosition,
 };
 
 use tokio_util::io::ReaderStream;
@@ -1273,25 +1273,25 @@ impl SCServer {
                     "/install",
                     axum::routing::post(crate::pipes_api::install_pipe),
                 )
-                .route("/{id}", axum::routing::get(crate::pipes_api::get_pipe))
+                .route("/:id", axum::routing::get(crate::pipes_api::get_pipe))
                 .route(
-                    "/{id}",
+                    "/:id",
                     axum::routing::delete(crate::pipes_api::delete_pipe),
                 )
                 .route(
-                    "/{id}/enable",
+                    "/:id/enable",
                     axum::routing::post(crate::pipes_api::enable_pipe),
                 )
                 .route(
-                    "/{id}/run",
+                    "/:id/run",
                     axum::routing::post(crate::pipes_api::run_pipe_now),
                 )
                 .route(
-                    "/{id}/logs",
+                    "/:id/logs",
                     axum::routing::get(crate::pipes_api::get_pipe_logs),
                 )
                 .route(
-                    "/{id}/config",
+                    "/:id/config",
                     axum::routing::post(crate::pipes_api::update_pipe_config),
                 )
                 .with_state(pm.clone());
@@ -2855,34 +2855,68 @@ async fn handle_video_export(
 async fn keyword_search_handler(
     Query(query): Query<KeywordSearchRequest>,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<SearchMatch>>, (StatusCode, JsonResponse<Value>)> {
-    let matches = state
-        .db
-        .search_with_text_positions(
-            &query.query,
-            query.limit,
-            query.offset,
-            query.start_time,
-            query.end_time,
-            query.fuzzy_match,
-            query.order,
-            query.app_names,
-        )
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if query.group {
+        // max_per_app=30 ensures no single app dominates results.
+        // With 10 apps that's max 300 rows — fast and diverse.
+        let matches = state
+            .db
+            .search_with_text_positions(
+                &query.query,
+                500, // overall cap
+                0,
+                query.start_time,
+                query.end_time,
+                query.fuzzy_match,
+                query.order,
+                query.app_names,
+                Some(30), // max 30 results per app
             )
-        })?;
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": e.to_string()})),
+                )
+            })?;
 
-    // Filter out screenpipe results at display time
-    let filtered: Vec<_> = matches
-        .into_iter()
-        .filter(|m| !m.app_name.to_lowercase().contains("screenpipe"))
-        .collect();
+        let filtered: Vec<_> = matches
+            .into_iter()
+            .filter(|m| !m.app_name.to_lowercase().contains("screenpipe"))
+            .collect();
 
-    Ok(JsonResponse(filtered))
+        let groups = DatabaseManager::cluster_search_matches(filtered, 120);
+
+        Ok(JsonResponse(json!(groups)))
+    } else {
+        let matches = state
+            .db
+            .search_with_text_positions(
+                &query.query,
+                query.limit,
+                query.offset,
+                query.start_time,
+                query.end_time,
+                query.fuzzy_match,
+                query.order,
+                query.app_names,
+                None, // no per-app limit for flat results
+            )
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": e.to_string()})),
+                )
+            })?;
+
+        let filtered: Vec<_> = matches
+            .into_iter()
+            .filter(|m| !m.app_name.to_lowercase().contains("screenpipe"))
+            .collect();
+
+        Ok(JsonResponse(json!(filtered)))
+    }
 }
 
 fn from_comma_separated_string<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
@@ -2911,6 +2945,8 @@ pub struct KeywordSearchRequest {
     #[serde(default)]
     #[serde(deserialize_with = "from_comma_separated_string")]
     app_names: Option<Vec<String>>,
+    #[serde(default)]
+    group: bool,
 }
 
 /// Query parameters for frame retrieval

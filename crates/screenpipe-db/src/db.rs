@@ -29,7 +29,8 @@ use crate::{
     text_similarity::is_similar_transcription, AudioChunksResponse, AudioDevice, AudioEntry,
     AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, FrameWindowData,
     InsertUiEvent, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch,
-    SearchResult, Speaker, TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent,
+    SearchMatchGroup, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
+    TimeSeriesChunk, UiContent,
     UiEventRecord, UiEventRow, VideoMetadata,
 };
 
@@ -3124,6 +3125,7 @@ impl DatabaseManager {
         fuzzy_match: bool,
         order: Order,
         app_names: Option<Vec<String>>,
+        max_per_app: Option<u32>,
     ) -> Result<Vec<SearchMatch>, sqlx::Error> {
         let mut conditions = Vec::new();
         let mut owned_conditions = Vec::new();
@@ -3177,8 +3179,52 @@ impl DatabaseManager {
             "1".to_string()
         };
 
-        let sql = format!(
-            r#"
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let order_dir = match order {
+            Order::Ascending => "ASC",
+            Order::Descending => "DESC",
+        };
+
+        let sql = if let Some(cap) = max_per_app {
+            // Use ROW_NUMBER() to limit results per app, ensuring diversity.
+            // Without this, a single dominant app (e.g. terminal) can fill
+            // the entire result set, hiding results from other apps.
+            format!(
+                r#"
+SELECT id, timestamp, url, app_name, window_name, ocr_text, text_json FROM (
+    SELECT
+        f.id,
+        f.timestamp,
+        f.browser_url as url,
+        COALESCE(f.app_name, o.app_name) as app_name,
+        COALESCE(f.window_name, o.window_name) as window_name,
+        o.text as ocr_text,
+        o.text_json,
+        ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(f.app_name, o.app_name)
+            ORDER BY f.timestamp {order_dir}, {relevance} DESC
+        ) as app_rn
+    FROM frames f
+    INNER JOIN ocr_text o ON f.id = o.frame_id
+    WHERE {where_clause}
+)
+WHERE app_rn <= {cap}
+ORDER BY timestamp {order_dir}
+LIMIT ? OFFSET ?
+"#,
+                order_dir = order_dir,
+                relevance = relevance_case,
+                where_clause = where_clause,
+                cap = cap
+            )
+        } else {
+            format!(
+                r#"
 SELECT
     f.id,
     f.timestamp,
@@ -3193,17 +3239,9 @@ WHERE {}
 ORDER BY f.timestamp {}, {} DESC
 LIMIT ? OFFSET ?
 "#,
-            if conditions.is_empty() {
-                "1=1".to_string()
-            } else {
-                conditions.join(" AND ")
-            },
-            match order {
-                Order::Ascending => "ASC",
-                Order::Descending => "DESC",
-            },
-            relevance_case
-        );
+                where_clause, order_dir, relevance_case
+            )
+        };
 
         let mut query_builder = sqlx::query_as::<_, FrameRow>(&sql);
 
@@ -3257,6 +3295,72 @@ LIMIT ? OFFSET ?
                 }
             })
             .collect())
+    }
+
+    // ===== Search Result Clustering =====
+
+    /// Cluster timestamp-sorted search matches into groups where consecutive results
+    /// share the same app_name + window_name (+ url if both have one) and are within
+    /// `max_gap_secs` of each other. Picks the highest-confidence match as representative.
+    pub fn cluster_search_matches(
+        matches: Vec<SearchMatch>,
+        max_gap_secs: i64,
+    ) -> Vec<SearchMatchGroup> {
+        if matches.is_empty() {
+            return Vec::new();
+        }
+
+        let mut groups: Vec<SearchMatchGroup> = Vec::new();
+
+        for m in matches {
+            let ts = m.timestamp.timestamp();
+            let should_merge = if let Some(last) = groups.last() {
+                let last_rep = &last.representative;
+                let same_app = last_rep.app_name == m.app_name;
+                let same_window = last_rep.window_name == m.window_name;
+                let same_url = match (&last_rep.url, &m.url) {
+                    (a, b) if a.is_empty() && b.is_empty() => true,
+                    (a, b) if a.is_empty() || b.is_empty() => true,
+                    (a, b) => a == b,
+                };
+                // Parse end_time to check gap
+                let last_end = chrono::DateTime::parse_from_rfc3339(&last.end_time)
+                    .map(|dt| dt.timestamp())
+                    .unwrap_or(0);
+                let within_gap = (ts - last_end).abs() <= max_gap_secs;
+                same_app && same_window && same_url && within_gap
+            } else {
+                false
+            };
+
+            if should_merge {
+                let last = groups.last_mut().unwrap();
+                last.frame_ids.push(m.frame_id);
+                last.group_size += 1;
+                let m_time = m.timestamp.to_rfc3339();
+                // Extend time range
+                if m_time < last.start_time {
+                    last.start_time = m_time;
+                } else if m_time > last.end_time {
+                    last.end_time = m_time;
+                }
+                // Pick higher confidence as representative
+                if m.confidence > last.representative.confidence {
+                    last.representative = m;
+                }
+            } else {
+                let time_str = m.timestamp.to_rfc3339();
+                groups.push(SearchMatchGroup {
+                    frame_ids: vec![m.frame_id],
+                    group_size: 1,
+                    start_time: time_str.clone(),
+                    end_time: time_str,
+                    representative: m,
+                });
+            }
+        }
+
+        groups
     }
 
     // ===== Speaker Reassignment Functions =====
@@ -4116,5 +4220,101 @@ mod tests {
 
         // Should match both "Hello" and "World" due to word-by-word matching
         assert_eq!(positions.len(), 2);
+    }
+
+    fn make_search_match(frame_id: i64, timestamp_secs: i64, app: &str, window: &str, url: &str, confidence: f32) -> SearchMatch {
+        SearchMatch {
+            frame_id,
+            timestamp: DateTime::from_timestamp(timestamp_secs, 0).unwrap(),
+            text_positions: vec![],
+            app_name: app.to_string(),
+            window_name: window.to_string(),
+            confidence,
+            text: String::new(),
+            url: url.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_cluster_empty() {
+        let groups = DatabaseManager::cluster_search_matches(vec![], 120);
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn test_cluster_single() {
+        let matches = vec![make_search_match(1, 1000, "Chrome", "Google", "https://google.com", 0.9)];
+        let groups = DatabaseManager::cluster_search_matches(matches, 120);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].group_size, 1);
+        assert_eq!(groups[0].frame_ids, vec![1]);
+    }
+
+    #[test]
+    fn test_cluster_consecutive_same_app() {
+        // 3 frames from the same app/window within 120s of each other
+        let matches = vec![
+            make_search_match(1, 1000, "Chrome", "Maps", "https://maps.google.com", 0.8),
+            make_search_match(2, 1005, "Chrome", "Maps", "https://maps.google.com", 0.95),
+            make_search_match(3, 1010, "Chrome", "Maps", "https://maps.google.com", 0.7),
+        ];
+        let groups = DatabaseManager::cluster_search_matches(matches, 120);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].group_size, 3);
+        assert_eq!(groups[0].frame_ids, vec![1, 2, 3]);
+        // Representative should be highest confidence (0.95)
+        assert_eq!(groups[0].representative.frame_id, 2);
+    }
+
+    #[test]
+    fn test_cluster_gap_breaks_group() {
+        // Two frames from same app but 200s apart (> 120s gap)
+        let matches = vec![
+            make_search_match(1, 1000, "Chrome", "Maps", "", 0.9),
+            make_search_match(2, 1200, "Chrome", "Maps", "", 0.8),
+        ];
+        let groups = DatabaseManager::cluster_search_matches(matches, 120);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].group_size, 1);
+        assert_eq!(groups[1].group_size, 1);
+    }
+
+    #[test]
+    fn test_cluster_different_app_breaks_group() {
+        let matches = vec![
+            make_search_match(1, 1000, "Chrome", "Maps", "", 0.9),
+            make_search_match(2, 1005, "Safari", "Maps", "", 0.8),
+        ];
+        let groups = DatabaseManager::cluster_search_matches(matches, 120);
+        assert_eq!(groups.len(), 2);
+    }
+
+    #[test]
+    fn test_cluster_different_window_breaks_group() {
+        let matches = vec![
+            make_search_match(1, 1000, "Chrome", "Maps", "", 0.9),
+            make_search_match(2, 1005, "Chrome", "Gmail", "", 0.8),
+        ];
+        let groups = DatabaseManager::cluster_search_matches(matches, 120);
+        assert_eq!(groups.len(), 2);
+    }
+
+    #[test]
+    fn test_cluster_mixed_scenario() {
+        // 3 maps frames, then 2 gmail frames, then 1 maps frame (separate visit)
+        let matches = vec![
+            make_search_match(1, 1000, "Chrome", "Maps", "", 0.8),
+            make_search_match(2, 1005, "Chrome", "Maps", "", 0.9),
+            make_search_match(3, 1010, "Chrome", "Maps", "", 0.7),
+            make_search_match(4, 1015, "Chrome", "Gmail", "", 0.6),
+            make_search_match(5, 1020, "Chrome", "Gmail", "", 0.5),
+            make_search_match(6, 2000, "Chrome", "Maps", "", 0.85),
+        ];
+        let groups = DatabaseManager::cluster_search_matches(matches, 120);
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups[0].group_size, 3); // Maps group 1
+        assert_eq!(groups[0].representative.frame_id, 2); // highest confidence
+        assert_eq!(groups[1].group_size, 2); // Gmail group
+        assert_eq!(groups[2].group_size, 1); // Maps group 2 (separate visit)
     }
 }

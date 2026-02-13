@@ -273,6 +273,9 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   const [isLoadingTranscriptions, setIsLoadingTranscriptions] = useState(false);
   const [selectedTranscriptionIndex, setSelectedTranscriptionIndex] = useState(0);
 
+  // App filter
+  const [appFilter, setAppFilter] = useState<string | null>(null);
+
   // Pagination
   const [ocrOffset, setOcrOffset] = useState(0);
   const [hasMoreOcr, setHasMoreOcr] = useState(true);
@@ -289,10 +292,31 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
   const {
     searchResults,
+    searchGroups,
     isSearching,
     searchKeywords,
     resetSearch,
   } = useKeywordSearchStore();
+
+  // Compute app distribution from results and filter
+  const appCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of searchResults) {
+      counts.set(r.app_name, (counts.get(r.app_name) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1]);
+  }, [searchResults]);
+
+  const filteredResults = useMemo(() => {
+    if (!appFilter) return searchResults;
+    return searchResults.filter(r => r.app_name === appFilter);
+  }, [searchResults, appFilter]);
+
+  const filteredGroups = useMemo(() => {
+    if (!appFilter) return searchGroups;
+    return searchGroups.filter(g => g.representative.app_name === appFilter);
+  }, [searchGroups, appFilter]);
 
   // Focus input when modal opens
   useEffect(() => {
@@ -300,6 +324,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
       setSelectedIndex(0);
       setQuery("");
       resetSearch();
+      setAppFilter(null);
       setSpeakerResults([]);
       setSelectedSpeaker(null);
       setSpeakerTranscriptions([]);
@@ -332,9 +357,11 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     if (!debouncedQuery.trim()) {
       resetSearch();
       setSpeakerResults([]);
+      setAppFilter(null);
       return;
     }
 
+    setAppFilter(null);
     setOcrOffset(0);
     setHasMoreOcr(true);
     searchKeywords(debouncedQuery, {
@@ -424,7 +451,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
   // Send to AI handler
   const handleSendToAI = useCallback(async () => {
-    const result = searchResults[selectedIndex];
+    const result = filteredResults[selectedIndex];
     if (!result) return;
 
     const context = `Context from search result:\n${result.app_name} - ${result.window_name}\nTime: ${format(new Date(result.timestamp), "PPpp")}\n\nText:\n${result.text || ""}`;
@@ -440,7 +467,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
     // Emit prefill event with context and frame image
     await emit("chat-prefill", { context, frameId: result.frame_id });
-  }, [searchResults, selectedIndex, onClose]);
+  }, [filteredResults, selectedIndex, onClose]);
 
   // Handle going back from speaker drill-down
   const handleBackFromSpeaker = useCallback(() => {
@@ -571,7 +598,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           break;
         case "ArrowRight":
           e.preventDefault();
-          setSelectedIndex(i => Math.min(i + 1, searchResults.length - 1));
+          setSelectedIndex(i => Math.min(i + 1, filteredResults.length - 1));
           break;
         case "ArrowLeft":
           e.preventDefault();
@@ -579,7 +606,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           break;
         case "ArrowDown":
           e.preventDefault();
-          setSelectedIndex(i => Math.min(i + cols, searchResults.length - 1));
+          setSelectedIndex(i => Math.min(i + cols, filteredResults.length - 1));
           break;
         case "ArrowUp":
           e.preventDefault();
@@ -590,9 +617,9 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           if (e.metaKey || e.ctrlKey) {
             // Cmd+Enter = send to AI
             handleSendToAI();
-          } else if (searchResults[selectedIndex]) {
+          } else if (filteredResults[selectedIndex]) {
             // Enter = navigate to timestamp
-            onNavigateToTimestamp(searchResults[selectedIndex].timestamp);
+            onNavigateToTimestamp(filteredResults[selectedIndex].timestamp);
             onClose();
           }
           break;
@@ -601,15 +628,15 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, searchResults, selectedIndex, selectedSpeaker, speakerTranscriptions, selectedTranscriptionIndex, onClose, onNavigateToTimestamp, handleSendToAI, handleBackFromSpeaker]);
+  }, [isOpen, filteredResults, selectedIndex, selectedSpeaker, speakerTranscriptions, selectedTranscriptionIndex, onClose, onNavigateToTimestamp, handleSendToAI, handleBackFromSpeaker]);
 
   // Scroll selected item into view
   useEffect(() => {
-    if (gridRef.current && searchResults.length > 0) {
+    if (gridRef.current && filteredResults.length > 0) {
       const selectedEl = gridRef.current.querySelector(`[data-index="${selectedIndex}"]`);
       selectedEl?.scrollIntoView({ block: "nearest" });
     }
-  }, [selectedIndex, searchResults.length]);
+  }, [selectedIndex, filteredResults.length]);
 
   const handleSelectResult = useCallback((result: SearchMatch) => {
     onNavigateToTimestamp(result.timestamp);
@@ -834,9 +861,43 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                       screen
                     </p>
                   )}
+
+                  {/* App filter chips */}
+                  {appCounts.length > 1 && (
+                    <div className="flex gap-1.5 mb-3 flex-wrap">
+                      <button
+                        onClick={() => { setAppFilter(null); setSelectedIndex(0); }}
+                        className={cn(
+                          "px-2 py-0.5 text-[11px] rounded-full border transition-colors",
+                          !appFilter
+                            ? "bg-foreground text-background border-foreground"
+                            : "border-border text-muted-foreground hover:border-foreground/40"
+                        )}
+                      >
+                        all ({searchResults.length})
+                      </button>
+                      {appCounts.map(([app, count]) => (
+                        <button
+                          key={app}
+                          onClick={() => { setAppFilter(appFilter === app ? null : app); setSelectedIndex(0); }}
+                          className={cn(
+                            "px-2 py-0.5 text-[11px] rounded-full border transition-colors",
+                            appFilter === app
+                              ? "bg-foreground text-background border-foreground"
+                              : "border-border text-muted-foreground hover:border-foreground/40"
+                          )}
+                        >
+                          {app} ({count})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-4 gap-3">
-                    {searchResults.map((result, index) => {
+                    {filteredResults.map((result, index) => {
                       const isActive = index === activeIndex;
+                      const group = filteredGroups[index];
+                      const groupSize = group?.group_size ?? 1;
 
                       return (
                         <div
@@ -852,14 +913,25 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                               : "border-border hover:border-foreground/50"
                           )}
                         >
-                          <FrameThumbnail
-                            frameId={result.frame_id}
-                            alt={`${result.app_name} - ${result.window_name}`}
-                          />
+                          <div className="relative">
+                            <FrameThumbnail
+                              frameId={result.frame_id}
+                              alt={`${result.app_name} - ${result.window_name}`}
+                            />
+                            {groupSize > 1 && (
+                              <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-black/70 text-white rounded">
+                                {groupSize} frames
+                              </span>
+                            )}
+                          </div>
                           <div className="p-2 bg-card">
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                               <Clock className="w-3 h-3" />
-                              <span className="font-mono">{formatRelativeTime(result.timestamp)}</span>
+                              <span className="font-mono">
+                                {groupSize > 1 && group
+                                  ? `${formatRelativeTime(group.start_time)} – ${formatRelativeTime(group.end_time)}`
+                                  : formatRelativeTime(result.timestamp)}
+                              </span>
                             </div>
                             <p className="text-xs font-medium text-foreground truncate">
                               {result.app_name}

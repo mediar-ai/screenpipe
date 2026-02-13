@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -13,15 +13,16 @@ import {
   RefreshCw,
   Loader2,
   ExternalLink,
+  Check,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
+import posthog from "posthog-js";
 
 function parsePipeError(stderr: string): {
   type: "daily_limit" | "rate_limit" | "unknown";
@@ -65,11 +66,11 @@ function parsePipeError(stderr: string): {
 interface PipeConfig {
   name: string;
   schedule: string;
-  lookback: string;
   enabled: boolean;
   agent: string;
   model: string;
   provider?: string;
+  preset?: string;
   config: Record<string, unknown>;
 }
 
@@ -79,6 +80,7 @@ interface PipeStatus {
   last_success: boolean | null;
   is_running: boolean;
   prompt_body: string;
+  raw_content: string;
   last_error: string | null;
 }
 
@@ -98,13 +100,31 @@ export function PipesSection() {
   const [loading, setLoading] = useState(true);
   const [runningPipe, setRunningPipe] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({});
+  const [saveStatus, setSaveStatus] = useState<Record<string, "saving" | "saved" | "error">>({});
+  const [refreshing, setRefreshing] = useState(false);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingSaves = useRef<Record<string, string>>({});
   const { settings } = useSettings();
 
   const fetchPipes = useCallback(async () => {
     try {
       const res = await fetch("http://localhost:3030/pipes");
       const data = await res.json();
-      setPipes(data.data || []);
+      const fetched: PipeStatus[] = data.data || [];
+      setPipes(fetched);
+      // Clear drafts that match the server content (already saved)
+      setPromptDrafts((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const pipe of fetched) {
+          if (next[pipe.config.name] && next[pipe.config.name] === pipe.raw_content) {
+            delete next[pipe.config.name];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
     } catch (e) {
       console.error("failed to fetch pipes:", e);
     } finally {
@@ -112,8 +132,23 @@ export function PipesSection() {
     }
   }, []);
 
+  const trackedPipesView = useRef(false);
   useEffect(() => {
-    fetchPipes();
+    fetchPipes().then(() => {
+      if (!trackedPipesView.current) {
+        trackedPipesView.current = true;
+        setPipes((current) => {
+          if (current.length > 0) {
+            posthog.capture("pipes_viewed", {
+              count: current.length,
+              enabled_count: current.filter(p => p.config.enabled).length,
+              pipes: current.map(p => p.config.name),
+            });
+          }
+          return current;
+        });
+      }
+    });
     const interval = setInterval(fetchPipes, 10000);
     return () => clearInterval(interval);
   }, [fetchPipes]);
@@ -129,6 +164,7 @@ export function PipesSection() {
   };
 
   const togglePipe = async (name: string, enabled: boolean) => {
+    posthog.capture("pipe_toggled", { pipe: name, enabled });
     await fetch(`http://localhost:3030/pipes/${name}/enable`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -138,6 +174,7 @@ export function PipesSection() {
   };
 
   const runPipe = async (name: string) => {
+    posthog.capture("pipe_run", { pipe: name });
     setRunningPipe(name);
     try {
       await fetch(`http://localhost:3030/pipes/${name}/run`, {
@@ -151,6 +188,7 @@ export function PipesSection() {
   };
 
   const deletePipe = async (name: string) => {
+    posthog.capture("pipe_deleted", { pipe: name });
     await fetch(`http://localhost:3030/pipes/${name}`, { method: "DELETE" });
     setExpanded(null);
     fetchPipes();
@@ -170,6 +208,55 @@ export function PipesSection() {
       fetchLogs(name);
     }
   };
+
+  const savePipeContent = useCallback(async (name: string, content: string) => {
+    setSaveStatus((prev) => ({ ...prev, [name]: "saving" }));
+    try {
+      const res = await fetch(`http://localhost:3030/pipes/${name}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ raw_content: content }),
+      });
+      const data = await res.json();
+      // Server returns 200 even on error — check body for error field
+      if (!res.ok || data.error) throw new Error(data.error || "save failed");
+      setSaveStatus((prev) => ({ ...prev, [name]: "saved" }));
+      // Don't clear draft or refetch — the 10s poll will sync.
+      setTimeout(() => setSaveStatus((prev) => { const next = { ...prev }; delete next[name]; return next; }), 2000);
+    } catch (e) {
+      console.error("pipe save failed:", e);
+      setSaveStatus((prev) => ({ ...prev, [name]: "error" }));
+    }
+  }, []);
+
+  const handlePipeEdit = useCallback((name: string, value: string) => {
+    setPromptDrafts((prev) => ({ ...prev, [name]: value }));
+    pendingSaves.current[name] = value;
+    // Clear existing timer
+    if (debounceTimers.current[name]) {
+      clearTimeout(debounceTimers.current[name]);
+    }
+    // Auto-save after 1.5s of no typing
+    debounceTimers.current[name] = setTimeout(() => {
+      delete pendingSaves.current[name];
+      savePipeContent(name, value);
+    }, 1500);
+  }, [savePipeContent]);
+
+  // Flush pending saves on unmount (e.g. switching settings tabs)
+  useEffect(() => {
+    const timers = debounceTimers;
+    const pending = pendingSaves;
+    const save = savePipeContent;
+    return () => {
+      for (const timer of Object.values(timers.current)) {
+        clearTimeout(timer);
+      }
+      for (const [name, content] of Object.entries(pending.current)) {
+        save(name, content);
+      }
+    };
+  }, [savePipeContent]);
 
   if (loading) {
     return (
@@ -216,8 +303,12 @@ export function PipesSection() {
               )}
             </div>
           )}
-          <Button variant="outline" size="sm" onClick={fetchPipes}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="sm" disabled={refreshing} onClick={async () => {
+            setRefreshing(true);
+            await fetchPipes();
+            setRefreshing(false);
+          }}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
           <Button variant="outline" size="sm" onClick={openPipesFolder}>
             <FolderOpen className="h-4 w-4 mr-1" />
@@ -342,43 +433,58 @@ export function PipesSection() {
                 {/* Expanded detail */}
                 {expanded === pipe.config.name && (
                   <div className="mt-4 space-y-4 border-t pt-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <Label className="text-xs">agent</Label>
-                        <Input
-                          value={pipe.config.agent}
-                          disabled
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs">model</Label>
-                        <Input
-                          value={pipe.config.model}
-                          disabled
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs">provider</Label>
-                        <Input
-                          value={pipe.config.provider || "screenpipe cloud"}
-                          disabled
-                          className="h-8 text-xs"
-                        />
-                      </div>
+                    <div>
+                      <Label className="text-xs">ai preset</Label>
+                      <select
+                        value={pipe.config.preset || ""}
+                        onChange={async (e) => {
+                          const val = e.target.value;
+                          await fetch(`http://localhost:3030/pipes/${pipe.config.name}/config`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ preset: val || null }),
+                          });
+                          fetchPipes();
+                        }}
+                        className="w-full h-8 text-xs border rounded px-2 bg-background"
+                      >
+                        <option value="">none (use pipe defaults)</option>
+                        {(settings.aiPresets || []).map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.id} — {p.model} ({p.provider})
+                            {p.defaultPreset ? " ★" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        uses model & provider from your ai settings preset
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      add <code>provider: anthropic</code> to pipe.md frontmatter to use your own key.{" "}
-                      run <code>pi /login</code> in terminal to authenticate.
-                    </p>
 
                     <div>
-                      <Label className="text-xs">prompt</Label>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs">pipe.md</Label>
+                        {saveStatus[pipe.config.name] === "saving" && (
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> saving...
+                          </span>
+                        )}
+                        {saveStatus[pipe.config.name] === "saved" && (
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Check className="h-3 w-3" /> saved
+                          </span>
+                        )}
+                        {saveStatus[pipe.config.name] === "error" && (
+                          <span className="text-[11px] text-destructive">save failed</span>
+                        )}
+                        {promptDrafts[pipe.config.name] !== undefined && !saveStatus[pipe.config.name] && (
+                          <span className="text-[11px] text-muted-foreground">unsaved</span>
+                        )}
+                      </div>
                       <Textarea
-                        value={pipe.prompt_body}
-                        readOnly
-                        className="text-xs font-mono h-32"
+                        value={promptDrafts[pipe.config.name] ?? pipe.raw_content}
+                        onChange={(e) => handlePipeEdit(pipe.config.name, e.target.value)}
+                        className="text-xs font-mono h-64 mt-1"
                       />
                     </div>
 
@@ -453,6 +559,7 @@ export function PipesSection() {
         open={showUpgrade}
         onOpenChange={setShowUpgrade}
         reason="daily_limit"
+        source="pipes"
       />
     </div>
   );

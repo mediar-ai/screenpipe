@@ -117,7 +117,7 @@ const IP_DAILY_LIMIT = 200; // Max queries per IP per day (catches device ID spo
 export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   anonymous: {
     dailyQueries: 25,
-    rpm: 10,
+    rpm: 15,
     allowedModels: [
       'claude-haiku-4-5',
       'gemini-3-flash',
@@ -126,7 +126,7 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   },
   logged_in: {
     dailyQueries: 50,
-    rpm: 20,
+    rpm: 25,
     allowedModels: [
       'claude-haiku-4-5',
       'claude-sonnet-4-5',
