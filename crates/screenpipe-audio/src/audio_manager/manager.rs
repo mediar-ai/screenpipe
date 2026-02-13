@@ -321,10 +321,16 @@ impl AudioManager {
 
         let quantized_path = self.stt_model_path.clone();
         info!("loading whisper model with GPU acceleration...");
-        let whisper_context = Arc::new(
-            WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
-                .expect("failed to load model"),
-        );
+        // Use spawn_blocking to avoid blocking a tokio worker thread for 1-3s
+        // while the 834MB model is loaded into Metal/Vulkan GPU memory.
+        let whisper_context = tokio::task::spawn_blocking(move || {
+            Arc::new(
+                WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
+                    .expect("failed to load model"),
+            )
+        })
+        .await
+        .expect("whisper model loading task panicked");
         info!("whisper model loaded successfully");
 
         Ok(tokio::spawn(async move {

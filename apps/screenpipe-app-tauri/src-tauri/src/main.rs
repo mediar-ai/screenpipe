@@ -1536,6 +1536,75 @@ async fn main() {
             });
             app.manage(onboarding_store.clone());
 
+            // Pre-download AI models in background immediately.
+            // These downloads don't need any permissions — they just fetch files to cache.
+            // On macOS, granting screen recording permission restarts the app, killing
+            // in-progress downloads. But:
+            // - hf_hub (whisper) uses temp file + atomic rename — interrupted downloads
+            //   leave no corrupt cache entry, next launch re-downloads cleanly.
+            // - Pyannote/silero use the same atomic pattern (write to .downloading, rename).
+            // - The small models (silero 2MB, pyannote 34MB) likely complete before the
+            //   user finishes clicking through permissions (~15-20s).
+            // - The whisper model (834MB) may or may not complete, but any progress
+            //   reduces wait time after the final restart.
+            {
+                let store_for_download = store.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Determine which whisper model the user's config needs
+                    let engine = match store_for_download.audio_transcription_engine.as_str() {
+                        "deepgram" | "screenpipe-cloud" => None, // Cloud engines don't need local model
+                        _ => {
+                            use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+                            Some(std::sync::Arc::new(match store_for_download.audio_transcription_engine.as_str() {
+                                "whisper-tiny" => AudioTranscriptionEngine::WhisperTiny,
+                                "whisper-tiny-quantized" => AudioTranscriptionEngine::WhisperTinyQuantized,
+                                "whisper-large-v3" => AudioTranscriptionEngine::WhisperLargeV3,
+                                "whisper-large-v3-quantized" => AudioTranscriptionEngine::WhisperLargeV3Quantized,
+                                "whisper-large-v3-turbo" => AudioTranscriptionEngine::WhisperLargeV3Turbo,
+                                _ => AudioTranscriptionEngine::WhisperLargeV3TurboQuantized, // default
+                            }))
+                        }
+                    };
+
+                    // Download whisper model (834MB default) — biggest download, start first
+                    if let Some(engine) = engine {
+                        let engine_clone = engine.clone();
+                        tokio::task::spawn_blocking(move || {
+                            match screenpipe_audio::transcription::whisper::model::download_whisper_model(engine_clone) {
+                                Ok(path) => info!("whisper model pre-download complete: {:?}", path),
+                                Err(e) => warn!("whisper model pre-download failed (will retry at server start): {}", e),
+                            }
+                        });
+                    }
+
+                    // Download small ONNX models in parallel — these complete in seconds
+                    let (_silero_result, _seg_result, _emb_result) = tokio::join!(
+                        async {
+                            match screenpipe_audio::vad::silero::SileroVad::ensure_model_downloaded().await {
+                                Ok(p) => info!("silero vad model pre-download complete: {:?}", p),
+                                Err(e) => warn!("silero vad pre-download failed (will retry): {}", e),
+                            }
+                        },
+                        async {
+                            match screenpipe_audio::speaker::models::get_or_download_model(
+                                screenpipe_audio::speaker::models::PyannoteModel::Segmentation
+                            ).await {
+                                Ok(p) => info!("segmentation model pre-download complete: {:?}", p),
+                                Err(e) => warn!("segmentation pre-download failed (will retry): {}", e),
+                            }
+                        },
+                        async {
+                            match screenpipe_audio::speaker::models::get_or_download_model(
+                                screenpipe_audio::speaker::models::PyannoteModel::Embedding
+                            ).await {
+                                Ok(p) => info!("embedding model pre-download complete: {:?}", p),
+                                Err(e) => warn!("embedding pre-download failed (will retry): {}", e),
+                            }
+                        },
+                    );
+                });
+            }
+
             // Show onboarding window if not completed
             if !onboarding_store.is_completed {
                 let _ = ShowRewindWindow::Onboarding.show(&app.handle());

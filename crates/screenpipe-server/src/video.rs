@@ -8,8 +8,9 @@ use dashmap::DashMap;
 use image::ImageFormat::{self};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
-    capture_screenshot_by_window::WindowFilters, continuous_capture, ocr_cache::WindowOcrCache,
-    process_ocr_task, CaptureResult, OcrEngine, PipelineMetrics, RawCaptureResult,
+    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::get_monitor_by_id,
+    ocr_cache::WindowOcrCache, process_ocr_task, CaptureResult, OcrEngine, PipelineMetrics,
+    RawCaptureResult,
 };
 
 use std::path::PathBuf;
@@ -222,6 +223,7 @@ impl VideoCapture {
 
         let capture_thread = tokio::spawn(async move {
             info!("Starting continuous_capture for monitor {}", monitor_id);
+            let mut consecutive_restarts: u32 = 0;
 
             loop {
                 match continuous_capture(
@@ -240,11 +242,24 @@ impl VideoCapture {
                         break;
                     }
                     Err(e) => {
-                        error!(
-                            "continuous_capture for monitor {} failed: {}, restarting in 5s",
-                            monitor_id, e
+                        consecutive_restarts += 1;
+
+                        if get_monitor_by_id(monitor_id).await.is_none() {
+                            warn!(
+                                "monitor {} no longer exists after error: {}. stopping capture loop.",
+                                monitor_id, e
+                            );
+                            break;
+                        }
+
+                        let backoff = Duration::from_secs(
+                            (1u64 << consecutive_restarts.min(4)).min(30),
                         );
-                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        error!(
+                            "continuous_capture for monitor {} failed (restart #{}): {}, retrying in {:?}",
+                            monitor_id, consecutive_restarts, e, backoff
+                        );
+                        tokio::time::sleep(backoff).await;
                     }
                 }
             }

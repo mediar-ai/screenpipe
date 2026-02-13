@@ -105,17 +105,19 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             visionReady: visionOk || prev.visionReady,
           }));
 
-          // If both subsystems are ok/disabled, we're recording
-          if (data.status === "healthy" || (audioOk && visionOk)) {
-            setSetupState("recording");
-          }
+          // Advance as soon as the server is responding. Audio/vision will catch up
+          // in the background — the user doesn't need to stare at a loading screen
+          // while the whisper model loads into GPU memory (1-3s after server is up).
+          // Previously we waited for both audio_status=ok AND frame_status=ok, which
+          // added 5-8s of unnecessary waiting.
+          setSetupState("recording");
         }
       } catch {
         // Server not ready yet
       }
     };
 
-    const interval = setInterval(poll, 1500);
+    const interval = setInterval(poll, 500);
     poll(); // immediate first check
     return () => clearInterval(interval);
   }, [setupState]);

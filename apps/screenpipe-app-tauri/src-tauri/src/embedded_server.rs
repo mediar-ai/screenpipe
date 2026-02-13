@@ -546,10 +546,15 @@ pub async fn start_embedded_server(
     }
 
     // Start audio recording
+    // Delay reduced from 5s to 1s — the original 5s/10s delay was a cosmetic holdover
+    // from the CLI binary (to let terminal output finish printing). The embedded server
+    // has no terminal output, and the HTTP server is already bound and serving at this
+    // point. Vision capture is also already running. 1s gives a small buffer for the
+    // HTTP server to start accepting connections.
     if !config.disable_audio {
         let audio_manager_clone = audio_manager.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
             if let Err(e) = audio_manager_clone.start().await {
                 error!("Failed to start audio manager: {}", e);
             }

@@ -484,7 +484,7 @@ export function AIProviderConfig({
                   id="model"
                   type="text"
                   list="ollama-models"
-                  placeholder={isLoadingModels ? "loading..." : "e.g. llama3.2:latest"}
+                  placeholder={isLoadingModels ? "loading..." : "e.g. ministral-3:latest"}
                   value={formData.model || ""}
                   onChange={(e) =>
                     setFormData({ ...formData, model: e.target.value })

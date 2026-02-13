@@ -180,7 +180,7 @@ let DEFAULT_SETTINGS: Settings = {
 			languages: [],
 			embeddedLLM: {
 				enabled: false,
-				model: "llama3.2:1b-instruct-q4_K_M",
+				model: "ministral-3:latest",
 				port: 11434,
 			},
 			enableBeta: false,

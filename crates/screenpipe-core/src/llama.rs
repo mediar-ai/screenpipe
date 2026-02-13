@@ -271,7 +271,7 @@ mod llm_module {
                 id: "123".to_string(),
                 object: "chat.completion".to_string(),
                 created: 1,
-                model: "llama3.2-1B-Instruct".to_string(),
+                model: "ministral-3".to_string(),
                 system_fingerprint: "".to_string(),
                 choices: vec![ChatResponseChoice {
                     index: 0,

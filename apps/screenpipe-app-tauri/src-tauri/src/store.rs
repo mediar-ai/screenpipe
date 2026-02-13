@@ -365,7 +365,7 @@ impl Default for EmbeddedLLM {
     fn default() -> Self {
         Self {
             enabled: false,
-            model: "llama3.2:1b-instruct-q4_K_M".to_string(),
+            model: "ministral-3:latest".to_string(),
             port: 11434,
         }
     }
