@@ -87,7 +87,10 @@ function detectMeetings(frames: StreamTimeSeriesResponse[]): Meeting[] {
 		if (totalDuration < MIN_DURATION_SECS) continue;
 
 		const startTime = entries[0].frameTimestamp;
-		const endTime = entries[entries.length - 1].frameTimestamp;
+		const lastEntry = entries[entries.length - 1];
+		const endTime = new Date(
+			lastEntry.frameTimestamp.getTime() + lastEntry.duration_secs * 1000
+		);
 
 		// Build speaker map
 		const speakers = new Map<
