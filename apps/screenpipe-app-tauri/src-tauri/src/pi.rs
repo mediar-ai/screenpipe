@@ -680,8 +680,8 @@ pub async fn pi_start_inner(
                 }
             }
         }
-        info!("Pi stdout reader ended");
-        let _ = app_handle.emit("pi_terminated", ());
+        info!("Pi stdout reader ended (pid: {})", pid);
+        let _ = app_handle.emit("pi_terminated", pid);
     });
 
     // Spawn stderr reader thread

@@ -28,6 +28,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
+import { homeDir } from "@tauri-apps/api/path";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import {
@@ -1079,14 +1080,15 @@ export function StandaloneChat() {
       }
     };
     checkPi();
-    // Poll until Pi is running
+    // Keep polling Pi status — recovers from stale termination events and transient failures
     const interval = setInterval(async () => {
-      const result = await commands.piInfo();
-      if (result.status === "ok") {
-        setPiInfo(result.data);
-        if (result.data.running) clearInterval(interval);
-      }
-    }, 2000);
+      try {
+        const result = await commands.piInfo();
+        if (result.status === "ok") {
+          setPiInfo(result.data);
+        }
+      } catch {}
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1107,8 +1109,13 @@ export function StandaloneChat() {
       piStartInFlightRef.current = true;
       setPiStarting(true);
       const providerConfig = buildProviderConfig();
-      const home = process.env.HOME || process.env.USERPROFILE || "/tmp";
-      const dir = `${home}/.screenpipe/pi-chat`;
+      let home: string;
+      try {
+        home = await homeDir();
+      } catch {
+        home = "/tmp";
+      }
+      const dir = `${home}.screenpipe/pi-chat`;
       console.log("[Pi] Restarting with new preset:", providerConfig?.provider, providerConfig?.model);
       try {
         const result = await commands.piStart(dir, settings.user?.token ?? null, providerConfig);
@@ -1393,16 +1400,28 @@ export function StandaloneChat() {
         }
       });
 
-      unlistenTerminated = await listen("pi_terminated", () => {
+      unlistenTerminated = await listen<number>("pi_terminated", (event) => {
         if (!mounted) return;
         if (piStoppedIntentionallyRef.current) {
           piStoppedIntentionallyRef.current = false;
           return;
         }
-        console.log("[Pi] Process terminated unexpectedly, restart count:", piRestartCountRef.current);
+        const terminatedPid = event.payload;
+        console.log("[Pi] Process terminated unexpectedly, pid:", terminatedPid, "restart count:", piRestartCountRef.current);
         piRestartCountRef.current += 1;
-        setTimeout(() => {
+        setTimeout(async () => {
           if (!mounted) return;
+          // Check if a newer Pi process is already running — don't null out piInfo
+          // if Rust already started a replacement (race between stop → start → terminated event)
+          try {
+            const result = await commands.piInfo();
+            if (result.status === "ok" && result.data.running && result.data.pid !== terminatedPid) {
+              console.log("[Pi] Stale termination for pid", terminatedPid, "— newer pid", result.data.pid, "is running, ignoring");
+              setPiInfo(result.data);
+              piRestartCountRef.current = 0;
+              return;
+            }
+          } catch {}
           setPiInfo(null);
         }, Math.min(1000 * piRestartCountRef.current, 5000));
       });
