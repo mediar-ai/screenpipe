@@ -13,10 +13,10 @@ icon: "microchip"
 
 ```bash
 # install from https://ollama.com then:
-ollama run llama3.2:3b
+ollama run ministral-3
 ```
 
-this downloads the model and starts Ollama. you can use any model — `llama3.2:3b` is a good starting point (fast, works on most machines).
+this downloads the model and starts Ollama. you can use any model — `ministral-3` is a good starting point (fast, works on most machines).
 
 ### 2. select Ollama in screenpipe
 
@@ -32,11 +32,10 @@ that's it. screenpipe talks to Ollama on `localhost:11434` automatically.
 
 | model | size | best for |
 |-------|------|----------|
-| `llama3.2:3b` | ~2 GB | fast, general use, works on most Macs |
-| `llama3.2:1b` | ~1 GB | fastest, lightweight tasks |
-| `mistral` | ~4 GB | good balance of speed and quality |
-| `llama3.1:8b` | ~5 GB | higher quality, needs 16 GB+ RAM |
-| `deepseek-r1:8b` | ~5 GB | strong reasoning |
+| `ministral-3` | ~2 GB | fast, general use, recommended starting point |
+| `gemma3:4b` | ~3 GB | strong quality for size, good for summaries |
+| `qwen3:4b` | ~3 GB | multilingual, good reasoning |
+| `deepseek-r1:8b` | ~5 GB | strong reasoning, needs 16 GB+ RAM |
 
 pull any model with:
 
@@ -57,10 +56,10 @@ ollama pull <model-name>
 - check it's responding: `curl http://localhost:11434/api/tags`
 
 **model not showing in dropdown?**
-- pull it first: `ollama pull llama3.2:3b`
+- pull it first: `ollama pull ministral-3`
 - you can also type the model name manually in the input field
 
 **slow responses?**
-- try a smaller model (`llama3.2:1b` or `llama3.2:3b`)
+- try a smaller model (`ministral-3`)
 - close other GPU-heavy apps
 - ensure you have enough free RAM (model size + ~2 GB overhead)
