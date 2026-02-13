@@ -90,20 +90,21 @@ fn install_onnxruntime() {
         println!("cargo:rustc-flag=-C target-feature=+crt-static");
     }
 
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-gpu-1.19.2.zip";
+    // Use CPU-only onnxruntime — GPU (DirectML) causes issues on Intel integrated GPUs
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-1.19.2.zip";
     let client = Client::builder()
         .timeout(Duration::from_secs(300))
         .build()
         .expect("failed to build client");
     let resp = client.get(url).send().expect("request failed");
     let body = resp.bytes().expect("body invalid");
-    fs::write("./onnxruntime-win-x64-gpu-1.19.2.zip", &body).expect("failed to write");
+    fs::write("./onnxruntime-win-x64-1.19.2.zip", &body).expect("failed to write");
     let unzip_path = find_unzip().expect(
         "could not find unzip executable - please install it via GnuWin32 or add it to PATH",
     );
 
     let status = Command::new(unzip_path)
-        .args(["-o", "onnxruntime-win-x64-gpu-1.19.2.zip"])
+        .args(["-o", "onnxruntime-win-x64-1.19.2.zip"])
         .status()
         .expect("failed to execute unzip");
 
@@ -111,10 +112,10 @@ fn install_onnxruntime() {
         panic!("failed to install onnx binary");
     }
     let target_dir =
-        Path::new("../../apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2");
+        Path::new("../../apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2");
     if target_dir.exists() {
         fs::remove_dir_all(target_dir).expect("failed to remove existing directory");
     }
-    fs::rename("onnxruntime-win-x64-gpu-1.19.2", target_dir).expect("failed to rename");
-    println!("cargo:rustc-link-search=native=../../apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2/lib");
+    fs::rename("onnxruntime-win-x64-1.19.2", target_dir).expect("failed to rename");
+    println!("cargo:rustc-link-search=native=../../apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2/lib");
 }
