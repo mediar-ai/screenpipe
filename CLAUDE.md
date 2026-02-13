@@ -37,3 +37,7 @@ Use `#` for Python, `//` for Rust/TS/JS/Swift. Keep it as the first comment in t
 - Config: `apps/screenpipe-app-tauri/src-tauri/tauri.conf.json` → `bundle.macOS.signingIdentity`
 - This ensures macOS TCC recognizes the app across rebuilds (permissions persist)
 - Other devs without the cert will see permission issues - onboarding has "continue anyway" button after 5s
+
+## git usage
+- make sure to understand there is always bunch of other agents working on the same codebase in parallel, never delete local code or use git reset or such
+

@@ -82,38 +82,38 @@ pub async fn get_frame_data(
         // If not in cache or cache disabled, get from database
         match state.db.get_frame(frame_id).await {
             Ok(Some((file_path, offset_index))) => {
-                let jpeg_q = crate::video::video_quality_to_jpeg_q(&state.video_quality);
-                match extract_frame_from_video(&file_path, offset_index, jpeg_q).await {
-                    Ok(frame_path) => {
-                        // Apply PII redaction if requested
-                        if query.redact_pii {
-                            return apply_pii_redaction(&state, frame_id, &frame_path).await;
-                        }
-
-                        // Store in cache if enabled and we can get the lock
-                        if let Some(cache) = &state.frame_image_cache {
-                            if let Ok(mut cache) = cache.try_lock() {
-                                cache.put(frame_id, (frame_path.clone(), Instant::now()));
-                            }
-                        }
-
+                match try_extract_and_serve_frame(
+                    &state,
+                    frame_id,
+                    &file_path,
+                    offset_index,
+                    query.redact_pii,
+                )
+                .await
+                {
+                    Ok(response) => {
                         debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
-                        serve_file(&frame_path).await
+                        Ok(response)
                     }
                     Err(e) => {
-                        let err_str = e.to_string();
+                        // Extraction failed — try the nearest valid frame as fallback
+                        debug!(
+                            "Frame {} extraction failed ({}), trying nearest frame",
+                            frame_id, e
+                        );
+                        if let Some(fallback) =
+                            try_nearest_frame(&state, frame_id, query.redact_pii).await
+                        {
+                            return Ok(fallback);
+                        }
 
-                        // Check for corrupted/missing video errors - return 410 Gone
-                        // This tells frontend the frame is permanently unavailable
+                        // No fallback found either
+                        let err_str = e.to_string();
                         if err_str.contains("VIDEO_CORRUPTED")
                             || err_str.contains("VIDEO_NOT_FOUND")
                         {
-                            debug!(
-                                "Frame {} unavailable (corrupted/missing video): {}",
-                                frame_id, e
-                            );
-                            return Err((
-                                StatusCode::GONE, // 410 = permanently unavailable
+                            Err((
+                                StatusCode::GONE,
                                 JsonResponse(json!({
                                     "error": "Frame unavailable - video file corrupted or missing",
                                     "error_type": "video_corrupted",
@@ -121,18 +121,18 @@ pub async fn get_frame_data(
                                     "file_path": file_path,
                                     "details": err_str
                                 })),
-                            ));
+                            ))
+                        } else {
+                            error!("Failed to extract frame {}: {}", frame_id, e);
+                            Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                JsonResponse(json!({
+                                    "error": format!("Failed to extract frame: {}", e),
+                                    "frame_id": frame_id,
+                                    "file_path": file_path
+                                })),
+                            ))
                         }
-
-                        error!("Failed to extract frame {}: {}", frame_id, e);
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            JsonResponse(json!({
-                                "error": format!("Failed to extract frame: {}", e),
-                                "frame_id": frame_id,
-                                "file_path": file_path
-                            })),
-                        ))
                     }
                 }
             }
@@ -169,6 +169,99 @@ pub async fn get_frame_data(
 }
 
 /// Query parameters for finding the next valid frame
+/// Try to extract a single frame and optionally cache the result.
+/// Returns the served image response on success, or the extraction error on failure.
+/// Acquires the frame extraction semaphore to limit concurrent ffmpeg processes.
+async fn try_extract_and_serve_frame(
+    state: &Arc<AppState>,
+    frame_id: i64,
+    file_path: &str,
+    offset_index: i64,
+    redact_pii: bool,
+) -> Result<Response<Body>, anyhow::Error> {
+    let _permit = state
+        .frame_extraction_semaphore
+        .acquire()
+        .await
+        .map_err(|_| anyhow::anyhow!("frame extraction semaphore closed"))?;
+
+    let jpeg_q = crate::video::video_quality_to_jpeg_q(&state.video_quality);
+    let frame_path = extract_frame_from_video(file_path, offset_index, jpeg_q).await?;
+
+    if redact_pii {
+        return apply_pii_redaction(state, frame_id, &frame_path)
+            .await
+            .map_err(|(status, _)| anyhow::anyhow!("PII redaction failed: {}", status));
+    }
+
+    // Store in cache if enabled
+    if let Some(cache) = &state.frame_image_cache {
+        if let Ok(mut cache) = cache.try_lock() {
+            cache.put(frame_id, (frame_path.clone(), Instant::now()));
+        }
+    }
+
+    serve_file(&frame_path)
+        .await
+        .map_err(|(status, _)| anyhow::anyhow!("Failed to serve file: {}", status))
+}
+
+/// Find the nearest extractable frame by searching backward then forward.
+/// Checks file existence/size before expensive ffmpeg extraction to stay fast.
+async fn try_nearest_frame(
+    state: &Arc<AppState>,
+    frame_id: i64,
+    redact_pii: bool,
+) -> Option<Response<Body>> {
+    // Keep small: each miss spawns ffmpeg (~100-500ms). 3 candidates per
+    // direction is enough — the bad frame is almost always at a chunk boundary
+    // so the very next frame in the other chunk works.
+    const SEARCH_LIMIT: i32 = 3;
+    const MIN_VIDEO_SIZE: u64 = 1024; // 1KB — below this the file is certainly corrupt
+
+    // Search backward first (older frames are more likely in finalized chunks)
+    let directions: [(bool, &str); 2] = [(false, "backward"), (true, "forward")];
+    for (forward, dir_name) in directions {
+        let candidates = match state
+            .db
+            .get_frames_near(frame_id, forward, SEARCH_LIMIT)
+            .await
+        {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        for (candidate_id, file_path, offset_index, _timestamp) in candidates {
+            // Quick pre-check: skip if file missing or too small (avoids ffmpeg spawn)
+            match tokio::fs::metadata(&file_path).await {
+                Ok(meta) if meta.len() >= MIN_VIDEO_SIZE => {}
+                _ => continue,
+            }
+
+            match try_extract_and_serve_frame(
+                state,
+                candidate_id,
+                &file_path,
+                offset_index,
+                redact_pii,
+            )
+            .await
+            {
+                Ok(response) => {
+                    debug!(
+                        "Frame {} unavailable, serving nearest frame {} ({})",
+                        frame_id, candidate_id, dir_name
+                    );
+                    return Some(response);
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+
+    None
+}
+
 #[derive(Debug, Deserialize, OaSchema)]
 pub struct NextValidFrameQuery {
     /// Current frame_id that failed to load

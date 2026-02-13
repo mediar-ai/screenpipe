@@ -103,6 +103,9 @@ pub struct AppState {
     pub vision_metrics: Arc<screenpipe_vision::PipelineMetrics>,
     /// Audio pipeline metrics (shared across all devices)
     pub audio_metrics: Arc<screenpipe_audio::metrics::AudioPipelineMetrics>,
+    /// Limits concurrent ffmpeg frame extractions to prevent CPU thrashing
+    /// when many thumbnails are requested in parallel (e.g., search results).
+    pub frame_extraction_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 pub struct SCServer {
@@ -341,6 +344,10 @@ impl SCServer {
             pipe_manager: self.pipe_manager.clone(),
             vision_metrics: self.vision_metrics.clone(),
             audio_metrics: self.audio_metrics.clone(),
+            // Allow up to 3 concurrent ffmpeg extractions. Beyond this, requests
+            // queue rather than thrashing CPU with 15+ parallel ffmpeg processes
+            // (typical when search results load all thumbnails at once).
+            frame_extraction_semaphore: Arc::new(tokio::sync::Semaphore::new(3)),
         });
 
         let cors = CorsLayer::new()
