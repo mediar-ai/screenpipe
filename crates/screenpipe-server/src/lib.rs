@@ -12,6 +12,7 @@ pub mod cli_status;
 pub mod cloud_search;
 pub mod core;
 pub mod pipes_api;
+pub mod routes;
 
 mod resource_monitor;
 mod server;
@@ -32,13 +33,13 @@ pub use core::{record_video, start_continuous_recording};
 
 pub use resource_monitor::{ResourceMonitor, RestartSignal};
 pub use screenpipe_core::Language;
-pub use server::health_check;
+pub use server::health_check_handler as health_check;
 pub use server::AppState;
 pub use server::ContentItem;
 pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::SCServer;
-pub use server::{api_list_monitors, MonitorInfo};
+pub use server::{api_list_monitors_handler as api_list_monitors, MonitorInfo};
 pub use sleep_monitor::start_sleep_monitor;
 pub use video::{
     video_quality_to_crf, video_quality_to_jpeg_q, video_quality_to_preset, FrameWriteInfo,
