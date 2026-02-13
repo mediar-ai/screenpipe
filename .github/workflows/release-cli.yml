@@ -271,7 +271,7 @@ jobs:
           CARGO_PROFILE_RELEASE_STRIP: "none"
           CARGO_PROFILE_RELEASE_PANIC: "abort"
           CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
-          RUSTFLAGS: "-C target-feature=+crt-static -C link-arg=/LTCG"
+          RUSTFLAGS: "-C link-arg=/LTCG"
         run: |
           cargo build --release --target x86_64-pc-windows-msvc
 
