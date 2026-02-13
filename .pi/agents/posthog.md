@@ -1,6 +1,6 @@
 ---
 name: posthog
-description: Query PostHog for product analytics, create insights, dashboards, and track user behavior. Auto-activates when user asks about analytics, user behavior, funnels, retention, or dashboards. Trigger words: "check posthog", "create insight", "analytics", "user behavior", "dashboard", "funnel", "retention", "user metrics", "usage stats"
+description: 'Query PostHog for product analytics, create insights, dashboards, and track user behavior. Auto-activates when user asks about analytics, user behavior, funnels, retention, or dashboards. Trigger words: "check posthog", "create insight", "analytics", "user behavior", "dashboard", "funnel", "retention", "user metrics", "usage stats"'
 allowed-tools: Bash, Read
 ---
 
@@ -233,7 +233,9 @@ These fire from the backend, tagged `$lib: screenpipe-server`:
 | Event | File | Notes |
 |-------|------|-------|
 | `search_performed` | `server.rs:590` | Every `/search` API call. **Must filter `query_length > 0` for real searches.** |
-| `resource_usage` | `resource_monitor.rs` | Periodic heartbeat with CPU/mem/audio stats. |
+| `resource_usage` | `resource_monitor.rs` | Periodic heartbeat with CPU/mem stats. |
+| `vision_pipeline_health` | `server.rs` | Vision pipeline metrics every 60s (frames captured/skipped/dropped, OCR latency, etc.) |
+| `audio_pipeline_health` | `server.rs` | Audio pipeline metrics every 60s (chunks sent, VAD pass/reject, transcriptions, words/min). **The key event for audio quality monitoring.** |
 | `system_will_sleep` | `sleep_monitor.rs` | macOS sleep detected. |
 | `system_did_wake` | `sleep_monitor.rs` | macOS wake detected. |
 | `macos_version_below_12` | `analytics.rs` | Unsupported macOS version warning. |
@@ -283,31 +285,89 @@ These fire from the Next.js website, tagged `$lib: web`:
 
 ---
 
-## Audio Transcription Quality
+## Audio Pipeline Health
 
-Tracked via `resource_usage` event properties:
+Tracked via `audio_pipeline_health` event (fires every 60s from Rust server, respects `--disable-telemetry`).
 
-| Property | Description |
-|----------|-------------|
-| `audio_transcripts_total` | Total transcriptions received |
-| `audio_transcripts_inserted` | Successfully stored |
-| `audio_duplicates_blocked` | Exact duplicates caught |
-| `audio_overlaps_trimmed` | Partial overlaps cleaned |
-| `audio_duplicate_rate` | blocked / total (0.2-0.5 healthy) |
-| `audio_avg_word_count` | Average words per transcript |
+### Audio Pipeline Funnel
+
+The audio pipeline has 4 stages where data can be lost. Each is tracked:
+
+```
+Stage 1: chunks_sent              → Audio chunks sent to transcription engine
+Stage 2: vad_passed / vad_rejected → VAD filter (speech vs silence)
+Stage 3: transcriptions_completed  → Engine produced text
+Stage 4: db_inserted              → Stored in database
+```
+
+### Key Metrics
+
+| Property | Description | Healthy Range |
+|----------|-------------|---------------|
+| `chunks_sent` | Audio chunks sent to transcription | >0 means recording works |
+| `chunks_channel_full` | Dropped because whisper queue full | 0 is ideal |
+| `stream_timeouts` | Device went silent >30s (hijack/idle) | Low for input devices |
+| `vad_passed` | Chunks that had enough speech | — |
+| `vad_rejected` | Chunks rejected by VAD (no speech) | — |
+| `vad_passthrough_rate` | vad_passed / (passed + rejected) | 0.3-0.8 during calls |
+| `avg_speech_ratio` | Average speech density in chunks | >0.1 during calls |
+| `transcriptions_completed` | Non-empty results from engine | — |
+| `transcriptions_empty` | Engine returned empty string | Low is good |
+| `transcription_errors` | Engine errors | 0 is ideal |
+| `db_inserted` | Successfully stored in DB | Should ≈ transcriptions_completed |
+| `db_duplicates_blocked` | Exact duplicates caught | — |
+| `db_overlaps_trimmed` | Partial overlaps cleaned | — |
+| `total_words` | Cumulative words transcribed | — |
+| `words_per_minute` | Transcription density | 40-150 during speech |
+
+### Query: Audio Pipeline Overview (7d)
 
 ```bash
 source /Users/louisbeaumont/Documents/screenpipe/.env.local
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
-  -d '{"query":{"kind":"HogQLQuery","query":"SELECT JSONExtractString(properties, '\''release'\'') as version, avg(JSONExtractFloat(properties, '\''audio_duplicate_rate'\'')) as avg_dup_rate, sum(JSONExtractFloat(properties, '\''audio_duplicates_blocked'\'')) as total_blocked, sum(JSONExtractFloat(properties, '\''audio_transcripts_total'\'')) as total_transcripts, uniq(distinct_id) as users FROM events WHERE event = '\''resource_usage'\'' AND JSONExtractFloat(properties, '\''audio_transcripts_total'\'') > 0 AND timestamp > now() - INTERVAL 14 DAY GROUP BY version ORDER BY users DESC LIMIT 10"}}' \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT toDate(timestamp) as day, sum(JSONExtractUInt(properties, '\''chunks_sent'\'')) as chunks, sum(JSONExtractUInt(properties, '\''vad_rejected'\'')) as vad_dropped, sum(JSONExtractUInt(properties, '\''db_inserted'\'')) as stored, avg(JSONExtractFloat(properties, '\''vad_passthrough_rate'\'')) as avg_vad_rate, avg(JSONExtractFloat(properties, '\''words_per_minute'\'')) as avg_wpm, uniq(distinct_id) as users FROM events WHERE event = '\''audio_pipeline_health'\'' AND timestamp > now() - INTERVAL 7 DAY GROUP BY day ORDER BY day"}}' \
   "https://eu.i.posthog.com/api/projects/27525/query/" | \
   python3 -c "
 import sys,json
 r=json.load(sys.stdin)
-print(f'{\"Version\":<12} | {\"Dup Rate\":>8} | {\"Blocked\":>8} | {\"Total\":>8} | {\"Users\":>5}')
+print(f'{\"Day\":<12} | {\"Chunks\":>7} | {\"VAD Drop\":>8} | {\"Stored\":>7} | {\"VAD Rate\":>8} | {\"WPM\":>5} | {\"Users\":>5}')
+print('-'*72)
 for row in r.get('results',[]):
-    rate = f'{row[1]*100:.1f}%' if row[1] else 'n/a'
-    print(f'{str(row[0]):<12} | {rate:>8} | {int(row[2] or 0):>8} | {int(row[3] or 0):>8} | {row[4]:>5}')
+    print(f'{row[0]:<12} | {int(row[1] or 0):>7} | {int(row[2] or 0):>8} | {int(row[3] or 0):>7} | {row[4]*100 if row[4] else 0:>7.1f}% | {row[5] or 0:>5.0f} | {row[6]:>5}')
+"
+```
+
+### Query: Audio Pipeline by Version (regression detection)
+
+```bash
+source /Users/louisbeaumont/Documents/screenpipe/.env.local
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT JSONExtractString(properties, '\''$lib_version'\'') as version, avg(JSONExtractFloat(properties, '\''vad_passthrough_rate'\'')) as avg_vad_rate, avg(JSONExtractFloat(properties, '\''words_per_minute'\'')) as avg_wpm, sum(JSONExtractUInt(properties, '\''chunks_channel_full'\'')) as channel_drops, sum(JSONExtractUInt(properties, '\''transcription_errors'\'')) as errors, uniq(distinct_id) as users FROM events WHERE event = '\''audio_pipeline_health'\'' AND timestamp > now() - INTERVAL 7 DAY GROUP BY version ORDER BY users DESC LIMIT 10"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" | \
+  python3 -c "
+import sys,json
+r=json.load(sys.stdin)
+print(f'{\"Version\":<14} | {\"VAD Rate\":>8} | {\"WPM\":>5} | {\"Ch.Full\":>7} | {\"Errors\":>6} | {\"Users\":>5}')
+print('-'*60)
+for row in r.get('results',[]):
+    print(f'{str(row[0]):<14} | {row[1]*100 if row[1] else 0:>7.1f}% | {row[2] or 0:>5.0f} | {int(row[3] or 0):>7} | {int(row[4] or 0):>6} | {row[5]:>5}')
+"
+```
+
+### Query: Users with broken audio (high VAD rejection)
+
+```bash
+source /Users/louisbeaumont/Documents/screenpipe/.env.local
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT distinct_id, avg(JSONExtractFloat(properties, '\''vad_passthrough_rate'\'')) as avg_vad_rate, sum(JSONExtractUInt(properties, '\''vad_rejected'\'')) as total_rejected, sum(JSONExtractUInt(properties, '\''db_inserted'\'')) as total_stored, sum(JSONExtractUInt(properties, '\''stream_timeouts'\'')) as timeouts FROM events WHERE event = '\''audio_pipeline_health'\'' AND timestamp > now() - INTERVAL 3 DAY GROUP BY distinct_id HAVING avg_vad_rate < 0.2 AND total_rejected > 100 ORDER BY total_rejected DESC LIMIT 20"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" | \
+  python3 -c "
+import sys,json
+r=json.load(sys.stdin)
+print('Users with low VAD passthrough (<20%):')
+print(f'{\"User\":>40} | {\"VAD Rate\":>8} | {\"Rejected\":>8} | {\"Stored\":>7} | {\"Timeouts\":>8}')
+for row in r.get('results',[]):
+    print(f'{str(row[0])[:40]:>40} | {row[1]*100:>7.1f}% | {int(row[2]):>8} | {int(row[3]):>7} | {int(row[4]):>8}')
 "
 ```
 
