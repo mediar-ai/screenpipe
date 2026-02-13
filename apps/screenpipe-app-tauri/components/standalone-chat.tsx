@@ -1453,9 +1453,11 @@ export function StandaloneChat() {
           }
         }, delay);
       });
-      // Listen for Pi stderr — surface critical errors to user
+      // Listen for Pi stderr — only surface errors when user is actively waiting for a response
       unlistenLog = await listen<string>("pi_log", (event) => {
         if (!mounted) return;
+        // Only show errors if user sent a message and is waiting — not during background startup/restart
+        if (!piMessageIdRef.current) return;
         const line = event.payload;
         if (line.includes("not found") || line.includes("ECONNREFUSED") || line.includes("connection refused")) {
           let hint = line;
