@@ -1602,15 +1602,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap_complete"
-version = "4.5.65"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "430b4dc2b5e3861848de79627b2bedc9f3342c7da5173a14eaa5d0f8dc18ae5d"
-dependencies = [
- "clap",
-]
-
-[[package]]
 name = "clap_derive"
 version = "4.5.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5078,7 +5069,7 @@ source = "git+https://github.com/Neptune650/knf-rs.git#b782e6bb02db495ce767f0094
 dependencies = [
  "eyre",
  "knf-rs-sys",
- "ndarray 0.16.1",
+ "ndarray",
 ]
 
 [[package]]
@@ -5870,19 +5861,6 @@ dependencies = [
  "security-framework 2.11.1",
  "security-framework-sys",
  "tempfile",
-]
-
-[[package]]
-name = "ndarray"
-version = "0.15.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb12d4e967ec485a5f71c6311fe28158e9d6f4bc4a447b474184d0f91a8fa32"
-dependencies = [
- "matrixmultiply",
- "num-complex",
- "num-integer",
- "num-traits",
- "rawpointer",
 ]
 
 [[package]]
@@ -6965,7 +6943,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5f95fe501e1cb81dec2f66ee3129025759b602817aa2c77ff421390c418cc34"
 dependencies = [
  "half",
- "ndarray 0.16.1",
+ "ndarray",
  "ort-sys",
  "tracing",
 ]
@@ -8370,16 +8348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-stemmers"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e46a2036019fdb888131db7a4c847a1063a7493f971ed94ea82c67eada63ca54"
-dependencies = [
- "serde",
- "serde_derive",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8719,7 +8687,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.0.423"
+version = "2.0.448"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -8764,7 +8732,6 @@ dependencies = [
  "screenpipe-vision",
  "sentry 0.42.0",
  "serde",
- "serde_derive",
  "serde_json",
  "specta",
  "specta-typescript",
@@ -8836,7 +8803,7 @@ dependencies = [
  "libpulse-simple-binding",
  "libsamplerate-sys",
  "log",
- "ndarray 0.16.1",
+ "ndarray",
  "oasgen",
  "objc",
  "once_cell",
@@ -8875,6 +8842,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chacha20poly1305",
+ "chrono",
  "clap",
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
@@ -8894,6 +8862,7 @@ dependencies = [
  "reqwest 0.12.12",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
  "thiserror 1.0.69",
  "tokenizers",
@@ -8975,34 +8944,27 @@ dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
  "bincode",
- "candle-core",
- "candle-nn",
- "candle-transformers",
  "chrono",
  "cidre 0.14.0",
  "clap",
- "clap_complete",
  "colored",
  "crossbeam",
  "dashmap",
  "dirs 5.0.1",
  "fastrand",
  "futures",
- "hf-hub 0.3.2 (git+https://github.com/neo773/hf-hub)",
  "hostname",
  "image 0.25.9",
  "imageproc",
  "lru",
  "md5",
  "moka",
- "ndarray 0.15.6",
  "nix 0.29.0",
  "oasgen",
  "once_cell",
  "port_check",
  "regex",
  "reqwest 0.12.12",
- "rust-stemmers",
  "screenpipe-accessibility",
  "screenpipe-apple-intelligence",
  "screenpipe-audio",
@@ -9017,7 +8979,6 @@ dependencies = [
  "sqlx",
  "sysinfo",
  "tempfile",
- "tokenizers",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -9027,7 +8988,6 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
- "walkdir",
  "windows 0.58.0",
 ]
 
@@ -12372,7 +12332,7 @@ version = "0.2.0"
 source = "git+https://github.com/screenpipe/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
 dependencies = [
  "eyre",
- "ndarray 0.16.1",
+ "ndarray",
  "ort",
  "ort-sys",
  "ringbuffer",

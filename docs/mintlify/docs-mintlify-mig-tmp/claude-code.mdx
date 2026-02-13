@@ -9,38 +9,17 @@ icon: "terminal"
 
 ## setup
 
-Claude Code connects to screenpipe via MCP (Model Context Protocol). there are two ways to set this up:
-
-### option 1: one-click from screenpipe app (recommended)
-
-1. open the **screenpipe app**
-2. go to **settings** → **connections**
-3. click **"install extension"** next to Claude Code
-4. done! Claude Code now has access to screenpipe
-
-### option 2: CLI command
-
 ```bash
-# add screenpipe MCP server to Claude Code
 claude mcp add screenpipe --transport stdio -- npx -y screenpipe-mcp
 ```
 
-### option 3: add from JSON config
+to make it available across all your projects:
 
-```bash
-claude mcp add-json screenpipe '{"type":"stdio","command":"npx","args":["-y","screenpipe-mcp"]}'
-```
-
-<Tip>
-use `--scope user` to make screenpipe available in all your projects:
 ```bash
 claude mcp add screenpipe --transport stdio --scope user -- npx -y screenpipe-mcp
 ```
-</Tip>
 
 ## verify connection
-
-check that screenpipe is connected:
 
 ```bash
 # list MCP servers
