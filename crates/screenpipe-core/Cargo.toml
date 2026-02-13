@@ -65,7 +65,6 @@ security = ["dep:regex", "dep:lazy_static"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
-llm = []
 cloud-sync = [
     "dep:argon2",
     "dep:chacha20poly1305",

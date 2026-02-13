@@ -5078,7 +5078,7 @@ source = "git+https://github.com/Neptune650/knf-rs.git#b782e6bb02db495ce767f0094
 dependencies = [
  "eyre",
  "knf-rs-sys",
- "ndarray 0.16.1",
+ "ndarray",
 ]
 
 [[package]]
@@ -5870,19 +5870,6 @@ dependencies = [
  "security-framework 2.11.1",
  "security-framework-sys",
  "tempfile",
-]
-
-[[package]]
-name = "ndarray"
-version = "0.15.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb12d4e967ec485a5f71c6311fe28158e9d6f4bc4a447b474184d0f91a8fa32"
-dependencies = [
- "matrixmultiply",
- "num-complex",
- "num-integer",
- "num-traits",
- "rawpointer",
 ]
 
 [[package]]
@@ -6965,7 +6952,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5f95fe501e1cb81dec2f66ee3129025759b602817aa2c77ff421390c418cc34"
 dependencies = [
  "half",
- "ndarray 0.16.1",
+ "ndarray",
  "ort-sys",
  "tracing",
 ]
@@ -8370,16 +8357,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-stemmers"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e46a2036019fdb888131db7a4c847a1063a7493f971ed94ea82c67eada63ca54"
-dependencies = [
- "serde",
- "serde_derive",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8836,7 +8813,7 @@ dependencies = [
  "libpulse-simple-binding",
  "libsamplerate-sys",
  "log",
- "ndarray 0.16.1",
+ "ndarray",
  "oasgen",
  "objc",
  "once_cell",
@@ -8997,14 +8974,12 @@ dependencies = [
  "lru",
  "md5",
  "moka",
- "ndarray 0.15.6",
  "nix 0.29.0",
  "oasgen",
  "once_cell",
  "port_check",
  "regex",
  "reqwest 0.12.12",
- "rust-stemmers",
  "screenpipe-accessibility",
  "screenpipe-apple-intelligence",
  "screenpipe-audio",
@@ -12374,7 +12349,7 @@ version = "0.2.0"
 source = "git+https://github.com/screenpipe/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
 dependencies = [
  "eyre",
- "ndarray 0.16.1",
+ "ndarray",
  "ort",
  "ort-sys",
  "ringbuffer",

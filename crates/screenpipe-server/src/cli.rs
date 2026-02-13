@@ -263,9 +263,6 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub disable_telemetry: bool,
 
-    #[arg(long, default_value_t = false)]
-    pub enable_llm: bool,
-
     #[arg(long, default_value_t = true)]
     pub enable_frame_cache: bool,
 
@@ -505,10 +502,6 @@ pub struct RecordArgs {
     #[arg(long, default_value_t = false)]
     pub disable_telemetry: bool,
 
-    /// Enable Local LLM API
-    #[arg(long, default_value_t = false)]
-    pub enable_llm: bool,
-
     /// Enable frame cache (makes timeline UI available)
     #[arg(long, default_value_t = true)]
     pub enable_frame_cache: bool,
@@ -578,7 +571,6 @@ impl RecordArgs {
             auto_destruct_pid: cli.auto_destruct_pid,
             vad_sensitivity: cli.vad_sensitivity.clone(),
             disable_telemetry: cli.disable_telemetry,
-            enable_llm: cli.enable_llm,
             enable_frame_cache: cli.enable_frame_cache,
             capture_unfocused_windows: cli.capture_unfocused_windows,
             video_quality: cli.video_quality.clone(),

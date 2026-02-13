@@ -1139,6 +1139,7 @@ export function StandaloneChat() {
   useEffect(() => {
     let unlistenEvent: UnlistenFn | null = null;
     let unlistenTerminated: UnlistenFn | null = null;
+    let unlistenLog: UnlistenFn | null = null;
     let mounted = true;
 
     const setup = async () => {
@@ -1351,7 +1352,12 @@ export function StandaloneChat() {
               if (!content && hasNonTextBlocks) {
                 content = ""; // empty — tool/thinking blocks will render
               } else if (!content) {
-                content = "no response from model — try a different prompt or model";
+                const provider = activePreset?.provider;
+                if (provider === "native-ollama") {
+                  content = "No response — is Ollama running? Start it with `ollama serve` and make sure the model is pulled.";
+                } else {
+                  content = "No response from model — try again or check your AI preset in settings.";
+                }
               }
               // Add text as a content block if no text block exists yet
               const hasTextBlock = contentBlocks.some((b) => b.type === "text");
@@ -1407,23 +1413,59 @@ export function StandaloneChat() {
           return;
         }
         const terminatedPid = event.payload;
-        console.log("[Pi] Process terminated unexpectedly, pid:", terminatedPid, "restart count:", piRestartCountRef.current);
+        console.log("[Pi] Process terminated, pid:", terminatedPid, "restart count:", piRestartCountRef.current);
         piRestartCountRef.current += 1;
+        const delay = Math.min(1000 * piRestartCountRef.current, 5000);
         setTimeout(async () => {
           if (!mounted) return;
-          // Check if a newer Pi process is already running — don't null out piInfo
-          // if Rust already started a replacement (race between stop → start → terminated event)
+          // Check if a newer Pi process is already running (race: stop → start → terminated)
           try {
             const result = await commands.piInfo();
             if (result.status === "ok" && result.data.running && result.data.pid !== terminatedPid) {
-              console.log("[Pi] Stale termination for pid", terminatedPid, "— newer pid", result.data.pid, "is running, ignoring");
+              console.log("[Pi] Stale termination for pid", terminatedPid, "— newer pid", result.data.pid, "is running");
               setPiInfo(result.data);
               piRestartCountRef.current = 0;
               return;
             }
           } catch {}
-          setPiInfo(null);
-        }, Math.min(1000 * piRestartCountRef.current, 5000));
+
+          // Pi is actually dead — auto-restart (up to 5 attempts)
+          if (piRestartCountRef.current <= 5 && !piStartInFlightRef.current) {
+            console.log("[Pi] Auto-restarting (attempt", piRestartCountRef.current, "/ 5)");
+            try {
+              const providerConfig = buildProviderConfig();
+              const home = await homeDir();
+              const dir = await join(home, ".screenpipe", "pi-chat");
+              const result = await commands.piStart(dir, settings.user?.token ?? null, providerConfig);
+              if (result.status === "ok") {
+                setPiInfo(result.data);
+                if (result.data.running) piRestartCountRef.current = 0;
+              } else {
+                console.error("[Pi] Auto-restart failed:", result.error);
+                setPiInfo(null);
+              }
+            } catch (e) {
+              console.error("[Pi] Auto-restart exception:", e);
+              setPiInfo(null);
+            }
+          } else {
+            setPiInfo(null);
+          }
+        }, delay);
+      });
+      // Listen for Pi stderr — surface critical errors to user
+      unlistenLog = await listen<string>("pi_log", (event) => {
+        if (!mounted) return;
+        const line = event.payload;
+        if (line.includes("not found") || line.includes("ECONNREFUSED") || line.includes("connection refused")) {
+          let hint = line;
+          if (line.includes("not found")) {
+            hint = `Model not found: ${line}. Check your AI preset in settings.`;
+          } else if (line.includes("ECONNREFUSED") || line.includes("connection refused")) {
+            hint = "Cannot connect to Ollama — is it running? Start with: ollama serve";
+          }
+          toast({ title: "Pi agent error", description: hint, variant: "destructive" });
+        }
       });
     };
 
@@ -1433,6 +1475,7 @@ export function StandaloneChat() {
       mounted = false;
       unlistenEvent?.();
       unlistenTerminated?.();
+      unlistenLog?.();
     };
   }, []);
 
@@ -1536,10 +1579,22 @@ export function StandaloneChat() {
       if (result.status === "error") {
         clearTimeout(timeoutId);
         piMessageIdRef.current = null;
+        // Provide helpful error messages for common failures
+        let errorMsg = result.error;
+        if (errorMsg.includes("Broken pipe") || errorMsg.includes("not running")) {
+          const provider = activePreset?.provider;
+          if (provider === "native-ollama") {
+            errorMsg = "Ollama is not running. Start it with: `ollama serve`";
+          } else {
+            errorMsg = "AI agent crashed — restarting automatically...";
+          }
+        } else if (errorMsg.includes("not found")) {
+          errorMsg = `Model "${activePreset?.model}" not found. Check your AI preset in settings.`;
+        }
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
-              ? { ...m, content: `Error: ${result.error}` }
+              ? { ...m, content: `Error: ${errorMsg}` }
               : m
           )
         );

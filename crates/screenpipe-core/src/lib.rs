@@ -5,26 +5,6 @@ pub mod agents;
 pub mod ffmpeg;
 pub mod pipes;
 pub use ffmpeg::find_ffmpeg_path;
-#[cfg(feature = "llm")]
-pub mod llm;
-#[cfg(feature = "llm")]
-pub use llm::*;
-#[cfg(feature = "llm")]
-pub mod phi;
-#[cfg(feature = "llm")]
-pub use phi::*;
-#[cfg(feature = "llm")]
-pub mod google;
-#[cfg(feature = "llm")]
-pub use google::*;
-#[cfg(feature = "llm")]
-pub mod mistral;
-#[cfg(feature = "llm")]
-pub use mistral::*;
-#[cfg(feature = "llm")]
-pub mod llama;
-#[cfg(feature = "llm")]
-pub use llama::*;
 
 mod language;
 #[cfg(feature = "security")]

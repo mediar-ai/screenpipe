@@ -88,10 +88,6 @@ reqwest = { workspace = true }
 # Concurrency
 crossbeam = { workspace = true }
 
-# filtering
-ndarray = "0.15.6"
-rust-stemmers = "1.2.0"
-
 # base64
 base64 = "0.22.1"
 
@@ -140,7 +136,6 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 vulkan = ["screenpipe-audio/vulkan"]
-llm = []
 experimental = []
 debug-console = ["console-subscriber"]
 adaptive-fps = ["screenpipe-vision/adaptive-fps"]

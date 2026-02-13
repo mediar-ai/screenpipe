@@ -6,13 +6,11 @@ pub mod analytics;
 #[cfg(feature = "apple-intelligence")]
 mod apple_intelligence_api;
 mod auto_destruct;
-pub mod chunking;
 pub mod cli;
 pub mod cli_pipe;
 pub mod cli_status;
 pub mod cloud_search;
 pub mod core;
-pub mod filtering;
 pub mod pipes_api;
 
 mod resource_monitor;

@@ -173,7 +173,6 @@ metal = ["screenpipe-audio/metal"]
 pulseaudio = ["screenpipe-audio/pulseaudio"]
 vulkan = ["screenpipe-audio/vulkan"]
 mkl = []
-llm = []
 cargo-clippy = []
 default = ["custom-protocol"]
 

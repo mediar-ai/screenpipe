@@ -341,7 +341,6 @@ async fn main() -> anyhow::Result<()> {
                         "video_chunk_duration".into(),
                         json!(cli.video_chunk_duration),
                     );
-                    map.insert("enable_llm".into(), json!(cli.enable_llm));
                     map.insert("enable_frame_cache".into(), json!(cli.enable_frame_cache));
                     map.insert(
                         "capture_unfocused_windows".into(),
@@ -519,7 +518,6 @@ async fn main() -> anyhow::Result<()> {
     cli.auto_destruct_pid = record_args.auto_destruct_pid;
     cli.vad_sensitivity = record_args.vad_sensitivity.clone();
     cli.disable_telemetry = record_args.disable_telemetry;
-    cli.enable_llm = record_args.enable_llm;
     cli.enable_frame_cache = record_args.enable_frame_cache;
     cli.capture_unfocused_windows = record_args.capture_unfocused_windows;
     cli.video_quality = record_args.video_quality.clone();
@@ -862,21 +860,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
-    #[cfg(feature = "llm")]
-    debug!("LLM initializing");
-
-    #[cfg(feature = "llm")]
-    let _llm = {
-        match cli.enable_llm {
-            true => Some(screenpipe_core::LLM::new(
-                screenpipe_core::ModelName::Llama,
-            )?),
-            false => None,
-        }
-    };
-
-    #[cfg(feature = "llm")]
-    debug!("LLM initialized");
 
     let mut server = SCServer::new(
         db_server,
@@ -993,8 +976,6 @@ async fn main() -> anyhow::Result<()> {
         "│ telemetry              │ {:<34} │",
         !cli.disable_telemetry
     );
-    println!("│ local llm              │ {:<34} │", cli.enable_llm);
-
     println!("│ use pii removal        │ {:<34} │", cli.use_pii_removal);
     println!("│ use all monitors       │ {:<34} │", cli.use_all_monitors);
     println!(
