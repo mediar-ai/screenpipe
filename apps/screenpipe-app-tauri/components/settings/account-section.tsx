@@ -279,16 +279,16 @@ export function AccountSection() {
                     <h3 className="text-lg font-semibold">screenpipe pro</h3>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold">{isAnnual ? "$19" : "$29"}</span>
+                    <span className="text-2xl font-bold">{isAnnual ? "$26" : "$39"}</span>
                     <span className="text-muted-foreground text-sm">/month</span>
                     {isAnnual && (
                       <span className="text-xs border border-foreground/20 text-foreground px-2 py-0.5 rounded-full font-medium">
-                        save 34%
+                        save 33%
                       </span>
                     )}
                   </div>
                   {isAnnual && (
-                    <p className="text-xs text-muted-foreground mt-0.5">$228/year, billed annually</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">$312/year, billed annually</p>
                   )}
                 </div>
                 <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
@@ -345,16 +345,16 @@ export function AccountSection() {
                     <h3 className="text-lg font-semibold">screenpipe pro</h3>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold">{isAnnual ? "$19" : "$29"}</span>
+                    <span className="text-2xl font-bold">{isAnnual ? "$26" : "$39"}</span>
                     <span className="text-muted-foreground text-sm">/month</span>
                     {isAnnual && (
                       <span className="text-xs border border-foreground/20 text-foreground px-2 py-0.5 rounded-full font-medium">
-                        save 34%
+                        save 33%
                       </span>
                     )}
                   </div>
                   {isAnnual && (
-                    <p className="text-xs text-muted-foreground mt-0.5">$228/year, billed annually</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">$312/year, billed annually</p>
                   )}
                 </div>
                 <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />

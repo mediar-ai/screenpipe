@@ -178,9 +178,9 @@ export function UpgradeDialog({
               >
                 <Zap className="h-4 w-4 shrink-0" />
                 <div className="text-left flex-1 min-w-0">
-                  <div className="font-medium">screenpipe pro — $29/mo</div>
+                  <div className="font-medium">screenpipe pro — $39/mo</div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
-                    200 queries/day + 500 credits/mo + all models
+                    cloud transcription + claude opus 4.6 + encrypted sync
                   </div>
                 </div>
               </Button>
@@ -193,9 +193,9 @@ export function UpgradeDialog({
                 <Star className="h-4 w-4 shrink-0" />
                 <div className="text-left flex-1 min-w-0">
                   <div className="font-medium flex items-center gap-1.5">
-                    $228/year
+                    $312/year
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      save 34%
+                      save 33%
                     </Badge>
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
