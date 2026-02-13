@@ -480,10 +480,13 @@ impl ShowRewindWindow {
                         save_frontmost_app();
                         unsafe {
                             let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
-                            make_webview_first_responder(&panel);
                         }
                         panel.order_front_regardless();
                         panel.make_key_window();
+                        // Set WKWebView as first responder AFTER make_key_window so
+                        // the responder chain update doesn't reset it to content_view.
+                        // This is critical for trackpad pinch-to-zoom (magnifyWithEvent:).
+                        unsafe { make_webview_first_responder(&panel); }
                         // Remove MoveToActiveSpace so panel stays pinned to this Space
                         panel.set_collection_behaviour(
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
@@ -556,10 +559,12 @@ impl ShowRewindWindow {
                         // Restore alpha in case it was set to 0 by focus-loss handler
                         unsafe {
                             let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
-                            make_webview_first_responder(&panel);
                         }
                         panel.order_front_regardless();
                         panel.make_key_window();
+                        // Set WKWebView as first responder AFTER make_key_window so
+                        // the responder chain update doesn't reset it to content_view.
+                        unsafe { make_webview_first_responder(&panel); }
 
                         // Remove MoveToActiveSpace now that the panel is shown.
                         // This keeps it pinned to THIS Space so it won't follow
@@ -708,9 +713,10 @@ impl ShowRewindWindow {
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                             );
-                            unsafe { make_webview_first_responder(&panel); }
                             panel.order_front_regardless();
                             panel.make_key_window();
+                            // Set WKWebView as first responder AFTER make_key_window
+                            unsafe { make_webview_first_responder(&panel); }
                             // Remove MoveToActiveSpace now that the panel is shown.
                             // Keeps it pinned to THIS Space so it won't follow
                             // three-finger swipes (same pattern as main overlay).
@@ -837,9 +843,10 @@ impl ShowRewindWindow {
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
-                                    unsafe { make_webview_first_responder(&panel); }
                                     panel.order_front_regardless();
                                     panel.make_key_window();
+                                    // Set WKWebView as first responder AFTER make_key_window
+                                    unsafe { make_webview_first_responder(&panel); }
                                     let _ = app_for_emit.emit("window-focused", true);
                                 }
                             });
@@ -900,8 +907,12 @@ impl ShowRewindWindow {
                                         if let Ok(panel) = app_clone.get_webview_panel("main-window") {
                                             unsafe {
                                                 let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
-                                                make_webview_first_responder(&panel);
                                             }
+                                            // Ensure panel is key window before setting first
+                                            // responder, otherwise magnifyWithEvent: won't
+                                            // reach the WKWebView (pinch-to-zoom breaks).
+                                            panel.make_key_window();
+                                            unsafe { make_webview_first_responder(&panel); }
                                         }
                                     }
                                     // Re-register window shortcuts on focus gain
@@ -1202,8 +1213,12 @@ impl ShowRewindWindow {
                                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
                                         unsafe {
                                             let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
-                                            make_webview_first_responder(&panel);
                                         }
+                                        // Ensure panel is key window before setting first
+                                        // responder, otherwise magnifyWithEvent: won't
+                                        // reach the WKWebView (pinch-to-zoom breaks).
+                                        panel.make_key_window();
+                                        unsafe { make_webview_first_responder(&panel); }
                                     }
                                 }
                                 // Re-register window-specific shortcuts on focus gain
