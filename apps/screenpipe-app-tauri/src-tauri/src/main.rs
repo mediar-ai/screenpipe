@@ -1225,7 +1225,6 @@ async fn main() {
             }
         }));
         let app = app
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build());
 
         // Only add Sentry plugin if telemetry is enabled
@@ -1332,6 +1331,8 @@ async fn main() {
             reminders::reminders_set_custom_prompt,
             reminders::reminders_get_audio_only,
             reminders::reminders_set_audio_only,
+            // Rollback commands
+            commands::rollback_to_version,
             // OCR commands
             commands::perform_ocr_on_image
         ])

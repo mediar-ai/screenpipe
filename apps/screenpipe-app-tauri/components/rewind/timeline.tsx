@@ -712,6 +712,8 @@ export default function Timeline() {
 			return;
 		}
 
+		let cancelled = false;
+
 		const findDateWithFrames = async () => {
 			let dateToCheck = new Date(currentDate);
 			const isToday = isSameDay(dateToCheck, new Date());
@@ -721,12 +723,16 @@ export default function Timeline() {
 			if (!isToday && !isNavigatingRef.current) {
 				let retries = 0;
 				while (retries < MAX_DATE_RETRIES) {
+					if (cancelled) return;
 					const checkFramesForDate = await hasFramesForDate(dateToCheck);
+					if (cancelled) return;
 					console.log("checkFramesForDate", dateToCheck, checkFramesForDate);
 					if (checkFramesForDate) break;
 					retries++;
 					dateToCheck = subDays(dateToCheck, 1);
 				}
+
+				if (cancelled) return;
 
 				if (retries > 0 && retries < MAX_DATE_RETRIES) {
 					// Found frames on a different date — update once
@@ -741,12 +747,18 @@ export default function Timeline() {
 				}
 			}
 
+			if (cancelled) return;
+
 			const startTime = startOfDay(dateToCheck);
 			const endTime = endOfDay(dateToCheck);
 			fetchTimeRange(startTime, endTime);
 		};
 
 		findDateWithFrames();
+
+		return () => {
+			cancelled = true;
+		};
 	}, [currentDate, websocket]); // Re-run when websocket connects or date changes
 
 	// Sync currentDate to frame's date - but NOT during intentional navigation

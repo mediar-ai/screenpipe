@@ -316,7 +316,7 @@ pub struct TextBounds {
     pub height: f32,
 }
 
-#[derive(OaSchema, Serialize)]
+#[derive(OaSchema, Serialize, Clone)]
 pub struct SearchMatch {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
@@ -327,6 +327,15 @@ pub struct SearchMatch {
     // pub context: Option<String>,
     pub text: String,
     pub url: String,
+}
+
+#[derive(OaSchema, Serialize)]
+pub struct SearchMatchGroup {
+    pub representative: SearchMatch,
+    pub group_size: usize,
+    pub start_time: String,
+    pub end_time: String,
+    pub frame_ids: Vec<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
