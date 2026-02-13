@@ -1,64 +1,65 @@
 ---
-title: "Apple Intelligence — use screenpipe with Siri & Apple shortcuts"
+title: "Apple Intelligence — on-device daily summaries & auto reminders"
 sidebarTitle: "apple intelligence"
-description: "Connect screenpipe to Apple Intelligence, Siri, and Apple Shortcuts for screen-aware automations on macOS."
+description: "screenpipe uses Apple Intelligence (on-device Foundation Models) to generate daily summaries and automatically extract action items into Apple Reminders."
 icon: "apple"
 ---
 
-screenpipe's local API integrates with Apple Intelligence through Siri Shortcuts, giving you voice-activated access to your screen history.
+screenpipe uses Apple's on-device Foundation Models to analyze your recorded activity — no data leaves your Mac. requires macOS 26+ with Apple Intelligence enabled on Apple Silicon.
 
-## how it works
+## daily summaries
 
-screenpipe runs a local API on `localhost:3030`. Apple Shortcuts can call this API to search your screen history, get recent activity, or trigger pipes — all through Siri voice commands or automations.
+screenpipe automatically generates a summary of your day at **6 PM** (when plugged in). the summary appears in your **timeline** view and includes:
 
-## Siri Shortcuts integration
+- **one-liner** — casual summary of your day
+- **key moments** — up to 5 important events from audio transcriptions
+- **action items** — things mentioned in conversations, ranked by urgency
+- **people mentioned** — names and context from your conversations
 
-### search your screen with Siri
+you can also click the Apple Intelligence icon in the timeline to generate a summary manually at any time.
 
-create a shortcut that queries screenpipe:
+### how it works
 
-1. open **Shortcuts** app on macOS
-2. create a new shortcut
-3. add **Get Contents of URL** action:
-   - URL: `http://localhost:3030/search?q=QUERY&limit=5&content_type=ocr`
-   - method: GET
-4. add **Get Dictionary Value** to parse the JSON response
-5. add **Show Result** or **Quick Look** to display results
+1. fetches your audio transcriptions for the day
+2. sends them to Apple's on-device Foundation Models (never leaves your Mac)
+3. returns a structured summary with key moments, action items, and people
+4. caches the result locally so it loads instantly next time
 
-### example: "what was I working on?"
+### enable/disable
 
-create a shortcut named "what was I working on":
+open **settings** → **connections** → toggle **Apple Intelligence** on or off.
 
-1. **Get Contents of URL**: `http://localhost:3030/search?content_type=ocr&limit=10`
-2. **Get Dictionary Value**: key `data`
-3. **Repeat with Each** → extract `content.text` and `content.app_name`
-4. **Show Result**: display the text
+## auto reminders
 
-then say: *"Hey Siri, what was I working on?"*
+screenpipe can scan your activity every 30 minutes and automatically create action items in **Apple Reminders**.
 
-### example: get meeting transcriptions
+### setup
 
-1. **Get Contents of URL**: `http://localhost:3030/search?content_type=audio&limit=20`
-2. parse and display transcriptions
+1. open **settings** → **connections** → find the **Apple Intelligence** card
+2. click **"Connect Apple Reminders"** (grants Reminders permission)
+3. toggle on **auto-scanning**
 
-say: *"Hey Siri, what did we discuss in the meeting?"*
+once enabled, screenpipe will:
+- scan your screen & audio every 30 minutes
+- extract action items using Apple Intelligence
+- create reminders in a **"Screenpipe"** list in Apple Reminders
+- auto-deduplicate so you don't get repeat reminders
 
-## Apple Shortcuts automations
+### options
 
-combine screenpipe with Shortcuts automations:
+- **audio only** — skip screen data, only analyze audio transcriptions (on by default)
+- **custom prompt** — add instructions like "focus on coding tasks" or "ignore social media"
+- **scan now** — manually trigger a scan anytime
 
-| automation | how |
-| --- | --- |
-| daily summary at 6pm | time-based trigger → query screenpipe → format summary → send notification |
-| focus mode logging | when Focus turns on → log current activity from screenpipe |
-| meeting notes on calendar end | calendar event ends → query audio transcriptions → save to Notes |
+## requirements
 
-## tips
+- **macOS 26+** (Tahoe) with Apple Intelligence enabled
+- **Apple Silicon** (M1 or later)
+- screenpipe running on localhost:3030
 
-- screenpipe must be running for the API to respond
-- all data stays local — Shortcuts queries `localhost` only
-- combine with **Ask ChatGPT** action in Shortcuts for AI-powered summaries
-- use `start_time` and `end_time` params to scope queries to specific time ranges
+<Note>
+if Apple Intelligence shows as "not available", check that it's enabled in **System Settings → Apple Intelligence & Siri** and that your Mac meets the requirements.
+</Note>
 
 ## vs Apple's built-in screen time
 
@@ -66,13 +67,7 @@ combine screenpipe with Shortcuts automations:
 | --- | --- | --- |
 | full text search | ✅ OCR on every frame | ❌ app usage only |
 | audio transcription | ✅ local Whisper | ❌ |
-| AI integration | ✅ any LLM | limited to Apple Intelligence |
+| AI summaries | ✅ daily summary with action items | ❌ |
+| auto reminders | ✅ action items → Apple Reminders | ❌ |
 | API access | ✅ full REST API | ❌ |
 | cross-platform | ✅ macOS, Windows, Linux | ❌ Apple only |
-| data export | ✅ SQLite, API | ❌ |
-
-## next steps
-
-- [install screenpipe](/getting-started)
-- [MCP server](/mcp-server) — connect to Claude and Cursor
-- [pipes](/pipes) — scheduled AI agents on your data
