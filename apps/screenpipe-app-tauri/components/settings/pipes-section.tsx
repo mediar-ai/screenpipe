@@ -315,7 +315,7 @@ export function PipesSection() {
     setRunningPipe(name);
     try {
       // Wait for any pending config save (e.g. preset change) to land first
-      if (pendingConfigSaves.current[name]) {
+      if (name in pendingConfigSaves.current) {
         await pendingConfigSaves.current[name];
       }
       await fetch(`http://localhost:3030/pipes/${name}/run`, {
