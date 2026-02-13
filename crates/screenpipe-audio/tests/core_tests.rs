@@ -77,6 +77,7 @@ mod tests {
             duration,
             Arc::new(sender),
             is_running,
+            Arc::new(screenpipe_audio::metrics::AudioPipelineMetrics::new()),
         )
         .await;
         println!("record_and_transcribe completed");
@@ -143,6 +144,7 @@ mod tests {
             duration,
             Arc::new(sender),
             is_running,
+            Arc::new(screenpipe_audio::metrics::AudioPipelineMetrics::new()),
         )
         .await
         .unwrap();
@@ -258,7 +260,7 @@ mod tests {
         ));
         let embedding_manager = Arc::new(std::sync::Mutex::new(EmbeddingManager::new(usize::MAX)));
 
-        let (mut segments, _) = prepare_segments(
+        let (mut segments, _, _) = prepare_segments(
             &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
@@ -359,7 +361,7 @@ mod tests {
         // Measure transcription time
         let start_time = Instant::now();
 
-        let (mut segments, _) = prepare_segments(
+        let (mut segments, _, _) = prepare_segments(
             &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,

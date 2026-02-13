@@ -11,7 +11,7 @@ mod tests {
     use std::{path::PathBuf, time::Duration as StdDuration, time::Instant};
     use tokio::sync::{mpsc, Mutex};
 
-    use screenpipe_vision::{continuous_capture, PipelineMetrics, RawCaptureResult};
+    use screenpipe_vision::{continuous_capture, PipelineMetrics};
     use std::time::Duration;
     use tokio::time::timeout;
 
