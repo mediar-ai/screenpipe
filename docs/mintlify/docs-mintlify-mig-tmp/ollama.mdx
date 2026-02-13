@@ -1,0 +1,66 @@
+---
+title: "Ollama — run AI locally with screenpipe"
+sidebarTitle: "ollama"
+description: "Use Ollama to run AI models locally with screenpipe. Free, private, no API keys needed."
+icon: "microchip"
+---
+
+[Ollama](https://ollama.com) lets you run AI models locally on your machine. screenpipe integrates natively with Ollama — no API keys, no cloud, completely private.
+
+## setup
+
+### 1. install Ollama & pull a model
+
+```bash
+# install from https://ollama.com then:
+ollama run llama3.2:3b
+```
+
+this downloads the model and starts Ollama. you can use any model — `llama3.2:3b` is a good starting point (fast, works on most machines).
+
+### 2. select Ollama in screenpipe
+
+1. open the **screenpipe app**
+2. click the **AI preset selector** (top of the chat/timeline)
+3. click **Ollama**
+4. pick your model from the dropdown (screenpipe auto-detects pulled models)
+5. start chatting
+
+that's it. screenpipe talks to Ollama on `localhost:11434` automatically.
+
+## recommended models
+
+| model | size | best for |
+|-------|------|----------|
+| `llama3.2:3b` | ~2 GB | fast, general use, works on most Macs |
+| `llama3.2:1b` | ~1 GB | fastest, lightweight tasks |
+| `mistral` | ~4 GB | good balance of speed and quality |
+| `llama3.1:8b` | ~5 GB | higher quality, needs 16 GB+ RAM |
+| `deepseek-r1:8b` | ~5 GB | strong reasoning |
+
+pull any model with:
+
+```bash
+ollama pull <model-name>
+```
+
+## requirements
+
+- [Ollama](https://ollama.com) installed and running
+- at least one model pulled
+- screenpipe running
+
+## troubleshooting
+
+**"ollama not detected"**
+- make sure Ollama is running: `ollama serve`
+- check it's responding: `curl http://localhost:11434/api/tags`
+
+**model not showing in dropdown?**
+- pull it first: `ollama pull llama3.2:3b`
+- you can also type the model name manually in the input field
+
+**slow responses?**
+- try a smaller model (`llama3.2:1b` or `llama3.2:3b`)
+- close other GPU-heavy apps
+- ensure you have enough free RAM (model size + ~2 GB overhead)
