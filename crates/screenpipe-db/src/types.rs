@@ -349,6 +349,16 @@ pub struct FrameRow {
     pub text_json: String,
 }
 
+/// Lightweight frame row for grouped search — skips text/text_json columns.
+#[derive(Debug, FromRow)]
+pub struct FrameRowLight {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub url: String,
+    pub app_name: String,
+    pub window_name: String,
+}
+
 #[derive(Deserialize, OaSchema, PartialEq, Default)]
 pub enum Order {
     #[serde(rename = "ascending")]

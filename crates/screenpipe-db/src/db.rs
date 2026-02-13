@@ -28,8 +28,8 @@ use futures::future::try_join_all;
 use crate::{
     text_similarity::is_similar_transcription, AudioChunksResponse, AudioDevice, AudioEntry,
     AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, FrameWindowData,
-    InsertUiEvent, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch,
-    SearchMatchGroup, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
+    FrameRowLight, InsertUiEvent, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order,
+    SearchMatch, SearchMatchGroup, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
     TimeSeriesChunk, UiContent,
     UiEventRecord, UiEventRow, VideoMetadata,
 };
@@ -3293,6 +3293,150 @@ LIMIT ? OFFSET ?
                     text: row.ocr_text.clone(),
                     url: row.url.clone(),
                 }
+            })
+            .collect())
+    }
+
+    /// Lightweight search for grouped results — skips text/text_json columns entirely.
+    /// Returns SearchMatch with empty text, text_positions, and zero confidence.
+    /// ~10x faster than search_with_text_positions because it avoids reading and
+    /// parsing large OCR text blobs.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_for_grouping(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        fuzzy_match: bool,
+        order: Order,
+        app_names: Option<Vec<String>>,
+        max_per_app: Option<u32>,
+    ) -> Result<Vec<SearchMatch>, sqlx::Error> {
+        let mut conditions = Vec::new();
+        let mut owned_conditions = Vec::new();
+
+        if start_time.is_some() {
+            conditions.push("f.timestamp >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("f.timestamp <= ?");
+        }
+
+        if let Some(apps) = &app_names {
+            if !apps.is_empty() {
+                let placeholders = vec!["?"; apps.len()].join(",");
+                let app_condition = format!("f.app_name IN ({})", placeholders);
+                owned_conditions.push(app_condition);
+                conditions.push(owned_conditions.last().unwrap().as_str());
+            }
+        }
+
+        let search_condition = if !query.is_empty() {
+            let fts_match = if fuzzy_match {
+                crate::text_normalizer::expand_search_query(query)
+            } else {
+                query.to_string()
+            };
+            conditions.push(
+                "f.id IN (SELECT frame_id FROM ocr_text_fts WHERE text MATCH ? ORDER BY rank LIMIT 5000)",
+            );
+            fts_match
+        } else {
+            String::new()
+        };
+
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let order_dir = match order {
+            Order::Ascending => "ASC",
+            Order::Descending => "DESC",
+        };
+
+        let sql = if let Some(cap) = max_per_app {
+            format!(
+                r#"
+SELECT id, timestamp, url, app_name, window_name FROM (
+    SELECT
+        f.id,
+        f.timestamp,
+        f.browser_url as url,
+        COALESCE(f.app_name, '') as app_name,
+        COALESCE(f.window_name, '') as window_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(f.app_name, '')
+            ORDER BY f.timestamp {order_dir}
+        ) as app_rn
+    FROM frames f
+    WHERE {where_clause}
+)
+WHERE app_rn <= {cap}
+ORDER BY timestamp {order_dir}
+LIMIT ? OFFSET ?
+"#,
+                order_dir = order_dir,
+                where_clause = where_clause,
+                cap = cap
+            )
+        } else {
+            format!(
+                r#"
+SELECT
+    f.id,
+    f.timestamp,
+    f.browser_url as url,
+    COALESCE(f.app_name, '') as app_name,
+    COALESCE(f.window_name, '') as window_name
+FROM frames f
+WHERE {}
+ORDER BY f.timestamp {}
+LIMIT ? OFFSET ?
+"#,
+                where_clause, order_dir
+            )
+        };
+
+        let mut query_builder = sqlx::query_as::<_, FrameRowLight>(&sql);
+
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end);
+        }
+
+        if let Some(apps) = app_names {
+            if !apps.is_empty() {
+                for app in apps {
+                    query_builder = query_builder.bind(app);
+                }
+            }
+        }
+
+        if !query.is_empty() {
+            query_builder = query_builder.bind(&search_condition);
+        }
+
+        query_builder = query_builder.bind(limit as i64).bind(offset as i64);
+
+        let rows = query_builder.fetch_all(&self.pool).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| SearchMatch {
+                frame_id: row.id,
+                timestamp: row.timestamp,
+                text_positions: Vec::new(),
+                app_name: row.app_name,
+                window_name: row.window_name,
+                confidence: 0.0,
+                text: String::new(),
+                url: row.url,
             })
             .collect())
     }

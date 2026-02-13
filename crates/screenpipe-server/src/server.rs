@@ -2857,20 +2857,21 @@ async fn keyword_search_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     if query.group {
-        // max_per_app=30 ensures no single app dominates results.
-        // With 10 apps that's max 300 rows — fast and diverse.
+        // Lightweight query: skips text/text_json columns (no OCR blob reads,
+        // no JSON parsing). max_per_app=30 ensures app diversity via ROW_NUMBER.
+        // FTS subquery capped at 5000 to limit scan. Typically <200ms.
         let matches = state
             .db
-            .search_with_text_positions(
+            .search_for_grouping(
                 &query.query,
-                500, // overall cap
+                500,
                 0,
                 query.start_time,
                 query.end_time,
                 query.fuzzy_match,
                 query.order,
                 query.app_names,
-                Some(30), // max 30 results per app
+                Some(30),
             )
             .await
             .map_err(|e| {
