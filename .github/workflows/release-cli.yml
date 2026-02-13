@@ -311,6 +311,10 @@ jobs:
           New-Item -Path "$packageDir/bin" -ItemType Directory -Force
           Copy-Item "target/x86_64-pc-windows-msvc/release/screenpipe.exe" "$packageDir/bin/"
           Copy-Item "target/x86_64-pc-windows-msvc/release/onnxruntime.dll" "$packageDir/bin/"
+          # Bundle vcruntime DLLs so users don't need MSVC redistributable installed
+          Copy-Item C:\Windows\System32\vcruntime140.dll "$packageDir/bin/" -Force
+          Copy-Item C:\Windows\System32\vcruntime140_1.dll "$packageDir/bin/" -Force -ErrorAction SilentlyContinue
+          Copy-Item C:\Windows\System32\msvcp140.dll "$packageDir/bin/" -Force -ErrorAction SilentlyContinue
           7z a "$packageDir.zip" "./$packageDir/*"
 
       - name: Calculate SHA256
