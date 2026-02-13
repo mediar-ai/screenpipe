@@ -13,8 +13,8 @@ use vad_rs::{Vad, VadStatus};
 use crate::vad::FRAME_HISTORY;
 
 use super::{
-    VadEngine, VadSensitivity, DOWNLOADING, MODEL_PATH, SILENCE_THRESHOLD,
-    SPEECH_FRAME_THRESHOLD, SPEECH_THRESHOLD,
+    VadEngine, VadSensitivity, DOWNLOADING, MODEL_PATH, SILENCE_THRESHOLD, SPEECH_FRAME_THRESHOLD,
+    SPEECH_THRESHOLD,
 };
 
 pub struct SileroVad {
@@ -132,7 +132,10 @@ impl SileroVad {
         drop(file);
 
         tokio::fs::rename(&tmp_path, &final_path).await?;
-        info!("Silero VAD v5 model downloaded and saved to: {:?}", final_path);
+        info!(
+            "Silero VAD v5 model downloaded and saved to: {:?}",
+            final_path
+        );
 
         Ok(())
     }

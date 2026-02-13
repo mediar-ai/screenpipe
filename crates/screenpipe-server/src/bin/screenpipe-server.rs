@@ -592,7 +592,9 @@ async fn main() -> anyhow::Result<()> {
                 for d in &cli.realtime_audio_device {
                     match parse_audio_device(d) {
                         Ok(device) => realtime_audio_devices.push(Arc::new(device.clone())),
-                        Err(e) => warn!("skipping unparseable realtime audio device '{}': {}", d, e),
+                        Err(e) => {
+                            warn!("skipping unparseable realtime audio device '{}': {}", d, e)
+                        }
                     }
                 }
             }
@@ -896,11 +898,14 @@ async fn main() -> anyhow::Result<()> {
 
     let mut pipe_manager = screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
     pipe_manager.set_on_run_complete(std::sync::Arc::new(|pipe_name, success, duration_secs| {
-        analytics::capture_event_nonblocking("pipe_scheduled_run", serde_json::json!({
-            "pipe": pipe_name,
-            "success": success,
-            "duration_secs": duration_secs,
-        }));
+        analytics::capture_event_nonblocking(
+            "pipe_scheduled_run",
+            serde_json::json!({
+                "pipe": pipe_name,
+                "success": success,
+                "duration_secs": duration_secs,
+            }),
+        );
     }));
     pipe_manager.install_builtin_pipes().ok();
     if let Err(e) = pipe_manager.load_pipes().await {

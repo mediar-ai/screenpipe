@@ -38,16 +38,9 @@ sqlx = { version = "0.7", features = [
     "migrate",
 ] }
 
-# Local Embeddings + STT
-candle = { workspace = true }
-candle-nn = { workspace = true }
-candle-transformers = { workspace = true }
-tokenizers = { workspace = true }
-
 anyhow = "1.0.86"
 async-trait = "0.1"
 moka = { version = "0.12", features = ["future"] }
-hf-hub = { workspace = true }
 
 #opentelemetry
 sentry = { workspace = true }
@@ -71,9 +64,6 @@ sysinfo = "0.29.0"
 
 # Color
 colored = "2.0"
-
-# Completions
-clap_complete = "4.2"
 
 # Plugins
 tower = { version = "0.5", features = ["util"] }
@@ -112,8 +102,6 @@ sha2 = "0.10.6"
 fastrand = "2.1.1"
 port_check = "0.2.1"
 
-walkdir = "2.3.4"
-
 regex = "1.10.0"
 
 lru = "0.13.0"
@@ -132,9 +120,9 @@ criterion = { workspace = true }
 
 [features]
 default = ["ui-events"]
-metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
-cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
-mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
+metal = ["screenpipe-core/metal"]
+cuda = ["screenpipe-core/cuda"]
+mkl = ["screenpipe-core/mkl"]
 vulkan = ["screenpipe-audio/vulkan"]
 experimental = []
 debug-console = ["console-subscriber"]
@@ -149,7 +137,7 @@ path = "src/bin/screenpipe-server.rs"
 
 
 [package.metadata.cargo-machete]
-ignored = ["url", "console-subscriber"]
+ignored = ["url"]
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }

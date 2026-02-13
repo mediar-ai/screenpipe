@@ -147,21 +147,31 @@ fn resolve_preset(pipes_dir: &Path, preset_id: &str) -> Option<ResolvedPreset> {
 
     let preset = if preset_id == "default" {
         // find the one with defaultPreset: true
-        presets.iter().find(|p| p.get("defaultPreset").and_then(|v| v.as_bool()).unwrap_or(false))
+        presets.iter().find(|p| {
+            p.get("defaultPreset")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        })
     } else {
-        presets.iter().find(|p| p.get("id").and_then(|v| v.as_str()) == Some(preset_id))
+        presets
+            .iter()
+            .find(|p| p.get("id").and_then(|v| v.as_str()) == Some(preset_id))
     }?;
 
     let model = preset.get("model")?.as_str()?.to_string();
 
     // Map app provider types to pipe provider strings
-    let provider = preset.get("provider").and_then(|v| v.as_str()).and_then(|p| match p {
-        "pi" => Some("screenpipe"),
-        "native-ollama" => Some("ollama"),
-        "openai" => Some("openai"),
-        "custom" => Some("openai"), // custom uses openai-compatible API
-        _ => None,
-    }).map(|s| s.to_string());
+    let provider = preset
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .and_then(|p| match p {
+            "pi" => Some("screenpipe"),
+            "native-ollama" => Some("ollama"),
+            "openai" => Some("openai"),
+            "custom" => Some("openai"), // custom uses openai-compatible API
+            _ => None,
+        })
+        .map(|s| s.to_string());
 
     Some(ResolvedPreset { model, provider })
 }
@@ -275,8 +285,9 @@ impl PipeManager {
                 let last_log = pipe_logs.and_then(|l| l.back());
                 let last_error = last_log.filter(|l| !l.success).map(|l| l.stderr.clone());
                 // Read raw file from disk for editing
-                let raw_content = std::fs::read_to_string(self.pipes_dir.join(name).join("pipe.md"))
-                    .unwrap_or_else(|_| serialize_pipe(config, body).unwrap_or_default());
+                let raw_content =
+                    std::fs::read_to_string(self.pipes_dir.join(name).join("pipe.md"))
+                        .unwrap_or_else(|_| serialize_pipe(config, body).unwrap_or_default());
                 let mut cfg = config.clone();
                 cfg.name = name.clone(); // always use directory name
                 PipeStatus {
@@ -367,8 +378,10 @@ impl PipeManager {
         let (run_model, run_provider) = if let Some(ref preset_id) = config.preset {
             match resolve_preset(&self.pipes_dir, preset_id) {
                 Some(resolved) => {
-                    info!("pipe '{}': using preset '{}' → model={}, provider={:?}",
-                        name, preset_id, resolved.model, resolved.provider);
+                    info!(
+                        "pipe '{}': using preset '{}' → model={}, provider={:?}",
+                        name, preset_id, resolved.model, resolved.provider
+                    );
                     (resolved.model, resolved.provider)
                 }
                 None => {
@@ -388,12 +401,7 @@ impl PipeManager {
         let _permit = self.semaphore.acquire().await?;
 
         let result = executor
-            .run(
-                &prompt,
-                &run_model,
-                &pipe_dir,
-                run_provider.as_deref(),
-            )
+            .run(&prompt, &run_model, &pipe_dir, run_provider.as_deref())
             .await;
 
         // Remove from running
@@ -758,7 +766,7 @@ impl PipeManager {
                                     name, preset_id, resolved.model, resolved.provider);
                                 (resolved.model, resolved.provider)
                             }
-                            None => (config.model.clone(), config.provider.clone())
+                            None => (config.model.clone(), config.provider.clone()),
                         }
                     } else {
                         (config.model.clone(), config.provider.clone())
@@ -824,7 +832,8 @@ impl PipeManager {
                         );
 
                         // Append to in-memory logs
-                        let duration_secs = (finished_at - started_at).num_milliseconds() as f64 / 1000.0;
+                        let duration_secs =
+                            (finished_at - started_at).num_milliseconds() as f64 / 1000.0;
                         let success = log.success;
                         let name_for_cb = log.pipe_name.clone();
                         let mut l = logs_ref.lock().await;
@@ -1007,7 +1016,9 @@ pub fn parse_schedule(schedule: &str) -> Option<ParsedSchedule> {
         return None;
     }
     if s.eq_ignore_ascii_case("daily") {
-        return Some(ParsedSchedule::Interval(std::time::Duration::from_secs(86400)));
+        return Some(ParsedSchedule::Interval(std::time::Duration::from_secs(
+            86400,
+        )));
     }
     // Try human-readable interval first
     if let Some(d) = parse_duration_str(s) {
@@ -1017,8 +1028,8 @@ pub fn parse_schedule(schedule: &str) -> Option<ParsedSchedule> {
     // cron crate requires 7 fields (sec min hour dom month dow year),
     // so we pad short expressions.
     let padded = match s.split_whitespace().count() {
-        5 => format!("0 {} *", s),  // standard 5-field → add seconds + year
-        6 => format!("{} *", s),     // 6-field → add year
+        5 => format!("0 {} *", s), // standard 5-field → add seconds + year
+        6 => format!("{} *", s),   // 6-field → add year
         _ => s.to_string(),
     };
     if let Ok(cron) = CronSchedule::from_str(&padded) {

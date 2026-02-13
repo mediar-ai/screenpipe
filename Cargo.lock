@@ -1168,15 +1168,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap_complete"
-version = "4.5.47"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06f5378ea264ad4f82bbc826628b5aad714a75abf6ece087e923010eb937fb6"
-dependencies = [
- "clap",
-]
-
-[[package]]
 name = "clap_derive"
 version = "4.5.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6503,13 +6494,9 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bincode",
- "candle-core",
- "candle-nn",
- "candle-transformers",
  "chrono",
  "cidre 0.14.0",
  "clap",
- "clap_complete",
  "colored",
  "console-subscriber",
  "criterion",
@@ -6519,7 +6506,6 @@ dependencies = [
  "env_logger",
  "fastrand",
  "futures",
- "hf-hub",
  "hostname",
  "image",
  "imageproc",
@@ -6546,7 +6532,6 @@ dependencies = [
  "sqlx",
  "sysinfo",
  "tempfile",
- "tokenizers",
  "tokio",
  "tokio-stream",
  "tokio-tungstenite 0.24.0",
@@ -6558,7 +6543,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
- "walkdir",
  "windows 0.58.0",
 ]
 

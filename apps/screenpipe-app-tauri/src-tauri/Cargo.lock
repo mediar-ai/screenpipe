@@ -1602,15 +1602,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap_complete"
-version = "4.5.65"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "430b4dc2b5e3861848de79627b2bedc9f3342c7da5173a14eaa5d0f8dc18ae5d"
-dependencies = [
- "clap",
-]
-
-[[package]]
 name = "clap_derive"
 version = "4.5.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8741,7 +8732,6 @@ dependencies = [
  "screenpipe-vision",
  "sentry 0.42.0",
  "serde",
- "serde_derive",
  "serde_json",
  "specta",
  "specta-typescript",
@@ -8954,20 +8944,15 @@ dependencies = [
  "axum 0.7.9",
  "base64 0.22.1",
  "bincode",
- "candle-core",
- "candle-nn",
- "candle-transformers",
  "chrono",
  "cidre 0.14.0",
  "clap",
- "clap_complete",
  "colored",
  "crossbeam",
  "dashmap",
  "dirs 5.0.1",
  "fastrand",
  "futures",
- "hf-hub 0.3.2 (git+https://github.com/neo773/hf-hub)",
  "hostname",
  "image 0.25.9",
  "imageproc",
@@ -8994,7 +8979,6 @@ dependencies = [
  "sqlx",
  "sysinfo",
  "tempfile",
- "tokenizers",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -9004,7 +8988,6 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
- "walkdir",
  "windows 0.58.0",
 ]
 

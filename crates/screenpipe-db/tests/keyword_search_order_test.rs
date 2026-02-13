@@ -74,7 +74,17 @@ mod tests {
         let _frame_c = insert_frame_with_ocr(&db, "Cursor", "editor", "println hello", 30).await;
 
         let results = db
-            .search_with_text_positions("hello", 10, 0, None, None, true, Order::Descending, None, None)
+            .search_with_text_positions(
+                "hello",
+                10,
+                0,
+                None,
+                None,
+                true,
+                Order::Descending,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -117,7 +127,17 @@ mod tests {
             insert_frame_with_ocr(&db, "WezTerm", "terminal", "new content hello world", 5).await;
 
         let results = db
-            .search_with_text_positions("hello", 10, 0, None, None, true, Order::Ascending, None, None)
+            .search_with_text_positions(
+                "hello",
+                10,
+                0,
+                None,
+                None,
+                true,
+                Order::Ascending,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -161,7 +181,17 @@ mod tests {
         .await;
 
         let results = db
-            .search_with_text_positions("hello", 10, 0, None, None, true, Order::Descending, None, None)
+            .search_with_text_positions(
+                "hello",
+                10,
+                0,
+                None,
+                None,
+                true,
+                Order::Descending,
+                None,
+                None,
+            )
             .await
             .unwrap();
 

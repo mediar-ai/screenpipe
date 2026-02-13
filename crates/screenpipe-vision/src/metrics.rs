@@ -90,8 +90,7 @@ impl PipelineMetrics {
         self.ocr_completed.fetch_add(1, Ordering::Relaxed);
         self.ocr_total_latency_us
             .fetch_add(latency.as_micros() as u64, Ordering::Relaxed);
-        self.ocr_cache_hits
-            .fetch_add(cache_hits, Ordering::Relaxed);
+        self.ocr_cache_hits.fetch_add(cache_hits, Ordering::Relaxed);
         self.ocr_cache_misses
             .fetch_add(cache_misses, Ordering::Relaxed);
     }
@@ -159,8 +158,7 @@ impl PipelineMetrics {
             frames_db_written,
             frames_dropped: self.frames_dropped.load(Ordering::Relaxed),
             avg_db_latency_ms: if frames_db_written > 0 {
-                (self.db_total_latency_us.load(Ordering::Relaxed) as f64
-                    / frames_db_written as f64)
+                (self.db_total_latency_us.load(Ordering::Relaxed) as f64 / frames_db_written as f64)
                     / 1000.0
             } else {
                 0.0

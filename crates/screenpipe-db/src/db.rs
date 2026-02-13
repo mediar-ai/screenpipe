@@ -27,11 +27,10 @@ use futures::future::try_join_all;
 
 use crate::{
     text_similarity::is_similar_transcription, AudioChunksResponse, AudioDevice, AudioEntry,
-    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, FrameWindowData,
-    FrameRowLight, InsertUiEvent, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order,
-    SearchMatch, SearchMatchGroup, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
-    TimeSeriesChunk, UiContent,
-    UiEventRecord, UiEventRow, VideoMetadata,
+    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, FrameRowLight,
+    FrameWindowData, InsertUiEvent, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
+    Order, SearchMatch, SearchMatchGroup, SearchResult, Speaker, TagContentType, TextBounds,
+    TextPosition, TimeSeriesChunk, UiContent, UiEventRecord, UiEventRow, VideoMetadata,
 };
 
 /// Time window (in seconds) to check for similar transcriptions across devices.
@@ -4366,7 +4365,14 @@ mod tests {
         assert_eq!(positions.len(), 2);
     }
 
-    fn make_search_match(frame_id: i64, timestamp_secs: i64, app: &str, window: &str, url: &str, confidence: f32) -> SearchMatch {
+    fn make_search_match(
+        frame_id: i64,
+        timestamp_secs: i64,
+        app: &str,
+        window: &str,
+        url: &str,
+        confidence: f32,
+    ) -> SearchMatch {
         SearchMatch {
             frame_id,
             timestamp: DateTime::from_timestamp(timestamp_secs, 0).unwrap(),
@@ -4387,7 +4393,14 @@ mod tests {
 
     #[test]
     fn test_cluster_single() {
-        let matches = vec![make_search_match(1, 1000, "Chrome", "Google", "https://google.com", 0.9)];
+        let matches = vec![make_search_match(
+            1,
+            1000,
+            "Chrome",
+            "Google",
+            "https://google.com",
+            0.9,
+        )];
         let groups = DatabaseManager::cluster_search_matches(matches, 120);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].group_size, 1);

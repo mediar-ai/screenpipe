@@ -26,12 +26,7 @@ use tokio::sync::Mutex;
 /// Create a synthetic test image
 fn create_test_image(width: u32, height: u32) -> DynamicImage {
     let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_fn(width, height, |x, y| {
-        Rgba([
-            (x % 256) as u8,
-            (y % 256) as u8,
-            ((x + y) % 256) as u8,
-            255,
-        ])
+        Rgba([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8, 255])
     });
     DynamicImage::ImageRgba8(img)
 }
@@ -185,10 +180,7 @@ async fn test_process_ocr_task_returns_capture_result() {
             assert_eq!(window.app_name, "TestApp0");
             assert_eq!(window.window_name, "Window 0");
             assert!(window.focused);
-            assert_eq!(
-                window.browser_url,
-                Some("https://example.com".to_string())
-            );
+            assert_eq!(window.browser_url, Some("https://example.com".to_string()));
         }
         Err(e) => {
             eprintln!("Skipping OCR test (Tesseract not available): {}", e);
@@ -279,8 +271,7 @@ async fn test_ocr_cache_hit_on_same_image() {
             );
             if !r1.capture.window_ocr_results.is_empty() {
                 assert_eq!(
-                    r1.capture.window_ocr_results[0].text,
-                    r2.capture.window_ocr_results[0].text,
+                    r1.capture.window_ocr_results[0].text, r2.capture.window_ocr_results[0].text,
                     "Cached result should produce identical text"
                 );
                 assert_eq!(

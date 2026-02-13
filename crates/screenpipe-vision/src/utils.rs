@@ -150,4 +150,3 @@ pub async fn capture_screenshot(
 
     Ok((image, window_images, image_hash, capture_duration))
 }
-

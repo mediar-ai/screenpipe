@@ -8,6 +8,7 @@ use crate::capture_screenshot_by_window::CapturedWindow;
 use crate::capture_screenshot_by_window::WindowFilters;
 use crate::custom_ocr::perform_ocr_custom;
 use crate::frame_comparison::{FrameComparer, FrameComparisonConfig};
+use crate::metrics::PipelineMetrics;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
@@ -27,7 +28,6 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 use serde_json;
-use crate::metrics::PipelineMetrics;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -338,9 +338,7 @@ pub async fn continuous_capture(
         metrics.record_capture();
         if let Err(e) = result_tx.send(raw).await {
             error!("Failed to send raw capture result: {}", e);
-            return Err(ContinuousCaptureError::ErrorSendingOcrResult(
-                e.to_string(),
-            ));
+            return Err(ContinuousCaptureError::ErrorSendingOcrResult(e.to_string()));
         }
 
         // Log frame comparison stats periodically

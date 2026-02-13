@@ -54,13 +54,7 @@ mod tests {
             StdDuration::from_secs(60),
             100,
         )));
-        let result = process_ocr_task(
-            &raw,
-            &ocr_engine,
-            &[],
-            ocr_cache,
-        )
-        .await;
+        let result = process_ocr_task(&raw, &ocr_engine, &[], ocr_cache).await;
 
         assert!(result.is_ok());
         // Add more specific assertions based on expected behavior

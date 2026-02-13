@@ -97,7 +97,8 @@ impl AudioPipelineMetrics {
     // --- Transcription stage ---
 
     pub fn record_transcription_completed(&self) {
-        self.transcriptions_completed.fetch_add(1, Ordering::Relaxed);
+        self.transcriptions_completed
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn record_transcription_empty(&self) {

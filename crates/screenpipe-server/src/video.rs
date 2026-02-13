@@ -252,9 +252,8 @@ impl VideoCapture {
                             break;
                         }
 
-                        let backoff = Duration::from_secs(
-                            (1u64 << consecutive_restarts.min(4)).min(30),
-                        );
+                        let backoff =
+                            Duration::from_secs((1u64 << consecutive_restarts.min(4)).min(30));
                         error!(
                             "continuous_capture for monitor {} failed (restart #{}): {}, retrying in {:?}",
                             monitor_id, consecutive_restarts, e, backoff
@@ -335,10 +334,8 @@ impl VideoCapture {
 
                 let result = Arc::new(result);
 
-                let video_pushed =
-                    push_to_raw_queue(&capture_video_frame_queue, &result, "Video");
-                let ocr_pushed =
-                    push_to_raw_queue(&capture_ocr_work_queue, &result, "OCR-work");
+                let video_pushed = push_to_raw_queue(&capture_video_frame_queue, &result, "Video");
+                let ocr_pushed = push_to_raw_queue(&capture_ocr_work_queue, &result, "OCR-work");
 
                 if !video_pushed || !ocr_pushed {
                     error!(

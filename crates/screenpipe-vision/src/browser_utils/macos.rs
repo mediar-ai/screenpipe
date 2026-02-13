@@ -253,7 +253,10 @@ impl BrowserUrlDetector for MacOSUrlDetector {
                 }
                 Ok(None) => Ok(None),
                 Err(e) => {
-                    debug!("Arc title+URL fetch failed, falling back to URL-only: {}", e);
+                    debug!(
+                        "Arc title+URL fetch failed, falling back to URL-only: {}",
+                        e
+                    );
                     // Fallback to the old URL-only method without title check
                     let script =
                         r#"tell application "Arc" to return URL of active tab of front window"#;
