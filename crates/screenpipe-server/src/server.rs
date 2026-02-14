@@ -14,7 +14,6 @@ use tracing::{error, info};
 
 use crate::{
     analytics,
-    embedding::embedding_endpoint::create_embeddings,
     routes::{
         audio::{
             api_list_audio_devices, start_audio, start_audio_device, stop_audio, stop_audio_device,
@@ -28,7 +27,7 @@ use crate::{
             api_list_monitors, api_vision_status, audio_metrics_handler, health_check,
             vision_metrics_handler,
         },
-        search::{keyword_search_handler, search, semantic_search_handler},
+        search::{keyword_search_handler, search},
         speakers::{
             delete_speaker_handler, get_similar_speakers_handler, get_unnamed_speakers_handler,
             mark_as_hallucination_handler, merge_speakers_handler, reassign_speaker_handler,
@@ -384,9 +383,7 @@ impl SCServer {
             .get("/experimental/validate/media", validate_media_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
-            .get("/semantic-search", semantic_search_handler)
             .get("/search/keyword", keyword_search_handler)
-            .post("/v1/embeddings", create_embeddings)
             .post("/audio/device/start", start_audio_device)
             .post("/audio/device/stop", stop_audio_device)
             .route_yaml_spec("/openapi.yaml")

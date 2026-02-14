@@ -25,7 +25,6 @@ use tracing::{debug, error, info};
 
 use crate::analytics;
 use crate::server::AppState;
-use crate::text_embeds::generate_embedding;
 use crate::video_utils::extract_frame;
 
 use super::content::{
@@ -358,63 +357,6 @@ pub(crate) async fn search(
     }
 
     Ok(JsonResponse(response))
-}
-
-#[derive(Debug, OaSchema, Deserialize)]
-pub(crate) struct SemanticSearchQuery {
-    text: String,
-    limit: Option<u32>,
-    threshold: Option<f32>,
-}
-
-#[oasgen]
-pub(crate) async fn semantic_search_handler(
-    Query(query): Query<SemanticSearchQuery>,
-    State(state): State<Arc<AppState>>,
-) -> Result<JsonResponse<Vec<screenpipe_db::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
-    let limit = query.limit.unwrap_or(10);
-    let threshold = query.threshold.unwrap_or(0.3);
-
-    debug!(
-        "semantic search for '{}' with limit {} and threshold {}",
-        query.text, limit, threshold
-    );
-
-    // Generate embedding for search text
-    let embedding = match generate_embedding(&query.text, 0).await {
-        Ok(emb) => emb,
-        Err(e) => {
-            error!("failed to generate embedding: {}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("failed to generate embedding: {}", e)})),
-            ));
-        }
-    };
-
-    // Search database for similar embeddings
-    match state
-        .db
-        .search_similar_embeddings(embedding, limit, threshold)
-        .await
-    {
-        Ok(results) => {
-            // Filter out screenpipe results at display time
-            let filtered: Vec<_> = results
-                .into_iter()
-                .filter(|r| !r.app_name.to_lowercase().contains("screenpipe"))
-                .collect();
-            debug!("found {} similar results (after filtering)", filtered.len());
-            Ok(JsonResponse(filtered))
-        }
-        Err(e) => {
-            error!("failed to search embeddings: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("failed to search embeddings: {}", e)})),
-            ))
-        }
-    }
 }
 
 #[oasgen]

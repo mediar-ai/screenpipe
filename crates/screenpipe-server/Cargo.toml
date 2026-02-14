@@ -120,9 +120,8 @@ criterion = { workspace = true }
 
 [features]
 default = ["ui-events"]
-metal = ["screenpipe-core/metal"]
-cuda = ["screenpipe-core/cuda"]
-mkl = ["screenpipe-core/mkl"]
+metal = ["screenpipe-audio/metal"]
+cuda = ["screenpipe-audio/cuda"]
 vulkan = ["screenpipe-audio/vulkan"]
 experimental = []
 debug-console = ["console-subscriber"]

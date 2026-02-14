@@ -20,7 +20,6 @@ mod server;
 pub mod sleep_monitor;
 mod sync_api;
 pub mod sync_provider;
-pub mod text_embeds;
 pub mod ui_events_api;
 pub mod ui_recorder;
 mod video;
@@ -46,6 +45,5 @@ pub use video::{
     video_quality_to_crf, video_quality_to_jpeg_q, video_quality_to_preset, FrameWriteInfo,
     FrameWriteTracker, VideoCapture,
 };
-pub mod embedding;
 pub use cloud_search::{CloudSearchClient, CloudSearchMetadata, CloudStatus};
 pub use ui_recorder::{start_ui_recording, UiRecorderConfig, UiRecorderHandle};

@@ -241,33 +241,6 @@ export interface SearchMatch {
   url: string;
 }
 
-// ─── Semantic Search ─────────────────────────────────────────────────────────
-
-/** Parameters for `GET /semantic-search` */
-export interface SemanticSearchParams {
-  text: string;
-  limit?: number;
-  threshold?: number;
-}
-
-/** A result from semantic search */
-export interface SemanticSearchResult {
-  frameId: number;
-  frameName: string;
-  ocrText: string;
-  textJson: string;
-  timestamp: string;
-  filePath: string;
-  offsetIndex: number;
-  appName: string;
-  ocrEngine: string;
-  windowName: string;
-  tags: string[];
-  browserUrl?: string;
-  focused?: boolean;
-  deviceName: string;
-}
-
 // ─── Frames ──────────────────────────────────────────────────────────────────
 
 /** Parameters for getting a frame */

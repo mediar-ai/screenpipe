@@ -130,6 +130,33 @@ pub async fn start_device_monitor(
                             }
                         }
                     }
+
+                    // Ensure an output device is actually running.
+                    // Handles the case where ScreenCaptureKit wasn't ready at startup.
+                    {
+                        let current_enabled = audio_manager.enabled_devices().await;
+                        let has_output = current_enabled.iter().any(|name| {
+                            parse_audio_device(name)
+                                .map(|d| d.device_type == DeviceType::Output)
+                                .unwrap_or(false)
+                        });
+
+                        if !has_output {
+                            if let Ok(default_output) = default_output_device().await {
+                                let device_name = default_output.to_string();
+                                info!("no output device running, starting default: {}", device_name);
+                                match audio_manager.start_device(&default_output).await {
+                                    Ok(()) => {
+                                        default_tracker.last_output = Some(device_name.clone());
+                                        info!("started missing output device: {}", device_name);
+                                    }
+                                    Err(e) => {
+                                        debug!("could not start output device {}: {}", device_name, e);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Check for stale recording handles (tasks that have finished/crashed)

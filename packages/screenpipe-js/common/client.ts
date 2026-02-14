@@ -6,8 +6,6 @@ import type {
   SearchResponse,
   KeywordSearchParams,
   SearchMatch,
-  SemanticSearchParams,
-  SemanticSearchResult,
   HealthCheckResponse,
   AudioDevice,
   MonitorInfo,
@@ -157,15 +155,6 @@ export class ScreenpipeClient {
   async keywordSearch(params: KeywordSearchParams): Promise<SearchMatch[]> {
     const raw = await this.get<unknown>("/search/keyword", toRecord(params));
     return convertObjectToCamelCase(raw) as SearchMatch[];
-  }
-
-  /**
-   * Semantic (embedding-based) search.
-   * `GET /semantic-search`
-   */
-  async semanticSearch(params: SemanticSearchParams): Promise<SemanticSearchResult[]> {
-    const raw = await this.get<unknown>("/semantic-search", toRecord(params));
-    return convertObjectToCamelCase(raw) as SemanticSearchResult[];
   }
 
   // ── Health ───────────────────────────────────────────────────────────────
@@ -451,23 +440,6 @@ export class ScreenpipeClient {
         content_type: request.content.contentType,
         data: request.content.data,
       },
-    });
-  }
-
-  // ── Embeddings ───────────────────────────────────────────────────────────
-
-  /**
-   * Create embeddings for text(s).
-   * `POST /v1/embeddings`
-   */
-  async createEmbeddings(
-    input: string | string[],
-    model: string = "all-MiniLM-L6-v2"
-  ): Promise<{ data: { embedding: number[]; index: number }[] }> {
-    return this.post("/v1/embeddings", {
-      model,
-      input,
-      encoding_format: "float",
     });
   }
 
