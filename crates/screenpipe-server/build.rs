@@ -1,6 +1,6 @@
 #[cfg(target_os = "windows")]
 fn link_onnx() {
-    println!("cargo:rustc-link-search=native=../../apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2/lib");
+    println!("cargo:rustc-link-search=native=../../apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2/lib");
 }
 
 #[cfg(target_os = "macos")]

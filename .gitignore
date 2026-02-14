@@ -31,8 +31,8 @@ pnpm-lock.yaml
 
 .DS_Store
 
-# Ignore onnxruntime-win-x64-gpu libraries
-onnxruntime-win-x64-gpu*/
+# Ignore onnxruntime-win-x64 libraries
+onnxruntime-win-x64*/
 
 # ignore environment variables
 .env
