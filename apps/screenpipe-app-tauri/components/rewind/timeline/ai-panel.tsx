@@ -231,7 +231,44 @@ export function AIPanel({
 		const md = chatMessages
 			.map((m) => {
 				const role = m.role === "user" ? "**User**" : "**Assistant**";
-				return `### ${role}\n\n${m.content}`;
+				let body = m.content || "";
+
+				// include tool calls from parts (ai sdk v4+)
+				if (m.parts && m.parts.length > 0) {
+					const partSections: string[] = [];
+					for (const part of m.parts) {
+						if (part.type === "text" && part.text) {
+							partSections.push(part.text);
+						} else if (part.type === "tool-invocation") {
+							const inv = (part as any).toolInvocation;
+							if (inv) {
+								const argsStr = inv.args ? JSON.stringify(inv.args, null, 2) : "";
+								let section = `\n**Tool: ${inv.toolName}**\n\`\`\`json\n${argsStr}\n\`\`\``;
+								if (inv.state === "result" && inv.result !== undefined) {
+									const result = typeof inv.result === "string" ? inv.result : JSON.stringify(inv.result, null, 2);
+									section += `\n**Result:**\n\`\`\`\n${result}\n\`\`\``;
+								}
+								partSections.push(section);
+							}
+						}
+					}
+					if (partSections.length > 0) {
+						body = partSections.join("\n\n");
+					}
+				}
+				// include tool invocations (ai sdk legacy)
+				else if (m.toolInvocations && m.toolInvocations.length > 0) {
+					for (const inv of m.toolInvocations) {
+						const argsStr = inv.args ? JSON.stringify(inv.args, null, 2) : "";
+						body += `\n\n**Tool: ${inv.toolName}**\n\`\`\`json\n${argsStr}\n\`\`\``;
+						if ("result" in inv && inv.result !== undefined) {
+							const result = typeof inv.result === "string" ? inv.result : JSON.stringify(inv.result, null, 2);
+							body += `\n**Result:**\n\`\`\`\n${result}\n\`\`\``;
+						}
+					}
+				}
+
+				return `### ${role}\n\n${body}`;
 			})
 			.join("\n\n---\n\n");
 		await navigator.clipboard.writeText(md);
