@@ -23,11 +23,85 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
+import { emit } from "@tauri-apps/api/event";
+import { commands } from "@/lib/utils/tauri";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import posthog from "posthog-js";
+
+const PIPE_CREATION_PROMPT = `create a screenpipe pipe that does the following.
+
+## what is screenpipe?
+
+screenpipe is a desktop app that continuously records your screen (OCR) and audio (transcription).
+it runs a local API at http://localhost:3030 that lets you query everything you've seen, said, or heard.
+
+## what is a pipe?
+
+a pipe is a scheduled AI agent defined as a single markdown file: ~/.screenpipe/pipes/{name}/pipe.md
+every N minutes, screenpipe runs a coding agent (like pi or claude-code) with the pipe's prompt.
+the agent can query your screen data, write files, call external APIs, send notifications, etc.
+
+## pipe.md format
+
+the file starts with YAML frontmatter, then the prompt body:
+
+\`\`\`
+---
+schedule: every 30m
+enabled: true
+---
+
+Your prompt instructions here...
+\`\`\`
+
+## context header
+
+before execution, screenpipe prepends a context header to the prompt with:
+- time range (start/end timestamps based on the schedule interval)
+- current date
+- user's timezone
+- screenpipe API base URL
+- output directory
+
+the AI agent uses this context to query the right time range. no template variables needed in the prompt.
+
+## screenpipe search API
+
+the agent queries screen data via the local REST API:
+
+curl "http://localhost:3030/search?limit=20&content_type=all&start_time=<ISO8601>&end_time=<ISO8601>"
+
+### query parameters
+- q: text search query (optional)
+- content_type: "ocr" | "audio" | "ui" | "all" | "ocr+audio" | "ocr+ui" | "audio+ui"
+- limit: max results (default 20)
+- offset: pagination offset
+- start_time / end_time: ISO 8601 timestamps
+- app_name: filter by app (e.g. "chrome", "cursor")
+- window_name: filter by window title
+- browser_url: filter by URL (e.g. "github.com")
+- min_length / max_length: filter by text length
+- speaker_ids: filter audio by speaker IDs
+
+## after creating the file
+
+IMPORTANT: always use "bunx screenpipe@latest" (not "bunx screenpipe" or "screenpipe") to ensure the latest CLI version:
+
+install: bunx screenpipe@latest pipe install ~/.screenpipe/pipes/my-pipe
+enable:  bunx screenpipe@latest pipe enable my-pipe
+test:    bunx screenpipe@latest pipe run my-pipe
+
+## important formatting rules
+
+the pipe.md file MUST start with --- on the very first line (YAML front-matter). no blank lines or comments before it.
+
+## task
+
+create the pipe.md file, install it, and enable it. here is what the user wants:`;
 
 function parsePipeError(stderr: string): {
   type: "daily_limit" | "rate_limit" | "unknown";
@@ -481,6 +555,33 @@ export function PipesSection() {
         </div>
       </div>
 
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const form = e.currentTarget;
+          const input = form.querySelector("input") as HTMLInputElement;
+          const value = input?.value?.trim();
+          if (!value) return;
+          input.value = "";
+
+          // Open the chat window first
+          await commands.showWindow("Chat");
+          // Wait for chat to mount
+          await new Promise((r) => setTimeout(r, 200));
+          // Emit prefill with pipe creation prompt + user's idea, and auto-send
+          await emit("chat-prefill", {
+            context: PIPE_CREATION_PROMPT,
+            prompt: value,
+            autoSend: true,
+          });
+        }}
+      >
+        <Input
+          placeholder="describe a pipe to create..."
+          className="font-mono text-sm"
+        />
+      </form>
+
       {pipes.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
@@ -567,7 +668,7 @@ export function PipesSection() {
                       variant="ghost"
                       size="sm"
                       onClick={() => runPipe(pipe.config.name)}
-                      disabled={runningPipe !== null}
+                      disabled={runningPipe === pipe.config.name}
                       title="run pipe"
                     >
                       <Play className="h-4 w-4" />

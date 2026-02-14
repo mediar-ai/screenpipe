@@ -426,6 +426,72 @@ impl PipeManager {
         Ok(())
     }
 
+    /// Re-scan `pipes_dir` and merge: add new pipes, update configs of existing
+    /// ones, remove pipes whose directories were deleted — but preserve runtime
+    /// state (running flags, logs, execution IDs).
+    pub async fn reload_pipes(&self) -> Result<()> {
+        let mut pipes = self.pipes.lock().await;
+
+        let entries = match std::fs::read_dir(&self.pipes_dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!("could not read pipes dir {:?}: {}", self.pipes_dir, e);
+                return Ok(());
+            }
+        };
+
+        let mut found_on_disk = std::collections::HashSet::new();
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let pipe_md = path.join("pipe.md");
+            if !pipe_md.exists() {
+                continue;
+            }
+            let dir_name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            found_on_disk.insert(dir_name.clone());
+
+            match std::fs::read_to_string(&pipe_md) {
+                Ok(content) => match parse_frontmatter(&content) {
+                    Ok((mut config, body)) => {
+                        config.name = dir_name.clone();
+                        if !pipes.contains_key(&dir_name) {
+                            info!("discovered new pipe: {}", dir_name);
+                        }
+                        pipes.insert(dir_name, (config, body));
+                    }
+                    Err(e) => {
+                        warn!("failed to parse {:?}: {}", pipe_md, e);
+                    }
+                },
+                Err(e) => warn!("failed to read {:?}: {}", pipe_md, e),
+            }
+        }
+
+        // Remove pipes whose directories no longer exist on disk
+        // (but only if they're not currently running)
+        let running = self.running.lock().await;
+        pipes.retain(|name, _| {
+            if found_on_disk.contains(name) {
+                return true;
+            }
+            if running.contains_key(name) {
+                return true; // keep running pipes even if dir was removed
+            }
+            info!("pipe directory removed, unloading: {}", name);
+            false
+        });
+
+        Ok(())
+    }
+
     /// List all pipes with status.
     pub async fn list_pipes(&self) -> Vec<PipeStatus> {
         let pipes = self.pipes.lock().await;

@@ -488,6 +488,9 @@ export function StandaloneChat() {
   const piStoppedIntentionallyRef = useRef(false);
   const piThinkingStartRef = useRef<number | null>(null);
 
+  // Ref to sendMessage so useEffect callbacks can call it without stale closures
+  const sendMessageRef = useRef<(msg: string) => Promise<void>>();
+
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -809,10 +812,39 @@ export function StandaloneChat() {
     }
   }, [processImageFile]);
 
-  // Listen for chat-prefill events from search modal
+  // Listen for chat-prefill events from search modal and pipe creation
   useEffect(() => {
-    const unlisten = listen<{ context: string; prompt?: string; frameId?: number }>("chat-prefill", (event) => {
-      const { context, prompt, frameId } = event.payload;
+    const unlisten = listen<{ context: string; prompt?: string; frameId?: number; autoSend?: boolean }>("chat-prefill", (event) => {
+      const { context, prompt, frameId, autoSend } = event.payload;
+
+      if (autoSend && prompt && context) {
+        // Auto-send: compose full message (context above, user text below) and send immediately
+        const fullMessage = `${context}\n\n${prompt}`;
+        // Start a new conversation then send
+        (async () => {
+          if (piInfo?.running) {
+            try {
+              await commands.piNewSession();
+            } catch (e) {
+              console.warn("[Pi] Failed to reset session:", e);
+            }
+          }
+          setMessages([]);
+          setConversationId(null);
+          setPrefillContext(null);
+          setPrefillFrameId(null);
+          // Set input as fallback in case auto-send fails (pi not ready)
+          setInput(fullMessage);
+          // Try to auto-send after state settles
+          setTimeout(() => {
+            if (sendMessageRef.current) {
+              sendMessageRef.current(fullMessage);
+            }
+          }, 500);
+        })();
+        return;
+      }
+
       setPrefillContext(context);
       if (frameId) {
         setPrefillFrameId(frameId);
@@ -827,7 +859,7 @@ export function StandaloneChat() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [piInfo]);
 
   const appMentionSuggestions = React.useMemo(
     () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
@@ -1459,7 +1491,22 @@ export function StandaloneChat() {
         // Only show errors if user sent a message and is waiting — not during background startup/restart
         if (!piMessageIdRef.current) return;
         const line = event.payload;
-        if (line.includes("not found") || line.includes("ECONNREFUSED") || line.includes("connection refused")) {
+        if (line.includes("model_not_allowed") || line.includes("403")) {
+          const msgId = piMessageIdRef.current;
+          setUpgradeReason("model_not_allowed");
+          if (msgId) {
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content: "This model requires an upgrade — try a different model in your AI preset." } : m)
+            );
+          }
+        } else if (line.includes("429") || line.includes("rate") || line.includes("daily_limit")) {
+          const msgId = piMessageIdRef.current;
+          if (msgId) {
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content: "Rate limited — try again in a moment or switch to a different model." } : m)
+            );
+          }
+        } else if (line.includes("not found") || line.includes("ECONNREFUSED") || line.includes("connection refused")) {
           let hint = line;
           if (line.includes("not found")) {
             hint = `Model not found: ${line}. Check your AI preset in settings.`;
@@ -1708,6 +1755,9 @@ export function StandaloneChat() {
     // All providers route through Pi agent
     return sendPiMessage(userMessage);
   }
+
+  // Keep ref in sync so useEffect callbacks can call sendMessage
+  sendMessageRef.current = sendMessage;
 
   const copyFullChatAsMarkdown = async () => {
     if (messages.length === 0) return;

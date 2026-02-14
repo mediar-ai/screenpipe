@@ -16,6 +16,50 @@ use tracing::{debug, error, info, warn};
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
 
+/// Returns the screenpipe cloud models array as a serde_json::Value.
+/// Shared between server-side pipe executor and desktop Pi chat so the
+/// model list stays in sync.
+pub fn screenpipe_cloud_models() -> serde_json::Value {
+    json!([
+        {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
+            "contextWindow": 200000,
+            "maxTokens": 32000
+        },
+        {
+            "id": "claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": {"input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75},
+            "contextWindow": 200000,
+            "maxTokens": 64000
+        },
+        {
+            "id": "claude-opus-4-5@20251101",
+            "name": "Claude Opus 4.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
+            "contextWindow": 200000,
+            "maxTokens": 32000
+        },
+        {
+            "id": "claude-haiku-4-5",
+            "name": "Claude Haiku 4.5",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
+            "contextWindow": 200000,
+            "maxTokens": 64000
+        }
+    ])
+}
+
 /// Pi agent executor.
 pub struct PiExecutor {
     /// Screenpipe cloud token (for LLM calls via screenpipe proxy).
@@ -82,26 +126,7 @@ impl PiExecutor {
             "api": "openai-completions",
             "apiKey": "SCREENPIPE_API_KEY",
             "authHeader": true,
-            "models": [
-                {
-                    "id": "claude-opus-4-5@20251101",
-                    "name": "Claude Opus 4.5",
-                    "reasoning": true,
-                    "input": ["text", "image"],
-                    "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
-                    "contextWindow": 200000,
-                    "maxTokens": 32000
-                },
-                {
-                    "id": "claude-haiku-4-5@20251001",
-                    "name": "Claude Haiku 4.5",
-                    "reasoning": true,
-                    "input": ["text", "image"],
-                    "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
-                    "contextWindow": 200000,
-                    "maxTokens": 64000
-                }
-            ]
+            "models": screenpipe_cloud_models()
         });
 
         if let Some(providers) = models_config

@@ -49,8 +49,12 @@ pub struct ExecutionsQuery {
 // ---------------------------------------------------------------------------
 
 /// GET /pipes — list all pipes with status.
+/// Re-scans disk so pipes installed externally (e.g. via CLI) are picked up.
 pub async fn list_pipes(State(pm): State<SharedPipeManager>) -> Json<Value> {
     let mgr = pm.lock().await;
+    if let Err(e) = mgr.reload_pipes().await {
+        tracing::warn!("failed to reload pipes from disk: {}", e);
+    }
     let pipes = mgr.list_pipes().await;
     Json(json!({ "data": pipes }))
 }
