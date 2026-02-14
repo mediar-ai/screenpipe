@@ -95,23 +95,15 @@ impl Drop for ImmediateTx {
                 // into the task, so if rollback succeeds, the clean connection is
                 // returned to the pool when dropped. If rollback fails, we detach.
                 warn!("ImmediateTx dropped without commit — scheduling rollback");
-                // Use tokio::task::block_in_place if inside a tokio worker thread,
-                // otherwise detach as fallback. block_in_place moves the current
-                // task off the worker thread so blocking is safe.
-                if tokio::runtime::Handle::try_current().is_ok() {
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async {
-                            if let Err(e) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                                error!("failed to rollback on drop: {}", e);
-                                let _raw = conn.detach();
-                            }
-                            // Connection is clean — returned to pool when `conn` drops
-                        });
-                    });
-                } else {
-                    // No tokio runtime available — detach as fallback
-                    let _raw = conn.detach();
-                }
+                // Rollback and return the connection to the pool. We spawn an async
+                // task because Drop is synchronous. The connection is moved into the
+                // task; if rollback succeeds, it returns to the pool when dropped.
+                tokio::spawn(async move {
+                    if let Err(e) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                        error!("failed to rollback on drop: {}", e);
+                        let _raw = conn.detach();
+                    }
+                });
             }
         }
         // _write_permit is dropped here, releasing the semaphore for the next writer

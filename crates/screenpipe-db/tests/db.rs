@@ -1569,4 +1569,38 @@ mod tests {
             .unwrap();
         assert_eq!(count, 0, "Should count zero results for non-matching query");
     }
+
+    #[tokio::test]
+    async fn test_dropped_tx_rolls_back_and_returns_connection() {
+        let db = setup_test_db().await;
+
+        // Insert an audio chunk via a committed transaction (baseline)
+        let chunk_id = db.insert_audio_chunk("rollback_test.mp4").await.unwrap();
+        assert!(chunk_id > 0);
+
+        // Start a transaction, insert a row, then DROP without committing.
+        // The Drop impl should rollback and return the connection to the pool.
+        {
+            let mut tx = db.begin_immediate_with_retry().await.unwrap();
+            sqlx::query("INSERT INTO audio_chunks (file_path, timestamp) VALUES ('should_not_exist.mp4', datetime('now'))")
+                .execute(&mut **tx.conn())
+                .await
+                .unwrap();
+            // tx is dropped here without commit — should rollback
+        }
+
+        // Verify the uncommitted row was rolled back
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audio_chunks WHERE file_path = 'should_not_exist.mp4'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(row.0, 0, "Uncommitted row should have been rolled back");
+
+        // Verify the pool is still healthy — we can acquire connections and do work.
+        // If the connection was leaked (detached), the pool would eventually exhaust.
+        for i in 0..5 {
+            let id = db.insert_audio_chunk(&format!("pool_health_{}.mp4", i)).await.unwrap();
+            assert!(id > 0, "Pool should still be healthy after rollback");
+        }
+    }
 }
