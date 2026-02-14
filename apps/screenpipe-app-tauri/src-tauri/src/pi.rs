@@ -36,9 +36,17 @@ fn build_command_for_path(path: &str) -> Command {
     }
 }
 
+/// On Unix, pi's shebang is `#!/usr/bin/env node` but screenpipe only bundles
+/// bun. Run `bun <pi_path>` so it works without node installed.
 #[cfg(not(windows))]
 fn build_command_for_path(path: &str) -> Command {
-    Command::new(path)
+    if let Some(bun) = find_bun_executable() {
+        let mut cmd = Command::new(bun);
+        cmd.arg(path);
+        cmd
+    } else {
+        Command::new(path)
+    }
 }
 
 /// Async version for tokio::process::Command
@@ -53,9 +61,17 @@ fn build_async_command_for_path(path: &str) -> tokio::process::Command {
     }
 }
 
+/// On Unix, pi's shebang is `#!/usr/bin/env node` but screenpipe only bundles
+/// bun. Run `bun <pi_path>` so it works without node installed.
 #[cfg(not(windows))]
 fn build_async_command_for_path(path: &str) -> tokio::process::Command {
-    tokio::process::Command::new(path)
+    if let Some(bun) = find_bun_executable() {
+        let mut cmd = tokio::process::Command::new(bun);
+        cmd.arg(path);
+        cmd
+    } else {
+        tokio::process::Command::new(path)
+    }
 }
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";

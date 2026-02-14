@@ -468,7 +468,12 @@ pub fn find_pi_executable() -> Option<String> {
     None
 }
 
-/// Build an async command, handling .cmd files on Windows.
+/// Build an async command for launching pi.
+///
+/// Pi's shebang is `#!/usr/bin/env node`, but screenpipe only bundles bun
+/// (not node). On Unix we run `bun <pi_path>` so the script executes under
+/// bun's Node-compatible runtime regardless of whether node is installed.
+/// On Windows, .cmd files need `cmd.exe /C`.
 fn build_async_command(path: &str) -> tokio::process::Command {
     #[cfg(windows)]
     {
@@ -482,7 +487,14 @@ fn build_async_command(path: &str) -> tokio::process::Command {
     }
     #[cfg(not(windows))]
     {
-        tokio::process::Command::new(path)
+        if let Some(bun) = find_bun_executable() {
+            let mut cmd = tokio::process::Command::new(bun);
+            cmd.arg(path);
+            cmd
+        } else {
+            // Fallback: run pi directly (requires node in PATH)
+            tokio::process::Command::new(path)
+        }
     }
 }
 
