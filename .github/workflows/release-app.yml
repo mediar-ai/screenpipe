@@ -812,6 +812,7 @@ jobs:
 
       - name: Upload to Cloudflare R2 (macOS)
         if: matrix.os_type == 'macos'
+        continue-on-error: true
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -856,6 +857,7 @@ jobs:
 
       - name: Upload to Cloudflare R2 (Windows)
         if: matrix.os_type == 'windows'
+        continue-on-error: true
         shell: powershell
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
