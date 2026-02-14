@@ -390,7 +390,7 @@ export function AIProviderConfig({
                   ...formData,
                   provider: "pi",
                   url: "", // Pi uses RPC mode
-                  model: "claude-haiku-4-5-20251001",
+                  model: "claude-haiku-4-5",
                 });
               }}
             >
@@ -588,11 +588,17 @@ export function AIProviderConfig({
                   if (!settings.user?.token) {
                     await openUrl("https://screenpi.pe/login");
                   } else {
-                    const baseUrl = "https://buy.stripe.com/9B63cv1cD1oG2Vjg097ss0G";
-                    const params = new URLSearchParams();
-                    if (settings.user?.id) params.set("client_reference_id", settings.user.id);
-                    if (settings.user?.email) params.set("customer_email", settings.user.email);
-                    await openUrl(`${baseUrl}?${params.toString()}`);
+                    try {
+                      const res = await fetch("https://screenpi.pe/api/cloud-sync/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${settings.user.token}` },
+                        body: JSON.stringify({ tier: "pro", billingPeriod: "monthly", userId: settings.user.id, email: settings.user.email }),
+                      });
+                      const data = await res.json();
+                      if (data.url) await openUrl(data.url);
+                    } catch (e) {
+                      console.error("checkout failed:", e);
+                    }
                   }
                   return;
                 }
