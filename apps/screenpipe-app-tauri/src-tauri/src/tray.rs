@@ -223,25 +223,48 @@ fn create_dynamic_menu(
     }
 
     // Full menu after onboarding is complete
-    // Get the show shortcut from store (must match frontend defaults in use-settings.tsx)
-    let default_shortcut = if cfg!(target_os = "windows") {
-        "Alt+S"
+    // Get shortcuts from store (must match frontend defaults in use-settings.tsx)
+    let (default_show, default_search, default_chat) = if cfg!(target_os = "windows") {
+        ("Alt+S", "Control+Alt+K", "Alt+L")
     } else {
-        "Control+Super+S"
+        ("Control+Super+S", "Control+Super+K", "Control+Super+L")
     };
     let show_shortcut = store
         .get("showScreenpipeShortcut")
         .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(|| default_shortcut.to_string());
+        .unwrap_or_else(|| default_show.to_string());
+    let search_shortcut = store
+        .get("searchShortcut")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| default_search.to_string());
+    let chat_shortcut = store
+        .get("showChatShortcut")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| default_chat.to_string());
 
-    // Show item with formatted shortcut in label
-    menu_builder = menu_builder.item(
-        &MenuItemBuilder::with_id(
-            "show",
-            format!("show screenpipe ({})", format_shortcut(&show_shortcut)),
+    // Show timeline, search, and chat items with shortcuts
+    menu_builder = menu_builder
+        .item(
+            &MenuItemBuilder::with_id(
+                "show",
+                format!("show timeline ({})", format_shortcut(&show_shortcut)),
+            )
+            .build(app)?,
         )
-        .build(app)?,
-    );
+        .item(
+            &MenuItemBuilder::with_id(
+                "show_search",
+                format!("show search ({})", format_shortcut(&search_shortcut)),
+            )
+            .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id(
+                "show_chat",
+                format!("show chat ({})", format_shortcut(&chat_shortcut)),
+            )
+            .build(app)?,
+        );
 
     // Recording status indicator
     let status_text = match get_recording_status() {
@@ -344,6 +367,12 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
     match event.id().as_ref() {
         "show" => {
             show_main_window(app_handle, false);
+        }
+        "show_search" => {
+            let _ = ShowRewindWindow::Search { query: None }.show(app_handle);
+        }
+        "show_chat" => {
+            let _ = ShowRewindWindow::Chat.show(app_handle);
         }
         "start_recording" => {
             let _ = app_handle.emit("shortcut-start-recording", ());
@@ -522,9 +551,14 @@ fn get_current_shortcuts(app: &AppHandle) -> Result<HashMap<String, String>> {
     let store = get_store(app, None)?;
     let mut shortcuts = HashMap::new();
 
-    // Get the show shortcut from store
-    if let Some(shortcut) = store.get("showScreenpipeShortcut").and_then(|v| v.as_str().map(String::from)) {
-        shortcuts.insert("show".to_string(), shortcut);
+    if let Some(s) = store.get("showScreenpipeShortcut").and_then(|v| v.as_str().map(String::from)) {
+        shortcuts.insert("show".to_string(), s);
+    }
+    if let Some(s) = store.get("searchShortcut").and_then(|v| v.as_str().map(String::from)) {
+        shortcuts.insert("search".to_string(), s);
+    }
+    if let Some(s) = store.get("showChatShortcut").and_then(|v| v.as_str().map(String::from)) {
+        shortcuts.insert("chat".to_string(), s);
     }
 
     Ok(shortcuts)
