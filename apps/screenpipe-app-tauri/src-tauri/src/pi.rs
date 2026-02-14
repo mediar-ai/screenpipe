@@ -74,7 +74,7 @@ fn build_async_command_for_path(path: &str) -> tokio::process::Command {
     }
 }
 
-const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
+const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent@0.51.1";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
 
 /// State for managing the Pi sidecar process

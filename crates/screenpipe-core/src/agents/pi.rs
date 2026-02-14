@@ -13,7 +13,7 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 
-const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
+const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent@0.51.1";
 pub const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
 
 /// Returns the screenpipe cloud models array as a serde_json::Value.
