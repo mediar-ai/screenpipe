@@ -357,7 +357,13 @@ fn create_dynamic_menu(
 
 fn setup_tray_click_handlers(main_tray: &TrayIcon) -> Result<()> {
     main_tray.on_menu_event(move |app_handle, event| {
-        handle_menu_event(app_handle, event);
+        // Wrap in catch_unwind: menu event handlers are called from tao::send_event
+        // which crosses the Obj-C FFI boundary (nounwind). A panic here would abort().
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            handle_menu_event(app_handle, event);
+        })) {
+            error!("panic in tray menu event handler: {:?}", e);
+        }
     });
 
     Ok(())
