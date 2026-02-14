@@ -710,6 +710,13 @@ jobs:
           Write-Host "ONNX Runtime extracted to $extractDir"
           Get-ChildItem "$extractDir/lib" | ForEach-Object { Write-Host $_.Name }
 
+      - name: Set ORT env vars for Windows
+        if: matrix.os_type == 'windows'
+        shell: bash
+        run: |
+          echo "ORT_STRATEGY=system" >> $GITHUB_ENV
+          echo "ORT_LIB_LOCATION=${{ github.workspace }}/apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2" >> $GITHUB_ENV
+
       - name: Use production config for release
         shell: bash
         run: cp apps/screenpipe-app-tauri/src-tauri/tauri.prod.conf.json apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
@@ -778,9 +785,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.os_type == 'windows' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
           VCPKG_STATIC_LINKAGE: "true"
           KNF_STATIC_CRT: ${{ matrix.os_type == 'windows' && '1' || '' }}
-          # Use system onnxruntime (from build.rs download) to avoid CRT mismatch with +crt-static
-          ORT_STRATEGY: ${{ matrix.os_type == 'windows' && 'system' || '' }}
-          ORT_LIB_LOCATION: ${{ matrix.os_type == 'windows' && format('{0}/apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2', github.workspace) || '' }}
+          # ORT_STRATEGY and ORT_LIB_LOCATION set via GITHUB_ENV in Windows-only step above
           # Fix whisper.cpp crash on newer CPUs (Lunar Lake, etc.) that lack AVX-512
           # GitHub windows-2022 runners have Xeon CPUs with AVX-512, but GGML_NATIVE=ON
           # compiles with -march=native, causing illegal instruction crashes on CPUs without AVX-512
