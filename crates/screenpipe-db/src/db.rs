@@ -85,17 +85,33 @@ impl ImmediateTx {
 impl Drop for ImmediateTx {
     fn drop(&mut self) {
         if !self.committed {
-            if let Some(conn) = self.conn.take() {
-                // Detach from pool — the connection has an open transaction.
-                // Returning it to the pool would cause "cannot start a transaction
-                // within a transaction" errors on the next use. Detaching drops the
-                // raw connection (closes it) and lets the pool create a fresh one.
+            if let Some(mut conn) = self.conn.take() {
+                // Roll back the open transaction and return the connection to the pool.
                 //
-                // Previous approach used futures::executor::block_on(ROLLBACK) which
-                // can deadlock inside a tokio async context, silently failing and
-                // returning the dirty connection to the pool.
-                let _raw = conn.detach();
-                warn!("ImmediateTx dropped without commit — connection detached (not returned to pool)");
+                // Previous approach detached (leaked) the connection to avoid async
+                // issues, but that slowly exhausted the pool over time.
+                //
+                // We spawn a task to rollback asynchronously. The connection is moved
+                // into the task, so if rollback succeeds, the clean connection is
+                // returned to the pool when dropped. If rollback fails, we detach.
+                warn!("ImmediateTx dropped without commit — scheduling rollback");
+                // Use tokio::task::block_in_place if inside a tokio worker thread,
+                // otherwise detach as fallback. block_in_place moves the current
+                // task off the worker thread so blocking is safe.
+                if tokio::runtime::Handle::try_current().is_ok() {
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            if let Err(e) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                                error!("failed to rollback on drop: {}", e);
+                                let _raw = conn.detach();
+                            }
+                            // Connection is clean — returned to pool when `conn` drops
+                        });
+                    });
+                } else {
+                    // No tokio runtime available — detach as fallback
+                    let _raw = conn.detach();
+                }
             }
         }
         // _write_permit is dropped here, releasing the semaphore for the next writer
