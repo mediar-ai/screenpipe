@@ -700,22 +700,32 @@ jobs:
         if: matrix.os_type == 'windows'
         shell: pwsh
         run: |
-          # Pre-download CPU onnxruntime so ort crate finds it via ORT_LIB_LOCATION
+          # Pre-download CPU onnxruntime for both Tauri resources and ort linking.
+          # Extract to TWO separate directories to avoid file locking:
+          # - onnxruntime-win-x64-1.19.2/ → Tauri resources (tauri_build reads these)
+          # - ort-system-lib/ → ORT_LIB_LOCATION (ort-sys copy-dylibs reads these)
+          # These build scripts run concurrently (different dependency chains), so they
+          # MUST NOT share files or Windows will return os error 32 (file locked).
           $url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-1.19.2.zip"
           $zipFile = "onnxruntime-win-x64-1.19.2.zip"
-          $extractDir = "apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2"
+          $tauriDir = "apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2"
+          $ortDir = "ort-system-lib"
           Invoke-WebRequest -Uri $url -OutFile $zipFile
-          if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+          if (Test-Path $tauriDir) { Remove-Item $tauriDir -Recurse -Force }
           7z x $zipFile -o"apps/screenpipe-app-tauri/src-tauri/" -y
-          Write-Host "ONNX Runtime extracted to $extractDir"
-          Get-ChildItem "$extractDir/lib" | ForEach-Object { Write-Host $_.Name }
+          Write-Host "ONNX Runtime extracted to $tauriDir (for Tauri resources)"
+          # Create separate copy for ort-sys linking
+          if (Test-Path $ortDir) { Remove-Item $ortDir -Recurse -Force }
+          Copy-Item -Path $tauriDir -Destination $ortDir -Recurse -Force
+          Write-Host "ONNX Runtime copied to $ortDir (for ORT_LIB_LOCATION)"
+          Get-ChildItem "$ortDir/lib" | ForEach-Object { Write-Host $_.Name }
 
       - name: Set ORT env vars for Windows
         if: matrix.os_type == 'windows'
         shell: bash
         run: |
           echo "ORT_STRATEGY=system" >> $GITHUB_ENV
-          echo "ORT_LIB_LOCATION=${{ github.workspace }}/apps/screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-1.19.2" >> $GITHUB_ENV
+          echo "ORT_LIB_LOCATION=${{ github.workspace }}/ort-system-lib" >> $GITHUB_ENV
 
       - name: Use production config for release
         shell: bash
