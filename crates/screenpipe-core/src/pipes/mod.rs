@@ -10,7 +10,10 @@
 //! parses configs, runs the scheduler, and delegates execution to an
 //! [`AgentExecutor`].
 
-use crate::agents::{AgentExecutor, ExecutionHandle};
+use crate::agents::{
+    pi::{PiExecutor, SCREENPIPE_API_URL},
+    AgentExecutor, ExecutionHandle,
+};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule as CronSchedule;
@@ -192,6 +195,8 @@ pub trait PipeStore: Send + Sync {
 struct ResolvedPreset {
     model: String,
     provider: Option<String>,
+    /// Provider base URL (e.g. `http://localhost:11434/v1` for Ollama).
+    url: Option<String>,
 }
 
 /// Read `~/.screenpipe/store.bin` and find the preset by id.
@@ -253,7 +258,13 @@ fn resolve_preset(pipes_dir: &Path, preset_id: &str) -> Option<ResolvedPreset> {
         })
         .map(|s| s.to_string());
 
-    Some(ResolvedPreset { model, provider })
+    let url = preset
+        .get("url")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    Some(ResolvedPreset { model, provider, url })
 }
 
 // ---------------------------------------------------------------------------
@@ -614,23 +625,23 @@ impl PipeManager {
         let pipe_dir = self.pipes_dir.join(name);
 
         // Resolve preset → model/provider overrides
-        let (run_model, run_provider) = if let Some(ref preset_id) = config.preset {
+        let (run_model, run_provider, run_provider_url) = if let Some(ref preset_id) = config.preset {
             match resolve_preset(&self.pipes_dir, preset_id) {
                 Some(resolved) => {
                     info!(
                         "pipe '{}': using preset '{}' → model={}, provider={:?}",
                         name, preset_id, resolved.model, resolved.provider
                     );
-                    (resolved.model, resolved.provider)
+                    (resolved.model, resolved.provider, resolved.url)
                 }
                 None => {
                     warn!("pipe '{}': preset '{}' not found in store.bin, falling back to pipe config",
                         name, preset_id);
-                    (config.model.clone(), config.provider.clone())
+                    (config.model.clone(), config.provider.clone(), None)
                 }
             }
         } else {
-            (config.model.clone(), config.provider.clone())
+            (config.model.clone(), config.provider.clone(), None)
         };
 
         // Create DB execution row
@@ -688,6 +699,20 @@ impl PipeManager {
                 }
             }
         });
+
+        // Pre-configure pi with the pipe's provider so models.json has the
+        // right entry before the agent subprocess starts.
+        if config.agent == "pi" {
+            if let Err(e) = PiExecutor::ensure_pi_config(
+                None,
+                SCREENPIPE_API_URL,
+                run_provider.as_deref(),
+                Some(&run_model),
+                run_provider_url.as_deref(),
+            ) {
+                warn!("failed to pre-configure pi provider: {}", e);
+            }
+        }
 
         // Run with timeout
         let timeout_duration = std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS);
@@ -1182,18 +1207,31 @@ impl PipeManager {
                     }
 
                     // Resolve preset → model/provider overrides (same as run_pipe)
-                    let (model, provider) = if let Some(ref preset_id) = config.preset {
+                    let (model, provider, provider_url) = if let Some(ref preset_id) = config.preset {
                         match resolve_preset(&pipes_dir, preset_id) {
                             Some(resolved) => {
                                 info!("scheduler: pipe '{}' using preset '{}' → model={}, provider={:?}",
                                     name, preset_id, resolved.model, resolved.provider);
-                                (resolved.model, resolved.provider)
+                                (resolved.model, resolved.provider, resolved.url)
                             }
-                            None => (config.model.clone(), config.provider.clone()),
+                            None => (config.model.clone(), config.provider.clone(), None),
                         }
                     } else {
-                        (config.model.clone(), config.provider.clone())
+                        (config.model.clone(), config.provider.clone(), None)
                     };
+
+                    // Pre-configure pi with the pipe's provider
+                    if config.agent == "pi" {
+                        if let Err(e) = PiExecutor::ensure_pi_config(
+                            None,
+                            SCREENPIPE_API_URL,
+                            provider.as_deref(),
+                            Some(&model),
+                            provider_url.as_deref(),
+                        ) {
+                            warn!("scheduler: failed to pre-configure pi provider: {}", e);
+                        }
+                    }
 
                     let prompt = render_prompt_with_port(config, body, api_port);
                     let pipe_dir = pipes_dir.join(name);

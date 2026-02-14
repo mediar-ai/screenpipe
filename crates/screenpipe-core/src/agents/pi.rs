@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
-const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
+pub const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
 
 /// Returns the screenpipe cloud models array as a serde_json::Value.
 /// Shared between server-side pipe executor and desktop Pi chat so the
@@ -103,12 +103,23 @@ impl PiExecutor {
         Ok(())
     }
 
-    /// Merge screenpipe provider into pi's existing config files.
+    /// Merge screenpipe provider (and optionally the pipe's own provider) into
+    /// pi's existing config files.
     ///
     /// Unlike the old `write_pi_config`, this preserves any existing providers
     /// and auth credentials the user set up via `pi /login` or by editing
     /// `~/.pi/agent/auth.json` directly.
-    pub fn ensure_pi_config(user_token: Option<&str>, api_url: &str) -> Result<()> {
+    ///
+    /// When a pipe uses a non-screenpipe provider (e.g. ollama, openai), pass
+    /// the resolved `provider`, `model`, and optional `provider_url` so the
+    /// corresponding entry is written to `models.json`.
+    pub fn ensure_pi_config(
+        user_token: Option<&str>,
+        api_url: &str,
+        provider: Option<&str>,
+        model: Option<&str>,
+        provider_url: Option<&str>,
+    ) -> Result<()> {
         let config_dir = get_pi_config_dir()?;
         std::fs::create_dir_all(&config_dir)?;
 
@@ -136,6 +147,51 @@ impl PiExecutor {
             providers.insert("screenpipe".to_string(), screenpipe_provider);
         } else {
             models_config = json!({"providers": {"screenpipe": screenpipe_provider}});
+        }
+
+        // Add the pipe's own provider (ollama, openai, custom) if specified
+        if let (Some(prov), Some(mdl)) = (provider, model) {
+            if prov != "screenpipe" {
+                let (pi_provider_name, base_url, api_key) = match prov {
+                    "ollama" => (
+                        "ollama",
+                        provider_url.unwrap_or("http://localhost:11434/v1"),
+                        "ollama",
+                    ),
+                    "openai" => (
+                        "openai-byok",
+                        provider_url.unwrap_or("https://api.openai.com/v1"),
+                        "OPENAI_API_KEY",
+                    ),
+                    other => (other, provider_url.unwrap_or(""), "CUSTOM_API_KEY"),
+                };
+
+                let user_provider = json!({
+                    "baseUrl": base_url,
+                    "api": "openai-completions",
+                    "apiKey": api_key,
+                    "models": [{
+                        "id": mdl,
+                        "name": mdl,
+                        "input": ["text"],
+                        "contextWindow": 128000,
+                        "maxTokens": 16384,
+                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
+                    }]
+                });
+
+                if let Some(providers) = models_config
+                    .get_mut("providers")
+                    .and_then(|p| p.as_object_mut())
+                {
+                    providers.insert(pi_provider_name.to_string(), user_provider);
+                }
+
+                info!(
+                    "pi config: added provider '{}' with model '{}'",
+                    pi_provider_name, mdl
+                );
+            }
         }
 
         std::fs::write(&models_path, serde_json::to_string_pretty(&models_config)?)?;
@@ -180,7 +236,13 @@ impl AgentExecutor for PiExecutor {
         provider: Option<&str>,
         pid_tx: Option<tokio::sync::oneshot::Sender<u32>>,
     ) -> Result<AgentOutput> {
-        Self::ensure_pi_config(self.user_token.as_deref(), &self.api_url)?;
+        Self::ensure_pi_config(
+            self.user_token.as_deref(),
+            &self.api_url,
+            provider,
+            Some(model),
+            None, // URL resolved from provider name defaults
+        )?;
         Self::ensure_screenpipe_skill(working_dir)?;
         Self::ensure_web_search_extension(working_dir)?;
 
@@ -456,4 +518,44 @@ pub fn kill_process_group(pid: u32) -> Result<()> {
             .output();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ensure_pi_config_adds_ollama_provider() {
+        // Call ensure_pi_config with ollama provider info
+        PiExecutor::ensure_pi_config(
+            None,
+            SCREENPIPE_API_URL,
+            Some("ollama"),
+            Some("qwen3:8b"),
+            Some("http://localhost:11434/v1"),
+        )
+        .expect("ensure_pi_config should succeed");
+
+        // Read models.json and verify ollama provider was added
+        let config_dir = get_pi_config_dir().unwrap();
+        let models_path = config_dir.join("models.json");
+        let content = std::fs::read_to_string(&models_path).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&content).unwrap();
+
+        let providers = config.get("providers").unwrap().as_object().unwrap();
+
+        // Should have both screenpipe and ollama providers
+        assert!(providers.contains_key("screenpipe"), "missing screenpipe provider");
+        assert!(providers.contains_key("ollama"), "missing ollama provider");
+
+        let ollama = &providers["ollama"];
+        assert_eq!(
+            ollama.get("baseUrl").unwrap().as_str().unwrap(),
+            "http://localhost:11434/v1"
+        );
+
+        let models = ollama.get("models").unwrap().as_array().unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].get("id").unwrap().as_str().unwrap(), "qwen3:8b");
+    }
 }
