@@ -102,6 +102,7 @@ async fn test_transcription_accuracy() {
                 sample_rate: 44100, // hardcoded based on test data sample rate
                 channels: 1,
                 device: Arc::new(default_input_device().unwrap()),
+                capture_timestamp: 0,
             };
 
             let audio_data = if audio_input.sample_rate != SAMPLE_RATE {

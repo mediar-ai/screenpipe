@@ -335,7 +335,7 @@ pub(crate) async fn add_transcription_to_db(
         transcription.transcription.clone()
     };
 
-    let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
+    let dummy_audio_chunk_id = db.insert_audio_chunk("", None).await?;
 
     db.insert_audio_transcription(
         dummy_audio_chunk_id, // No associated audio chunk
@@ -346,6 +346,7 @@ pub(crate) async fn add_transcription_to_db(
             name: device_name.to_string(),
             device_type: DeviceType::Input.into(),
         },
+        None,
         None,
         None,
         None,

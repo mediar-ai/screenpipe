@@ -90,6 +90,8 @@ export type Settings = SettingsStore & {
 	useSystemDefaultAudio?: boolean;
 	adaptiveFps?: boolean;
 	enableUiEvents?: boolean;
+	/** Audio transcription scheduling: "realtime" (default) or "smart" (defer to idle) */
+	transcriptionMode?: "realtime" | "smart";
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -231,6 +233,7 @@ let DEFAULT_SETTINGS: Settings = {
 			overlayMode: "fullscreen",
 			showOverlayInScreenRecording: false,
 			videoQuality: "balanced",
+			transcriptionMode: "realtime",
 		};
 
 export function createDefaultSettingsObject(): Settings {

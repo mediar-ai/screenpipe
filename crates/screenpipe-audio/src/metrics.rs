@@ -43,6 +43,16 @@ pub struct AudioPipelineMetrics {
     /// Cumulative word count across all inserted transcriptions
     pub total_words: AtomicU64,
 
+    // --- Batch/Smart mode ---
+    /// Audio segments deferred because system was not idle
+    pub segments_deferred: AtomicU64,
+    /// Audio segments processed during batch (idle) periods
+    pub segments_batch_processed: AtomicU64,
+    /// Number of times transcription was paused (transition to non-idle)
+    pub batch_pause_events: AtomicU64,
+    /// Number of times transcription was resumed (transition to idle)
+    pub batch_resume_events: AtomicU64,
+
     // --- Timing ---
     pub started_at: Instant,
 }
@@ -63,6 +73,10 @@ impl AudioPipelineMetrics {
             db_duplicates_blocked: AtomicU64::new(0),
             db_overlaps_trimmed: AtomicU64::new(0),
             total_words: AtomicU64::new(0),
+            segments_deferred: AtomicU64::new(0),
+            segments_batch_processed: AtomicU64::new(0),
+            batch_pause_events: AtomicU64::new(0),
+            batch_resume_events: AtomicU64::new(0),
             started_at: Instant::now(),
         }
     }
@@ -124,6 +138,25 @@ impl AudioPipelineMetrics {
         self.db_overlaps_trimmed.fetch_add(1, Ordering::Relaxed);
     }
 
+    // --- Batch/Smart mode ---
+
+    pub fn record_segment_deferred(&self) {
+        self.segments_deferred.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_segment_batch_processed(&self) {
+        self.segments_batch_processed
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_batch_pause(&self) {
+        self.batch_pause_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_batch_resume(&self) {
+        self.batch_resume_events.fetch_add(1, Ordering::Relaxed);
+    }
+
     /// Take a point-in-time snapshot for reporting.
     pub fn snapshot(&self) -> AudioMetricsSnapshot {
         let chunks_sent = self.chunks_sent.load(Ordering::Relaxed);
@@ -158,6 +191,11 @@ impl AudioPipelineMetrics {
             db_duplicates_blocked: self.db_duplicates_blocked.load(Ordering::Relaxed),
             db_overlaps_trimmed: self.db_overlaps_trimmed.load(Ordering::Relaxed),
             total_words: self.total_words.load(Ordering::Relaxed),
+            // Batch/Smart mode
+            segments_deferred: self.segments_deferred.load(Ordering::Relaxed),
+            segments_batch_processed: self.segments_batch_processed.load(Ordering::Relaxed),
+            batch_pause_events: self.batch_pause_events.load(Ordering::Relaxed),
+            batch_resume_events: self.batch_resume_events.load(Ordering::Relaxed),
             // Derived
             vad_passthrough_rate: if vad_total > 0 {
                 vad_passed as f64 / vad_total as f64
@@ -204,6 +242,12 @@ pub struct AudioMetricsSnapshot {
     pub db_duplicates_blocked: u64,
     pub db_overlaps_trimmed: u64,
     pub total_words: u64,
+
+    // Batch/Smart mode
+    pub segments_deferred: u64,
+    pub segments_batch_processed: u64,
+    pub batch_pause_events: u64,
+    pub batch_resume_events: u64,
 
     // Derived
     /// 0.0 = all rejected, 1.0 = all passed

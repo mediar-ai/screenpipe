@@ -19,11 +19,7 @@ use anyhow::Result;
 use objc::rc::autoreleasepool;
 use screenpipe_core::Language;
 use std::path::PathBuf;
-use std::{
-    sync::Arc,
-    sync::Mutex as StdMutex,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{sync::Arc, sync::Mutex as StdMutex};
 use tokio::sync::Mutex;
 use tracing::error;
 use whisper_rs::WhisperContext;
@@ -109,10 +105,10 @@ pub async fn process_audio_input(
     whisper_context: Arc<WhisperContext>,
     metrics: Arc<AudioPipelineMetrics>,
 ) -> Result<()> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs();
+    // Use the capture timestamp from when audio was recorded, not processing time.
+    // This is critical for batch/deferred transcription mode where processing
+    // may happen minutes or hours after capture.
+    let timestamp = audio.capture_timestamp;
 
     let audio_data = if audio.sample_rate != SAMPLE_RATE {
         resample(audio.data.as_ref(), audio.sample_rate, SAMPLE_RATE)?
@@ -123,7 +119,9 @@ pub async fn process_audio_input(
     let audio = AudioInput {
         data: Arc::new(audio_data.clone()),
         sample_rate: SAMPLE_RATE,
-        ..audio
+        channels: audio.channels,
+        device: audio.device,
+        capture_timestamp: audio.capture_timestamp,
     };
 
     let (mut segments, speech_ratio_ok, speech_ratio) = prepare_segments(
@@ -229,6 +227,7 @@ pub async fn run_stt(
                 sample_rate,
                 channels: 1,
                 device: device.clone(),
+                capture_timestamp: timestamp,
             },
             transcription: Some(transcription),
             path,
@@ -246,6 +245,7 @@ pub async fn run_stt(
                     sample_rate: segment.sample_rate,
                     channels: 1,
                     device: device.clone(),
+                    capture_timestamp: timestamp,
                 },
                 transcription: None,
                 path,

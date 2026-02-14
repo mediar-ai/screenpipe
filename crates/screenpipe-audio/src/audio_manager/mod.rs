@@ -1,4 +1,4 @@
-mod builder;
+pub mod builder;
 mod device_monitor;
 mod manager;
 pub use builder::*;

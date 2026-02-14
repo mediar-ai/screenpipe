@@ -1,6 +1,7 @@
 use clap::ValueEnum;
 use clap::{Parser, Subcommand, ValueHint};
 use screenpipe_audio::{
+    audio_manager::builder::TranscriptionMode,
     core::engine::AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
     vad::{VadEngineEnum, VadSensitivity},
 };
@@ -141,6 +142,25 @@ impl From<CliVadSensitivity> for VadSensitivity {
 }
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
+pub enum CliTranscriptionMode {
+    /// Transcribe immediately as audio is captured (default)
+    #[clap(name = "realtime")]
+    Realtime,
+    /// Defer local Whisper inference to idle periods (CPU < threshold)
+    #[clap(name = "smart")]
+    Smart,
+}
+
+impl From<CliTranscriptionMode> for TranscriptionMode {
+    fn from(cli_mode: CliTranscriptionMode) -> Self {
+        match cli_mode {
+            CliTranscriptionMode::Realtime => TranscriptionMode::Realtime,
+            CliTranscriptionMode::Smart => TranscriptionMode::Smart,
+        }
+    }
+}
+
+#[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum OutputFormat {
     Text,
     Json,
@@ -259,6 +279,10 @@ pub struct Cli {
 
     #[arg(long, value_enum, default_value_t = CliVadSensitivity::High)]
     pub vad_sensitivity: CliVadSensitivity,
+
+    /// Audio transcription scheduling mode
+    #[arg(long, value_enum, default_value_t = CliTranscriptionMode::Realtime)]
+    pub transcription_mode: CliTranscriptionMode,
 
     #[arg(long, default_value_t = false)]
     pub disable_telemetry: bool,
@@ -498,6 +522,10 @@ pub struct RecordArgs {
     #[arg(long, value_enum, default_value_t = CliVadSensitivity::High)]
     pub vad_sensitivity: CliVadSensitivity,
 
+    /// Audio transcription scheduling mode: realtime (default) or smart (defer to idle)
+    #[arg(long, value_enum, default_value_t = CliTranscriptionMode::Realtime)]
+    pub transcription_mode: CliTranscriptionMode,
+
     /// Disable telemetry
     #[arg(long, default_value_t = false)]
     pub disable_telemetry: bool,
@@ -570,6 +598,7 @@ impl RecordArgs {
             deepgram_api_key: cli.deepgram_api_key.clone(),
             auto_destruct_pid: cli.auto_destruct_pid,
             vad_sensitivity: cli.vad_sensitivity.clone(),
+            transcription_mode: cli.transcription_mode.clone(),
             disable_telemetry: cli.disable_telemetry,
             enable_frame_cache: cli.enable_frame_cache,
             capture_unfocused_windows: cli.capture_unfocused_windows,

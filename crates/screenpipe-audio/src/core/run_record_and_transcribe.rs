@@ -7,7 +7,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{anyhow, Result};
@@ -98,11 +98,16 @@ pub async fn run_record_and_transcribe(
 
         if !collected_audio.is_empty() {
             debug!("sending audio segment to audio model");
+            let capture_timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs();
             match whisper_sender.try_send(AudioInput {
                 data: Arc::new(collected_audio.clone()),
                 device: audio_stream.device.clone(),
                 sample_rate: audio_stream.device_config.sample_rate().0,
                 channels: audio_stream.device_config.channels(),
+                capture_timestamp,
             }) {
                 Ok(_) => {
                     debug!("sent audio segment to audio model");

@@ -34,6 +34,7 @@ import {
   Globe,
   Shield,
   Film,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -933,7 +934,33 @@ export function RecordingSettings() {
           </CardContent>
         </Card>
 
-      
+        {/* Transcription Mode - only for local Whisper engines */}
+        {settings.audioTranscriptionEngine !== "deepgram" &&
+         settings.audioTranscriptionEngine !== "screenpipe-cloud" && (
+          <Card className="border-border bg-card">
+            <CardContent className="px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <Zap className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      Smart transcription
+                      <HelpTooltip text="When enabled, defers Whisper inference until your system is idle. Useful during video calls (Zoom, Meet, Teams) to avoid slowdowns. Audio capture continues uninterrupted — transcription catches up when you're done." />
+                    </h3>
+                    <p className="text-xs text-muted-foreground">Pause transcription during heavy workloads</p>
+                  </div>
+                </div>
+                <Switch
+                  id="transcriptionMode"
+                  checked={(settings.transcriptionMode ?? "realtime") === "smart"}
+                  onCheckedChange={(checked) =>
+                    handleSettingsChange({ transcriptionMode: checked ? "smart" : "realtime" }, true)
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* System Default Audio */}
         <Card className="border-border bg-card">

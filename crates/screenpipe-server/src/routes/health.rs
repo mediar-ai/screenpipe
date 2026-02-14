@@ -82,6 +82,17 @@ pub struct AudioPipelineHealthInfo {
     pub db_inserted: u64,
     pub total_words: u64,
     pub words_per_minute: f64,
+    // Batch/Smart mode fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcription_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcription_paused: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments_deferred: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments_batch_processed: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batch_paused_reason: Option<String>,
 }
 
 #[oasgen]
@@ -289,6 +300,10 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         pipeline,
         audio_pipeline: if !state.audio_disabled {
             let snap = state.audio_metrics.snapshot();
+            let is_paused = state
+                .audio_manager
+                .transcription_paused
+                .load(Ordering::Relaxed);
             Some(AudioPipelineHealthInfo {
                 uptime_secs: snap.uptime_secs,
                 chunks_sent: snap.chunks_sent,
@@ -304,6 +319,26 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
                 db_inserted: snap.db_inserted,
                 total_words: snap.total_words,
                 words_per_minute: snap.words_per_minute,
+                // Batch/Smart mode
+                transcription_mode: if snap.segments_deferred > 0
+                    || snap.segments_batch_processed > 0
+                {
+                    Some("smart".to_string())
+                } else {
+                    Some("realtime".to_string())
+                },
+                transcription_paused: Some(is_paused),
+                segments_deferred: if snap.segments_deferred > 0 {
+                    Some(snap.segments_deferred)
+                } else {
+                    None
+                },
+                segments_batch_processed: if snap.segments_batch_processed > 0 {
+                    Some(snap.segments_batch_processed)
+                } else {
+                    None
+                },
+                batch_paused_reason: None, // populated by idle detector if available
             })
         } else {
             None

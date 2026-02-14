@@ -12,5 +12,6 @@ pub mod transcription;
 pub use utils::audio::pcm_decode;
 pub use utils::audio::resample;
 pub mod audio_manager;
+pub mod idle_detector;
 mod device;
 mod segmentation;

@@ -236,6 +236,7 @@ mod tests {
             sample_rate: 44100, // hardcoded based on test data sample rate
             channels: 1,
             device: Arc::new(default_input_device().unwrap()),
+            capture_timestamp: 0,
         };
 
         // Create the missing parameters
@@ -319,6 +320,7 @@ mod tests {
             sample_rate: 16000, // Adjust this based on your test audio
             channels: 1,
             device: Arc::new(default_output_device().await.unwrap()),
+            capture_timestamp: 0,
         };
 
         let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

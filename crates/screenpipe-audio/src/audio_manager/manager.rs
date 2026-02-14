@@ -7,25 +7,31 @@ use dashmap::DashMap;
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 use tokio::{
     join,
     sync::{Mutex, RwLock},
     task::JoinHandle,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use whisper_rs::WhisperContext;
 
 use screenpipe_db::DatabaseManager;
 
-use super::{start_device_monitor, stop_device_monitor, AudioManagerOptions};
+use super::{start_device_monitor, stop_device_monitor, AudioManagerOptions, TranscriptionMode};
 use crate::{
     core::{
         device::{parse_audio_device, AudioDevice},
+        engine::AudioTranscriptionEngine,
         record_and_transcribe,
     },
     device::device_manager::DeviceManager,
+    idle_detector::IdleDetector,
     metrics::AudioPipelineMetrics,
     segmentation::segmentation_manager::SegmentationManager,
     transcription::{
@@ -64,6 +70,9 @@ pub struct AudioManager {
     recording_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     stt_model_path: PathBuf,
     pub metrics: Arc<AudioPipelineMetrics>,
+    idle_detector: Option<Arc<IdleDetector>>,
+    /// Whether transcription is currently paused due to high CPU (batch/smart mode).
+    pub transcription_paused: Arc<AtomicBool>,
 }
 
 impl AudioManager {
@@ -84,6 +93,19 @@ impl AudioManager {
 
         whisper_rs::install_logging_hooks();
 
+        // Only create idle detector for Smart mode with local Whisper engines
+        let is_local_whisper =
+            *options.transcription_engine != AudioTranscriptionEngine::Deepgram;
+        let idle_detector = if options.transcription_mode == TranscriptionMode::Smart
+            && is_local_whisper
+        {
+            let detector = Arc::new(IdleDetector::new(70.0));
+            info!("batch/smart transcription mode enabled — will defer Whisper during high CPU");
+            Some(detector)
+        } else {
+            None
+        };
+
         let manager = Self {
             options: Arc::new(RwLock::new(options)),
             device_manager: Arc::new(device_manager),
@@ -100,6 +122,8 @@ impl AudioManager {
             transcription_receiver_handle: Arc::new(RwLock::new(None)),
             stt_model_path,
             metrics: Arc::new(AudioPipelineMetrics::new()),
+            idle_detector,
+            transcription_paused: Arc::new(AtomicBool::new(false)),
         };
 
         Ok(manager)
@@ -122,6 +146,17 @@ impl AudioManager {
         let mut recording_receiver_handle = self.recording_receiver_handle.write().await;
         *recording_receiver_handle = Some(self.start_audio_receiver_handler().await?);
         let self_arc = Arc::new(self.clone());
+
+        // Spawn idle detector refresh task if in Smart mode
+        if let Some(ref detector) = self.idle_detector {
+            let detector = detector.clone();
+            tokio::spawn(async move {
+                loop {
+                    detector.refresh();
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                }
+            });
+        }
 
         start_device_monitor(self_arc.clone(), self.device_manager.clone()).await?;
 
@@ -328,6 +363,8 @@ impl AudioManager {
         let whisper_receiver = self.recording_receiver.clone();
         let metrics = self.metrics.clone();
         let context_param = create_whisper_context_parameters(audio_transcription_engine.clone())?;
+        let idle_detector = self.idle_detector.clone();
+        let transcription_paused = self.transcription_paused.clone();
 
         let quantized_path = self.stt_model_path.clone();
         info!("loading whisper model with GPU acceleration...");
@@ -346,6 +383,30 @@ impl AudioManager {
         Ok(tokio::spawn(async move {
             while let Ok(audio) = whisper_receiver.recv() {
                 info!("Received audio from device: {:?}", audio.device.name);
+
+                // Batch/Smart mode: wait for system idle before running Whisper
+                if let Some(ref detector) = idle_detector {
+                    let mut was_paused = false;
+                    while !detector.is_idle() {
+                        if !was_paused {
+                            warn!(
+                                "batch mode: deferring transcription ({})",
+                                detector.paused_reason().unwrap_or_default()
+                            );
+                            metrics.record_batch_pause();
+                            was_paused = true;
+                        }
+                        metrics.record_segment_deferred();
+                        transcription_paused.store(true, Ordering::Relaxed);
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                    }
+                    if was_paused {
+                        info!("batch mode: system idle, resuming transcription");
+                        metrics.record_batch_resume();
+                    }
+                    transcription_paused.store(false, Ordering::Relaxed);
+                }
+
                 if let Err(e) = process_audio_input(
                     audio.clone(),
                     vad_engine.clone(),
@@ -363,6 +424,8 @@ impl AudioManager {
                 .await
                 {
                     error!("Error processing audio: {:?}", e);
+                } else if idle_detector.is_some() {
+                    metrics.record_segment_batch_processed();
                 }
             }
         }))

@@ -72,6 +72,7 @@ dashmap = { workspace = true }
 # Directories
 dirs = "5.0.1"
 
+sysinfo = "0.29.0"
 lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
 ndarray = "0.16"

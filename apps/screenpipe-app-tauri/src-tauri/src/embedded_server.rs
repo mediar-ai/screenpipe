@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use screenpipe_audio::audio_manager::builder::TranscriptionMode;
 use screenpipe_audio::audio_manager::AudioManagerBuilder;
 use screenpipe_audio::core::device::{default_input_device, default_output_device, parse_audio_device};
 use screenpipe_audio::core::engine::AudioTranscriptionEngine;
@@ -59,6 +60,7 @@ pub struct EmbeddedServerConfig {
     pub use_system_default_audio: bool,
     pub video_quality: String,
     pub adaptive_fps: bool,
+    pub transcription_mode: TranscriptionMode,
 }
 
 impl EmbeddedServerConfig {
@@ -130,6 +132,10 @@ impl EmbeddedServerConfig {
             use_system_default_audio: store.use_system_default_audio,
             video_quality: store.video_quality.clone(),
             adaptive_fps: store.adaptive_fps,
+            transcription_mode: match store.extra.get("transcriptionMode").and_then(|v| v.as_str()) {
+                Some("smart") => TranscriptionMode::Smart,
+                _ => TranscriptionMode::Realtime,
+            },
         }
     }
 }
@@ -324,6 +330,7 @@ pub async fn start_embedded_server(
         .use_system_default_audio(config.use_system_default_audio)
         .deepgram_api_key(config.deepgram_api_key.clone())
         .output_path(data_path.clone())
+        .transcription_mode(config.transcription_mode.clone())
         .build(db.clone())
         .await
         .map_err(|e| format!("Failed to build audio manager: {}", e))?;

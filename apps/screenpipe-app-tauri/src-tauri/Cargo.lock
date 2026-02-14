@@ -8722,7 +8722,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.0.454"
+version = "2.0.456"
 dependencies = [
  "anyhow",
  "arboard",
@@ -8816,7 +8816,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-audio"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -8856,6 +8856,7 @@ dependencies = [
  "serde",
  "serde_json",
  "symphonia",
+ "sysinfo",
  "tokio",
  "tracing",
  "vad-rs",
@@ -8866,7 +8867,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-core"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "accessibility",
  "accessibility-sys",
@@ -8912,7 +8913,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-db"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8937,7 +8938,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-events"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8953,7 +8954,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-integrations"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8974,7 +8975,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-server"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9030,7 +9031,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-vision"
-version = "0.3.140"
+version = "0.3.142"
 dependencies = [
  "accessibility-sys",
  "anyhow",

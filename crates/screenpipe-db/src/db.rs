@@ -287,11 +287,16 @@ impl DatabaseManager {
         }
     }
 
-    pub async fn insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
+    pub async fn insert_audio_chunk(
+        &self,
+        file_path: &str,
+        timestamp: Option<DateTime<Utc>>,
+    ) -> Result<i64, sqlx::Error> {
+        let ts = timestamp.unwrap_or_else(Utc::now);
         let mut tx = self.begin_immediate_with_retry().await?;
         let id = sqlx::query("INSERT INTO audio_chunks (file_path, timestamp) VALUES (?1, ?2)")
             .bind(file_path)
-            .bind(Utc::now())
+            .bind(ts)
             .execute(&mut **tx.conn())
             .await?
             .last_insert_rowid();
@@ -307,10 +312,14 @@ impl DatabaseManager {
         Ok(id.unwrap_or(0))
     }
 
-    pub async fn get_or_insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
+    pub async fn get_or_insert_audio_chunk(
+        &self,
+        file_path: &str,
+        timestamp: Option<DateTime<Utc>>,
+    ) -> Result<i64, sqlx::Error> {
         let mut id = self.get_audio_chunk_id(file_path).await?;
         if id == 0 {
-            id = self.insert_audio_chunk(file_path).await?;
+            id = self.insert_audio_chunk(file_path, timestamp).await?;
         }
         Ok(id)
     }
@@ -339,6 +348,7 @@ impl DatabaseManager {
         speaker_id: Option<i64>,
         start_time: Option<f64>,
         end_time: Option<f64>,
+        timestamp: Option<DateTime<Utc>>,
     ) -> Result<i64, sqlx::Error> {
         // Skip empty transcriptions
         let trimmed = transcription.trim();
@@ -361,6 +371,7 @@ impl DatabaseManager {
             return Ok(0);
         }
 
+        let ts = timestamp.unwrap_or_else(Utc::now);
         let text_length = transcription.len() as i64;
         let mut tx = self.begin_immediate_with_retry().await?;
 
@@ -372,7 +383,7 @@ impl DatabaseManager {
         .bind(audio_chunk_id)
         .bind(transcription)
         .bind(offset_index)
-        .bind(Utc::now())
+        .bind(ts)
         .bind(transcription_engine)
         .bind(&device.name)
         .bind(device.device_type == DeviceType::Input)
