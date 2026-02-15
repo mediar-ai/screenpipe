@@ -141,11 +141,35 @@ impl PiManager {
         }
     }
 
-    pub fn snapshot(&self) -> PiInfo {
-        let (running, pid) = match &self.child {
-            None => (false, None),
-            Some(child) => (true, Some(child.id())),
-        };
+    /// Check if the child process is actually alive via try_wait().
+    /// If the process has exited, cleans up child/stdin and returns false.
+    fn check_alive(&mut self) -> bool {
+        if let Some(ref mut child) = self.child {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    // Process exited — clean up
+                    let pid = child.id();
+                    info!("Pi process (pid {}) has exited with status: {}", pid, status);
+                    self.child = None;
+                    self.stdin = None;
+                    // Emit pi_terminated so frontend can auto-restart
+                    let _ = self.app_handle.emit("pi_terminated", pid);
+                    false
+                }
+                Ok(None) => true, // Still running
+                Err(e) => {
+                    warn!("Failed to check Pi process status: {}", e);
+                    true // Assume running if we can't check
+                }
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn snapshot(&mut self) -> PiInfo {
+        let running = self.check_alive();
+        let pid = self.child.as_ref().map(|c| c.id());
 
         PiInfo {
             running,
@@ -161,7 +185,7 @@ impl PiManager {
             if let Some(ref mut stdin) = self.stdin {
                 let _ = writeln!(stdin, r#"{{"type":"abort"}}"#);
             }
-            
+
             // Kill the process
             if let Err(e) = child.kill() {
                 error!("Failed to kill pi child process: {}", e);
@@ -172,26 +196,32 @@ impl PiManager {
         self.project_dir = None;
     }
 
-    pub fn is_running(&self) -> bool {
-        self.child.is_some()
+    pub fn is_running(&mut self) -> bool {
+        self.check_alive()
     }
 
     /// Send a command to Pi via stdin and return response
     pub fn send_command(&mut self, command: Value) -> Result<(), String> {
+        // Verify process is actually alive before writing
+        if !self.check_alive() {
+            return Err("Pi process has died".to_string());
+        }
+
         let stdin = self.stdin.as_mut().ok_or("Pi not running")?;
-        
+
         self.request_id += 1;
         let mut cmd = command;
         if let Some(obj) = cmd.as_object_mut() {
             obj.insert("id".to_string(), json!(format!("req_{}", self.request_id)));
         }
-        
+
         let cmd_str = serde_json::to_string(&cmd).map_err(|e| e.to_string())?;
-        debug!("Sending to Pi: {}", cmd_str);
-        
+        info!("Sending to Pi (req_{}): type={}", self.request_id, cmd.get("type").and_then(|t| t.as_str()).unwrap_or("?"));
+
         writeln!(stdin, "{}", cmd_str).map_err(|e| format!("Failed to write to Pi stdin: {}", e))?;
         stdin.flush().map_err(|e| format!("Failed to flush Pi stdin: {}", e))?;
-        
+        info!("Sent to Pi (req_{}): flushed ok", self.request_id);
+
         Ok(())
     }
 }
@@ -455,8 +485,8 @@ fn ensure_pi_config(user_token: Option<&str>, provider_config: Option<&PiProvide
 #[tauri::command]
 #[specta::specta]
 pub async fn pi_info(state: State<'_, PiState>) -> Result<PiInfo, String> {
-    let manager = state.0.lock().await;
-    match manager.as_ref() {
+    let mut manager = state.0.lock().await;
+    match manager.as_mut() {
         Some(m) => Ok(m.snapshot()),
         None => Ok(PiInfo::default()),
     }
@@ -473,7 +503,7 @@ pub async fn pi_stop(state: State<'_, PiState>) -> Result<PiInfo, String> {
         m.stop();
     }
 
-    match manager.as_ref() {
+    match manager.as_mut() {
         Some(m) => Ok(m.snapshot()),
         None => Ok(PiInfo::default()),
     }
@@ -644,7 +674,7 @@ pub async fn pi_start_inner(
     }
 
     // Snapshot the state BEFORE dropping the lock, so we don't hold it during I/O
-    let snapshot = match manager_guard.as_ref() {
+    let snapshot = match manager_guard.as_mut() {
         Some(m) => m.snapshot(),
         None => PiInfo::default(),
     };
@@ -1061,6 +1091,259 @@ pub fn ensure_pi_installed_background() {
 mod tests {
     #[cfg(windows)]
     use super::parse_where_output;
+    #[cfg(not(windows))]
+    use super::{find_bun_executable, find_pi_executable};
+    use serde_json::{json, Value};
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Helper: spawn Pi in RPC mode with piped stdin/stdout using the same
+    /// command-building logic the app uses (bun <pi_path> on Unix).
+    #[cfg(not(windows))]
+    fn spawn_pi_rpc(provider: &str, model: &str) -> Option<std::process::Child> {
+        let pi_path = find_pi_executable()?;
+        let mut cmd = if let Some(bun) = find_bun_executable() {
+            let mut c = Command::new(bun);
+            c.arg(&pi_path);
+            c
+        } else {
+            Command::new(&pi_path)
+        };
+        cmd.args(["--mode", "rpc", "--provider", provider, "--model", model])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd.spawn().ok()
+    }
+
+    /// Helper: read lines from a BufReader on a background thread, sending
+    /// parsed JSON values through a channel. This avoids blocking the test
+    /// thread on read_line() which would prevent timeout enforcement.
+    #[cfg(not(windows))]
+    fn spawn_line_reader(
+        reader: BufReader<std::process::ChildStdout>,
+    ) -> mpsc::Receiver<Value> {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut reader = reader;
+            let mut line = String::new();
+            loop {
+                line.clear();
+                match reader.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        if let Ok(v) = serde_json::from_str::<Value>(&line) {
+                            if tx.send(v).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        rx
+    }
+
+    /// Helper: wait for a JSON message with a specific "type" field, with timeout.
+    #[cfg(not(windows))]
+    fn wait_for_type(
+        rx: &mpsc::Receiver<Value>,
+        expected_type: &str,
+        timeout: Duration,
+    ) -> Result<Value, String> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(format!("timeout waiting for type={expected_type}"));
+            }
+            match rx.recv_timeout(remaining) {
+                Ok(v) => {
+                    if v.get("type").and_then(|t| t.as_str()) == Some(expected_type) {
+                        return Ok(v);
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    return Err(format!("timeout waiting for type={expected_type}"));
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("EOF (reader disconnected)".into());
+                }
+            }
+        }
+    }
+
+    /// Integration test: Pi responds to a prompt via stdin/stdout pipes.
+    /// Requires: Pi installed, network access, valid API key.
+    #[test]
+    #[ignore]
+    #[cfg(not(windows))]
+    fn test_pi_rpc_prompt_response() {
+        let mut child = match spawn_pi_rpc("screenpipe", "claude-haiku-4-5") {
+            Some(c) => c,
+            None => {
+                eprintln!("SKIP: pi executable not found");
+                return;
+            }
+        };
+
+        let mut stdin = child.stdin.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let rx = spawn_line_reader(BufReader::new(stdout));
+
+        let cmd = json!({"type": "prompt", "message": "say ok", "id": "test_1"});
+        writeln!(stdin, "{}", serde_json::to_string(&cmd).unwrap()).unwrap();
+        stdin.flush().unwrap();
+
+        let resp = wait_for_type(&rx, "response", Duration::from_secs(15));
+        assert!(resp.is_ok(), "prompt response: {:?}", resp);
+        assert_eq!(
+            resp.unwrap().get("success").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        let agent_start = wait_for_type(&rx, "agent_start", Duration::from_secs(15));
+        assert!(agent_start.is_ok(), "should receive agent_start after prompt");
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// Integration test: Pi survives stdin idle period.
+    #[test]
+    #[ignore]
+    #[cfg(not(windows))]
+    fn test_pi_rpc_idle_then_prompt() {
+        let mut child = match spawn_pi_rpc("screenpipe", "claude-haiku-4-5") {
+            Some(c) => c,
+            None => {
+                eprintln!("SKIP: pi executable not found");
+                return;
+            }
+        };
+
+        let mut stdin = child.stdin.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let rx = spawn_line_reader(BufReader::new(stdout));
+
+        std::thread::sleep(Duration::from_secs(5));
+
+        let cmd = json!({"type": "prompt", "message": "say ok", "id": "idle_test"});
+        writeln!(stdin, "{}", serde_json::to_string(&cmd).unwrap()).unwrap();
+        stdin.flush().unwrap();
+
+        let resp = wait_for_type(&rx, "response", Duration::from_secs(15));
+        assert!(resp.is_ok(), "prompt after idle failed: {:?}", resp);
+        assert_eq!(
+            resp.unwrap().get("success").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// Integration test: simulates the startup race condition.
+    #[test]
+    #[ignore]
+    #[cfg(not(windows))]
+    fn test_pi_rpc_restart_race() {
+        let mut child1 = match spawn_pi_rpc("screenpipe", "claude-haiku-4-5") {
+            Some(c) => c,
+            None => {
+                eprintln!("SKIP: pi executable not found");
+                return;
+            }
+        };
+
+        std::thread::sleep(Duration::from_millis(500));
+
+        let _ = child1.kill();
+        let _ = child1.wait();
+
+        let mut child2 = match spawn_pi_rpc("screenpipe", "claude-haiku-4-5") {
+            Some(c) => c,
+            None => {
+                panic!("second pi spawn failed");
+            }
+        };
+
+        let mut stdin2 = child2.stdin.take().unwrap();
+        let stdout2 = child2.stdout.take().unwrap();
+        let rx2 = spawn_line_reader(BufReader::new(stdout2));
+
+        let cmd = json!({"type": "prompt", "message": "say ok", "id": "race_test"});
+        writeln!(stdin2, "{}", serde_json::to_string(&cmd).unwrap()).unwrap();
+        stdin2.flush().unwrap();
+
+        let resp = wait_for_type(&rx2, "response", Duration::from_secs(15));
+        assert!(resp.is_ok(), "prompt to restarted pi failed: {:?}", resp);
+        assert_eq!(
+            resp.unwrap().get("success").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        let _ = child2.kill();
+        let _ = child2.wait();
+    }
+
+    /// Test: writing to a killed Pi's stdin pipe returns an error.
+    #[test]
+    #[cfg(not(windows))]
+    fn test_pi_write_to_dead_pipe_errors() {
+        let mut child = match spawn_pi_rpc("screenpipe", "claude-haiku-4-5") {
+            Some(c) => c,
+            None => {
+                eprintln!("SKIP: pi executable not found");
+                return;
+            }
+        };
+
+        let mut stdin = child.stdin.take().unwrap();
+
+        let _ = child.kill();
+        let _ = child.wait();
+
+        std::thread::sleep(Duration::from_millis(200));
+
+        let result = writeln!(stdin, r#"{{"type":"prompt","message":"hi"}}"#);
+        if result.is_ok() {
+            let _ = stdin.flush();
+            std::thread::sleep(Duration::from_millis(100));
+            let result2 = writeln!(stdin, r#"{{"type":"prompt","message":"hi2"}}"#);
+            let flush2 = stdin.flush();
+            assert!(
+                result2.is_err() || flush2.is_err(),
+                "writing to dead pipe should eventually error"
+            );
+        }
+    }
+
+    /// Test: Pi process spawns and stays alive (no immediate crash).
+    #[test]
+    #[cfg(not(windows))]
+    fn test_pi_spawns_and_stays_alive() {
+        let mut child = match spawn_pi_rpc("screenpipe", "claude-haiku-4-5") {
+            Some(c) => c,
+            None => {
+                eprintln!("SKIP: pi executable not found");
+                return;
+            }
+        };
+
+        std::thread::sleep(Duration::from_millis(500));
+        match child.try_wait() {
+            Ok(None) => { /* still running — good */ }
+            Ok(Some(status)) => panic!("Pi exited immediately with status: {}", status),
+            Err(e) => panic!("Error checking Pi status: {}", e),
+        }
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 
     /// Test that parse_where_output prefers .cmd files over shell scripts
     #[test]
