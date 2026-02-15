@@ -14,7 +14,7 @@ import {
 	ParticipantsSummary,
 } from "@/components/conversation-bubble";
 import { cn } from "@/lib/utils";
-import { Meeting } from "@/lib/hooks/use-meetings";
+import { Meeting, deduplicateAudioItems } from "@/lib/hooks/use-meetings";
 
 interface AudioGroup {
 	deviceName: string;
@@ -228,12 +228,15 @@ export function AudioTranscript({
 		// Sort by timestamp
 		allAudio.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
+		// Deduplicate overlapping input/output entries (same speech captured by mic + display)
+		const dedupedAudio = deduplicateAudioItems(allAudio);
+
 		// Build conversation items with grouping and gap detection
 		const items: ConversationItem[] = [];
 		let lastSpeakerId: number | undefined = undefined;
 		let lastTimestamp: Date | null = null;
 
-		allAudio.forEach((audio) => {
+		dedupedAudio.forEach((audio) => {
 			const { speakerId } = getSpeakerInfo(audio);
 			const isFirstInGroup = speakerId !== lastSpeakerId;
 
@@ -263,7 +266,7 @@ export function AudioTranscript({
 
 		// Compute participants
 		const participantMap = new Map<number, { name: string; duration: number }>();
-		allAudio.forEach((audio) => {
+		dedupedAudio.forEach((audio) => {
 			const { speakerId, speakerName } = getSpeakerInfo(audio);
 			const id = speakerId ?? -1;
 			const existing = participantMap.get(id);
@@ -285,10 +288,10 @@ export function AudioTranscript({
 
 		// Time range
 		const timeRange =
-			allAudio.length > 0
+			dedupedAudio.length > 0
 				? {
-						start: allAudio[0].timestamp,
-						end: allAudio[allAudio.length - 1].timestamp,
+						start: dedupedAudio[0].timestamp,
+						end: dedupedAudio[dedupedAudio.length - 1].timestamp,
 				  }
 				: null;
 
@@ -307,12 +310,15 @@ export function AudioTranscript({
 			})
 		);
 
+		// Deduplicate overlapping input/output entries
+		const dedupedAudio = deduplicateAudioItems(allAudio);
+
 		// Build conversation items
 		const items: ConversationItem[] = [];
 		let lastSpeakerId: number | undefined = undefined;
 		let lastTimestamp: Date | null = null;
 
-		allAudio.forEach((audio) => {
+		dedupedAudio.forEach((audio) => {
 			const { speakerId } = getSpeakerInfo(audio);
 			const isFirstInGroup = speakerId !== lastSpeakerId;
 
