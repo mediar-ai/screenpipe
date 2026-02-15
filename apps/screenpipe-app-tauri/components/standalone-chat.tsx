@@ -1138,6 +1138,22 @@ export function StandaloneChat() {
     if (piStartInFlightRef.current) return;
 
     const restartPi = async () => {
+      // Clear any in-flight streaming state before killing Pi
+      if (piMessageIdRef.current) {
+        const msgId = piMessageIdRef.current;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgId && (m.content === "Processing..." || !m.content)
+              ? { ...m, content: "Model changed — restarting AI agent..." }
+              : m
+          )
+        );
+        piStreamingTextRef.current = "";
+        piMessageIdRef.current = null;
+        piContentBlocksRef.current = [];
+        setIsLoading(false);
+        setIsStreaming(false);
+      }
       piStartInFlightRef.current = true;
       setPiStarting(true);
       const providerConfig = buildProviderConfig();
@@ -1446,6 +1462,24 @@ export function StandaloneChat() {
         }
         const terminatedPid = event.payload;
         console.log("[Pi] Process terminated, pid:", terminatedPid, "restart count:", piRestartCountRef.current);
+
+        // If a message was in flight, mark it as errored so the UI doesn't stay stuck
+        if (piMessageIdRef.current) {
+          const msgId = piMessageIdRef.current;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msgId && (m.content === "Processing..." || !m.content)
+                ? { ...m, content: "AI agent crashed — restarting automatically..." }
+                : m
+            )
+          );
+          piStreamingTextRef.current = "";
+          piMessageIdRef.current = null;
+          piContentBlocksRef.current = [];
+          setIsLoading(false);
+          setIsStreaming(false);
+        }
+
         piRestartCountRef.current += 1;
         const delay = Math.min(1000 * piRestartCountRef.current, 5000);
         setTimeout(async () => {
@@ -1532,6 +1566,12 @@ export function StandaloneChat() {
   async function sendPiMessage(userMessage: string) {
     if (!piInfo?.running) {
       toast({ title: "Pi not running", description: "Please wait for Pi to start", variant: "destructive" });
+      return;
+    }
+
+    // Prevent sending while a previous message is still being processed
+    if (piMessageIdRef.current) {
+      toast({ title: "Please wait", description: "Previous message is still being processed", variant: "destructive" });
       return;
     }
 
@@ -1630,7 +1670,7 @@ export function StandaloneChat() {
         piMessageIdRef.current = null;
         // Provide helpful error messages for common failures
         let errorMsg = result.error;
-        if (errorMsg.includes("Broken pipe") || errorMsg.includes("not running")) {
+        if (errorMsg.includes("Broken pipe") || errorMsg.includes("not running") || errorMsg.includes("has died")) {
           const provider = activePreset?.provider;
           if (provider === "native-ollama") {
             errorMsg = "Ollama is not running. Start it with: `ollama serve`";
