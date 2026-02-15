@@ -77,7 +77,17 @@ impl DeviceManager {
     }
 
     pub async fn stop_device(&self, device: &AudioDevice) -> Result<()> {
-        if !self.is_running(device) {
+        // Always clean up streams and states regardless of is_running flag.
+        // On macOS, the error callback may set is_running to false before
+        // cleanup runs, causing the old early-return to skip stream removal.
+        // This left stale streams that prevented proper device restart.
+        let was_running = self
+            .states
+            .get(device)
+            .map(|s| s.load(Ordering::Relaxed))
+            .unwrap_or(false);
+
+        if !was_running && !self.streams.contains_key(device) {
             return Err(anyhow!("Device {} already stopped", device));
         }
 

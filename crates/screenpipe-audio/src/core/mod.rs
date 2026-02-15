@@ -4,6 +4,8 @@
 
 pub mod device;
 pub mod engine;
+#[cfg(target_os = "macos")]
+pub mod macos_sleep;
 #[cfg(all(target_os = "linux", feature = "pulseaudio"))]
 pub mod pulse;
 mod run_record_and_transcribe;
