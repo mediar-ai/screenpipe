@@ -1,12 +1,7 @@
-## Improvements
-- Pi agent auto-restarts on crash with better error messages
-- Chat button added to timeline controls
-- Meeting end time now includes duration of last audio segment
-
 ## Bug Fixes
-- Fixed Pi agent 'Connecting...' stuck forever on startup (race condition)
-- Fixed Pi agent path resolution on macOS (missing trailing slash)
-- Fixed Pi stderr noise — only shows errors when user is waiting for a response
-- Fixed shortcut modifier key ordering in timeline controls
+- Fixed Pi agent getting stuck on "analyzing..." — now detects when process dies and auto-restarts
+- Fixed chat streaming state getting stuck when Pi crashes mid-response or user changes model
+- Fixed duplicate audio transcriptions appearing in meeting and conversation views
+- Fixed Windows GPU ORT references (updated to CPU-only)
 
-#### **Full Changelog:** [ca7d2575..HEAD](https://github.com/mediar-ai/screenpipe/compare/ca7d2575..HEAD)
+#### **Full Changelog:** [5a4efcd7..4e6ea77b](https://github.com/mediar-ai/screenpipe/compare/5a4efcd7..4e6ea77b)
