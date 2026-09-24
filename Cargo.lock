@@ -9216,6 +9216,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "uiautomation",
  "url",
  "windows 0.58.0",
