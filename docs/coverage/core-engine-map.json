@@ -1358,6 +1358,7 @@
       "files": [
         "src/incognito/linux.rs",
         "src/platform/linux.rs",
+        "src/platform/linux_atspi_tests.rs",
         "src/tree/linux.rs",
         "src/tree/linux_lines.rs"
       ],

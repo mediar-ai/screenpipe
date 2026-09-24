@@ -228,21 +228,47 @@ impl UiRecorder {
 // Permission checks
 // ============================================================================
 
-/// Check if AT-SPI2 D-Bus service is available.
+/// Well-known name, object and interface of the AT-SPI2 bus launcher.
+const ATSPI_BUS_NAME: &str = "org.a11y.Bus";
+const ATSPI_BUS_PATH: &str = "/org/a11y/bus";
+
+/// Check if the AT-SPI2 accessibility bus is reachable.
+///
+/// Asks the session bus in-process over zbus instead of spawning
+/// `dbus-send`. Inside the AppImage, `LD_LIBRARY_PATH` points the system
+/// `dbus-send` at the bundled, older `libdbus-1.so.3`, which fails to load
+/// (`version LIBDBUS_PRIVATE_1.16.2 not found`). The check then reported
+/// accessibility as unavailable on desktops where AT-SPI2 works, which
+/// disabled UI event recording entirely.
+///
+/// The query runs on its own thread. The engine calls this from an async
+/// task, and when zbus is built with `tokio` (atspi enables it) its blocking
+/// API panics inside a runtime, which took down the capture session.
 fn check_atspi_available() -> bool {
-    // Try to connect to the session bus and check if org.a11y.Bus exists
-    std::process::Command::new("dbus-send")
-        .args([
-            "--session",
-            "--dest=org.a11y.Bus",
-            "--type=method_call",
-            "--print-reply",
-            "/org/a11y/bus",
-            "org.a11y.Bus.GetAddress",
-        ])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    thread::spawn(|| {
+        zbus::blocking::Connection::session()
+            .ok()
+            .and_then(|connection| atspi_bus_address(&connection))
+            .is_some()
+    })
+    .join()
+    .unwrap_or(false)
+}
+
+/// Returns the AT-SPI2 bus address advertised on `connection`, or `None`
+/// when the launcher is missing, errors, or answers with an empty address.
+fn atspi_bus_address(connection: &zbus::blocking::Connection) -> Option<String> {
+    let reply = connection
+        .call_method(
+            Some(ATSPI_BUS_NAME),
+            ATSPI_BUS_PATH,
+            Some(ATSPI_BUS_NAME),
+            "GetAddress",
+            &(),
+        )
+        .ok()?;
+    let address: String = reply.body().deserialize().ok()?;
+    (!address.is_empty()).then_some(address)
 }
 
 /// Check if the user can read evdev input devices.
@@ -1214,8 +1240,21 @@ fn get_x11_active_window_info() -> Option<(String, String, i32)> {
     Some((app_name, title, pid))
 }
 
+/// Builds a `Command` for a system tool (`hyprctl`, `swaymsg`, `xdotool`).
+///
+/// The AppImage runtime exports `LD_LIBRARY_PATH` pointing at libraries
+/// bundled for screenpipe itself. System tools resolved from `PATH` must load
+/// the system's libraries instead, or they fail on a symbol-version mismatch
+/// and window tracking silently returns nothing. Same reasoning as
+/// `screenpipe_core::agents::pi::scrub_bun_runtime_env`.
+fn system_tool_command(command: &str) -> Command {
+    let mut cmd = Command::new(command);
+    cmd.env_remove("LD_LIBRARY_PATH");
+    cmd
+}
+
 fn command_output_with_timeout(command: &str, args: &[&str], timeout: Duration) -> Option<Output> {
-    let mut child = Command::new(command)
+    let mut child = system_tool_command(command)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1558,6 +1597,10 @@ fn truncate(s: &str, max: usize) -> String {
         format!("{}...", &s[..end])
     }
 }
+
+#[cfg(test)]
+#[path = "linux_atspi_tests.rs"]
+mod atspi_tests;
 
 #[cfg(test)]
 mod tests {

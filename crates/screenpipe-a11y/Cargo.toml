@@ -93,7 +93,9 @@ tokio = { workspace = true }
 tempfile = { workspace = true }
 # Linux debug examples are compiled by `cargo clippy --all-targets` on every
 # developer OS, so keep their D-Bus dependency available outside Linux too.
-zbus = { workspace = true }
+# `tokio` matches the app build, where atspi enables it: zbus's blocking API
+# then drives tokio and panics if called from inside a runtime.
+zbus = { workspace = true, features = ["tokio"] }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 libc = { workspace = true }
