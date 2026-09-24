@@ -431,12 +431,16 @@
       "crate": "screenpipe-engine",
       "files": [
         "src/focus_tracker/darwin.rs",
+        "src/focus_tracker/linux_kdotool.rs",
+        "src/focus_tracker/linux_kwin.rs",
+        "src/focus_tracker/linux_tests.rs",
         "src/focus_tracker/windows.rs",
         "src/process_priority.rs"
       ],
       "platforms": [
         "windows",
-        "macos"
+        "macos",
+        "linux"
       ],
       "layers": [
         "engine-lifecycle",
@@ -449,7 +453,7 @@
       "criticality": "medium",
       "confidence": "conditional",
       "kind": "unit",
-      "notes": "Platform focus-tracker parsing/helpers. These files are cfg-gated and only execute on their target OS. The separately invoked harness=false tests/native_multi_monitor.rs acceptance is documented in scripts/native-test-fixtures/macos/README.md and is not counted as an automatic Rust test block."
+      "notes": "Platform focus-tracker parsing/helpers. These files are cfg-gated and only execute on their target OS. The separately invoked harness=false tests/native_multi_monitor.rs acceptance is documented in scripts/native-test-fixtures/macos/README.md and is not counted as an automatic Rust test block. Linux (KDE Plasma) covers kdotool polling and the KWin-script backend end to end against a fake KWin on a private dbus-daemon."
     },
     {
       "id": "engine-meeting-privacy-sync",

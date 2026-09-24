@@ -18,6 +18,7 @@ icon: "wrench"
 | Cannot find receipt | Account billing area and purchase email | [FAQ](/faq) |
 | Desktop timeline missing after CLI install | Install desktop app, not only CLI | [Getting started](/getting-started) |
 | App opens but data is empty | `curl http://localhost:3030/health` and wait 1-2 minutes | [API recipes](/api-recipes) |
+| Linux: timeline shows apps as "Unknown" | Desktop support for focus tracking (KDE Plasma) | [App names on Linux](#linux-timeline-shows-apps-as-unknown) |
 | AI tool cannot see Screenpipe | MCP config, Node 18+, app running | [MCP server](/mcp-server) |
 | Scheduled task fails or hangs | Scheduled task logs, provider auth, permissions | [Scheduled task debugging](/task-troubleshooting) |
 | Windows command window flashes during scheduled task run | Scheduled task exits immediately; check logs | [Scheduled task debugging](/task-troubleshooting) |
@@ -129,6 +130,16 @@ If recent results are missing:
 ### Can I capture only work hours?
 
 Use app recording filters when you want to include or exclude specific apps, windows, or URLs. For strict work-hour logic, create a scheduled task that checks the current time and exits outside your desired window, or configure recording/schedule settings when that control is available in the app.
+
+### Linux: timeline shows apps as "Unknown"
+
+App names, window titles and browser URLs come from the accessibility tree of the focused window. Screenpipe only reads it for the monitor that holds keyboard focus, so it needs the desktop to say where focus is.
+
+- **KDE Plasma (Wayland or X11)** is supported. Screenpipe uses [`kdotool`](https://github.com/jinliu/kdotool) when it is on your `PATH` (for example `cargo install kdotool`, or your distribution's package), and otherwise loads a small KWin script named `screenpipe-focus-tracker` that reports focus changes. Nothing needs configuring. The log shows which one is in use: `linux focus tracker: using Kdotool(...)` or `using KWinScript`.
+- **Other desktops** (GNOME, Hyprland, Sway, others) are not supported yet. Screenpipe keeps recording every monitor and fills text from OCR, but frames have no app or window name.
+- **Accessibility must be running.** Check with `busctl --user get-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled` (should print `b true`).
+
+With focus tracking working, frames from the focused monitor carry app and window names. Right after focus moves to another monitor, the monitors you left pause for a moment, and if focus stays on one monitor for about 30 seconds every monitor is captured again (the same rules as on macOS and Windows). Frames from monitors without focus are still stored, with OCR text only.
 
 ## Audio & transcription
 

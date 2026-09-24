@@ -14,6 +14,10 @@ use tokio::sync::broadcast;
 mod darwin;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+mod linux_kdotool;
+#[cfg(target_os = "linux")]
+mod linux_kwin;
 mod null;
 #[cfg(target_os = "windows")]
 mod windows;
