@@ -2543,7 +2543,7 @@ fn app_name_for_pid(_pid: i32) -> Option<String> {
 fn normalize_metadata_value(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("unknown"))
         .map(str::to_string)
 }
 
@@ -2597,7 +2597,9 @@ fn matching_elements_reference(
 
 fn should_query_lightweight_focus(trigger: &CaptureTrigger) -> bool {
     match trigger {
-        CaptureTrigger::AppSwitch { app_name, .. } => app_name.trim().is_empty(),
+        CaptureTrigger::AppSwitch { app_name, .. } => {
+            normalize_metadata_value(Some(app_name.as_str())).is_none()
+        }
         _ => true,
     }
 }
@@ -2605,7 +2607,12 @@ fn should_query_lightweight_focus(trigger: &CaptureTrigger) -> bool {
 fn drm_trigger_app_name(trigger: &CaptureTrigger) -> Option<&str> {
     match trigger {
         CaptureTrigger::AppSwitch { app_name, .. } => {
-            Some(app_name.trim()).filter(|name| !name.is_empty())
+            let trimmed = app_name.trim();
+            if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unknown") {
+                None
+            } else {
+                Some(trimmed)
+            }
         }
         _ => None,
     }
@@ -4442,7 +4449,7 @@ mod tests {
 
     #[test]
     fn blank_app_switch_queries_lightweight_focus() {
-        for app_name in ["", "   ", "\t", "\n"] {
+        for app_name in ["", "   ", "\t", "\n", "Unknown", "unknown", "UNKNOWN"] {
             let trigger = CaptureTrigger::AppSwitch {
                 app_name: app_name.into(),
                 target: None,
@@ -4477,7 +4484,7 @@ mod tests {
             window_name: Some("Lucern Clinic".into()),
         };
 
-        for app_name in ["", "   ", "\t", "\n"] {
+        for app_name in ["", "   ", "\t", "\n", "Unknown", "unknown"] {
             let trigger = CaptureTrigger::AppSwitch {
                 app_name: app_name.into(),
                 target: None,
@@ -4499,7 +4506,7 @@ mod tests {
             window_name: Some("Lucern Clinic".into()),
         };
 
-        for trigger_app in ["", "   ", "\t", "\n"] {
+        for trigger_app in ["", "   ", "\t", "\n", "Unknown", "unknown"] {
             let trigger = CaptureTrigger::AppSwitch {
                 app_name: trigger_app.into(),
                 target: None,
@@ -4510,6 +4517,52 @@ mod tests {
             assert_eq!(app_name.as_deref(), Some("Telegram"));
             assert_eq!(window_name.as_deref(), Some("Lucern Clinic"));
         }
+    }
+
+    #[test]
+    fn resolve_capture_metadata_rejects_unknown_sentinel_in_lightweight_metadata_and_trigger() {
+        let snapshot = screenpipe_a11y::tree::TreeSnapshot {
+            app_name: "Orca".into(),
+            app_id: None,
+            executable: None,
+            app_version: None,
+            window_name: "Screen Reader".into(),
+            text_content: "visible text".into(),
+            nodes: Vec::new(),
+            semantic_nodes: Vec::new(),
+            browser_url: None,
+            document_path: None,
+            timestamp: Utc::now(),
+            node_count: 0,
+            walk_duration: Duration::from_millis(1),
+            content_hash: 0,
+            simhash: 0,
+            truncated: false,
+            truncation_reason: screenpipe_a11y::tree::TruncationReason::None,
+            retained_work_pending: false,
+            max_depth_reached: 0,
+            window_bounds: None,
+        };
+
+        let metadata = LightweightFocusedMetadata {
+            app_name: Some("Unknown".into()),
+            window_name: Some("Orca Window".into()),
+        };
+
+        // Even with prefer_lightweight_metadata: true (Linux behavior),
+        // "Unknown" in lightweight_metadata must NOT overwrite the real tree app_name.
+        let (app_name, window_name, _, _) = resolve_capture_metadata_with_policy(
+            Some(&snapshot),
+            &CaptureTrigger::AppSwitch {
+                app_name: "Unknown".into(),
+                target: None,
+            },
+            Some(&metadata),
+            true,
+        );
+
+        assert_eq!(app_name.as_deref(), Some("Orca"));
+        assert_eq!(window_name.as_deref(), Some("Orca Window"));
     }
 
     #[test]

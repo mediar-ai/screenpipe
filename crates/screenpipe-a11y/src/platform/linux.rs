@@ -30,7 +30,7 @@ use chrono::Utc;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use parking_lot::Mutex;
 use screenpipe_core::pii_removal::remove_pii;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -1044,6 +1044,7 @@ pub fn get_active_window_info() -> Option<(String, String, i32)> {
 pub fn get_active_window_info_fresh() -> Option<(String, String, i32)> {
     get_hyprland_active_window_info()
         .or_else(get_sway_active_window_info)
+        .or_else(get_kde_active_window_info)
         .or_else(get_x11_active_window_info)
 }
 
@@ -1189,6 +1190,85 @@ fn clean_hyprland_title(title: &str) -> String {
         .to_string()
 }
 
+fn is_kde_desktop() -> bool {
+    std::env::var("XDG_CURRENT_DESKTOP").map_or(false, |desktop| {
+        desktop
+            .split(':')
+            .any(|entry| entry.trim().eq_ignore_ascii_case("kde"))
+    }) || std::env::var_os("KDE_FULL_SESSION").is_some()
+}
+
+fn find_kdotool() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let candidate = dir.join("kdotool");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        for sub in [".cargo/bin/kdotool", ".local/bin/kdotool"] {
+            let candidate = PathBuf::from(&home).join(sub);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+fn get_kde_active_window_info() -> Option<(String, String, i32)> {
+    if !is_kde_desktop() {
+        return None;
+    }
+
+    let kdotool = find_kdotool()?;
+    let output = command_output_with_timeout(
+        kdotool.to_str()?,
+        &[
+            "getactivewindow",
+            "getwindowclassname",
+            "getwindowname",
+            "getwindowpid",
+        ],
+        Duration::from_millis(300),
+    )
+    .filter(|o| o.status.success())?;
+
+    parse_kdotool_active_window_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+pub fn parse_kdotool_active_window_output(output: &str) -> Option<(String, String, i32)> {
+    let lines: Vec<&str> = output.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+
+    let app_name = lines[0].trim();
+    if app_name.is_empty() || app_name.eq_ignore_ascii_case("unknown") {
+        return None;
+    }
+
+    if lines.len() == 1 {
+        return Some((app_name.to_string(), String::new(), 0));
+    }
+
+    let (title, pid) = if let Ok(parsed_pid) = lines.last().unwrap_or(&"").trim().parse::<i32>() {
+        let title = if lines.len() > 2 {
+            lines[1..lines.len() - 1].join("\n").trim().to_string()
+        } else {
+            String::new()
+        };
+        (title, parsed_pid)
+    } else {
+        let title = lines[1..].join("\n").trim().to_string();
+        (title, 0)
+    };
+
+    Some((app_name.to_string(), title, pid))
+}
+
 fn get_x11_active_window_info() -> Option<(String, String, i32)> {
     // Try xdotool (works on X11 and XWayland)
     let wid_output =
@@ -1230,12 +1310,15 @@ fn get_x11_active_window_info() -> Option<(String, String, i32)> {
         })
         .unwrap_or(0);
 
+    if pid <= 0 {
+        return None;
+    }
+
     // Get process name from PID
-    let app_name = if pid > 0 {
-        get_process_name(pid as u32).unwrap_or_else(|| "Unknown".to_string())
-    } else {
-        "Unknown".to_string()
-    };
+    let app_name = get_process_name(pid as u32)?;
+    if app_name.is_empty() || app_name.eq_ignore_ascii_case("unknown") {
+        return None;
+    }
 
     Some((app_name, title, pid))
 }
@@ -1801,5 +1884,49 @@ mod tests {
             let name = get_process_name(1);
             assert!(name.is_some());
         }
+    }
+
+    #[test]
+    fn test_parse_kdotool_active_window_output() {
+        // Standard output with class, title, pid
+        let out = "vivaldi-stable\nEnvelope Budgeting | Actual Budget - Vivaldi\n4045988\n";
+        let (app, title, pid) = parse_kdotool_active_window_output(out).unwrap();
+        assert_eq!(app, "vivaldi-stable");
+        assert_eq!(title, "Envelope Budgeting | Actual Budget - Vivaldi");
+        assert_eq!(pid, 4045988);
+
+        // Window with empty title (e.g. plasmashell panel/desktop)
+        let out = "plasmashell\n\n8455\n";
+        let (app, title, pid) = parse_kdotool_active_window_output(out).unwrap();
+        assert_eq!(app, "plasmashell");
+        assert_eq!(title, "");
+        assert_eq!(pid, 8455);
+
+        // Window with multiline title
+        let out = "code\nEditor Line 1\nEditor Line 2\n1234\n";
+        let (app, title, pid) = parse_kdotool_active_window_output(out).unwrap();
+        assert_eq!(app, "code");
+        assert_eq!(title, "Editor Line 1\nEditor Line 2");
+        assert_eq!(pid, 1234);
+
+        // Single line output (class name only)
+        let out = "alacritty\n";
+        let (app, title, pid) = parse_kdotool_active_window_output(out).unwrap();
+        assert_eq!(app, "alacritty");
+        assert_eq!(title, "");
+        assert_eq!(pid, 0);
+
+        // Output with missing/non-numeric PID
+        let out = "firefox\nMozilla Firefox\n";
+        let (app, title, pid) = parse_kdotool_active_window_output(out).unwrap();
+        assert_eq!(app, "firefox");
+        assert_eq!(title, "Mozilla Firefox");
+        assert_eq!(pid, 0);
+
+        // Unknown app name rejected
+        assert!(parse_kdotool_active_window_output("Unknown\nTitle\n1234\n").is_none());
+        assert!(parse_kdotool_active_window_output("unknown\nTitle\n1234\n").is_none());
+        assert!(parse_kdotool_active_window_output("   \nTitle\n1234\n").is_none());
+        assert!(parse_kdotool_active_window_output("").is_none());
     }
 }
