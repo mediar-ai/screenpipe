@@ -166,6 +166,8 @@ mod windows_overlay;
 #[cfg(target_os = "windows")]
 mod windows_webview_env;
 #[cfg(target_os = "linux")]
+mod linux_appimage_env;
+#[cfg(target_os = "linux")]
 mod linux_webkit_env;
 
 pub use server::*;
@@ -555,7 +557,10 @@ async fn main() {
     }
 
     #[cfg(target_os = "linux")]
-    linux_webkit_env::configure();
+    {
+        linux_appimage_env::configure();
+        linux_webkit_env::configure();
+    }
 
     // Raise the file-descriptor soft limit BEFORE any DB/socket work. The app
     // embeds the engine in-process, so it never ran the engine binary's main()
