@@ -343,6 +343,11 @@ impl CaptureSession {
         );
     }
 
+    /// Whether this session started with audio capture off.
+    pub(crate) fn audio_disabled(&self) -> bool {
+        self.audio_disabled
+    }
+
     /// Stop all capture pipelines. The server stays alive.
     ///
     /// This is self-contained — no external references needed.

@@ -895,7 +895,7 @@ async fn start_capture_inner(
 // ---------------------------------------------------------------------------
 
 /// Stop capture AND server so the next spawn_screenpipe does a full restart.
-/// Called by "Apply & Restart", audio shortcuts, updates, and rollbacks.
+/// Called by "Apply & Restart", updates, and rollbacks.
 /// The tray toggle uses stop_capture / start_capture to keep the server alive.
 #[tauri::command]
 #[specta::specta]
@@ -952,6 +952,19 @@ pub(crate) async fn stop_screenpipe_inner(state: &RecordingState) -> Result<(), 
     state.last_spawn_epoch.store(0, Ordering::SeqCst);
 
     Ok(())
+}
+
+/// Restart the engine so it reads the saved settings. Unlike the
+/// `stop_screenpipe` + `spawn_screenpipe` commands, this leaves capture intent
+/// alone: a paused recording stays paused.
+pub(crate) async fn restart_keeping_capture_intent(app: &tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<RecordingState>();
+    let _lifecycle = state.server_lifecycle.lock().await;
+    if !state.capture_intended() && state.server.lock().await.is_none() {
+        return Ok(());
+    }
+    stop_screenpipe_inner(&state).await?;
+    spawn_screenpipe_inner(&state, app.clone()).await
 }
 
 async fn shutdown_server<T, F, Fut>(
