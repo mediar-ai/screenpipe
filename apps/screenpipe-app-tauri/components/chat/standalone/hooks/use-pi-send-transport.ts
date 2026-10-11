@@ -212,6 +212,11 @@ export async function checkLivePiSession(
  */
 export type PendingSend = {
   sessionId: string;
+  /** The durable user row and reply placeholder reuse these, so the list
+   *  keeps the same row, turn status, and clock across the swap. */
+  messageId: string;
+  replyId: string;
+  sentAt: number;
   text: string;
   /** The friendly label a Home card sends, so the optimistic bubble matches
    *  the durable row's `displayContent` and nothing changes on the swap. */
@@ -426,7 +431,17 @@ export function usePiSendTransport(options: PiSendTransportOptions) {
     // `pendingSend` renders a real user bubble until the durable row replaces
     // it, and the recovery effect at the end of this hook puts the text back if
     // the send aborts.
-    setPendingSend({ sessionId: attemptSessionId, text: userMessage, displayLabel });
+    const sentAt = Date.now();
+    const userMessageId = sentAt.toString();
+    const assistantMessageId = (sentAt + 1).toString();
+    setPendingSend({
+      sessionId: attemptSessionId,
+      messageId: userMessageId,
+      replyId: assistantMessageId,
+      sentAt,
+      text: userMessage,
+      displayLabel,
+    });
     setInput("");
 
     // A selector change may still be in flight when the user submits. Wait for
@@ -686,7 +701,7 @@ export function usePiSendTransport(options: PiSendTransportOptions) {
 
     const consumedAttachments = consumePendingAttachments();
     const newUserMessage: Message = {
-      id: Date.now().toString(),
+      id: userMessageId,
       role: "user",
       content: userMessage,
       ...(displayLabel ? { displayContent: displayLabel } : {}),
@@ -694,10 +709,9 @@ export function usePiSendTransport(options: PiSendTransportOptions) {
       ...(consumedAttachments ? { attachments: consumedAttachments } : {}),
       ...(sendOptions?.entrySource ? { entrySource: sendOptions.entrySource } : {}),
       ...(sendOptions?.entryCard ? { entryCard: sendOptions.entryCard } : {}),
-      timestamp: Date.now(),
+      timestamp: sentAt,
     };
 
-    const assistantMessageId = (Date.now() + 1).toString();
     const assistantPlaceholder: Message = {
       id: assistantMessageId,
       role: "assistant",
