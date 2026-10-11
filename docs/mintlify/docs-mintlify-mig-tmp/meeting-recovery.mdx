@@ -1,0 +1,53 @@
+---
+title: "Fix missing meeting transcripts and failed summaries"
+sidebarTitle: "Meeting recovery"
+description: "Recover from empty meeting transcripts, delayed live captions, failed AI summaries, and invalid bundled pi compaction patch errors without deleting recordings."
+icon: "wrench"
+---
+
+A meeting has separate capture, transcription, and AI-summary stages. Find the stage that failed before changing settings. A summary error does not mean the meeting recording was lost.
+
+## Find the failing stage
+
+| What you see | First check | Next step |
+| --- | --- | --- |
+| No meeting audio or transcript | Audio enabled, microphone permission, selected input and system audio | Check the timeline and [missing recordings](/missing-recordings) |
+| Audio exists but transcript is empty or late | Transcription engine, its credentials, processing status, and batch duration | Run transcription diagnostics in **Settings → Audio & meetings** |
+| Background transcript works but live captions do not | Active meeting and the separate Live meeting notes provider | Follow [live-caption setup](/meeting-intelligence#enable-real-time-transcription-with-live-meeting-notes) |
+| Transcript exists but summary fails | Selected AI provider, account, allowance, model, and the exact error | Follow the summary checks below |
+| Summary runs but misses the call | Meeting time range and available transcript or screen sources | Ask for source timestamps and compare them with the meeting |
+
+## Empty or delayed transcript
+
+1. Confirm the intended microphone and system audio sources in **Settings → Audio & meetings**. Test both sides of a short call.
+2. Check the selected transcription engine. If it uses a cloud account or API key, verify that provider's access separately from chat-model access.
+3. Run **Run diagnostics** in the transcription controls. Save the specific failing step and redacted error.
+4. For batch transcription, allow the current batch to finish. Where available, **Max batch duration (seconds)** controls batching; a shorter batch can reduce delay but will not recreate audio that was never captured.
+5. For an active meeting, configure **Live meeting notes** and verify a new test sentence. This does not backfill a past call.
+
+## Transcript exists but summary fails
+
+1. Preserve the meeting note and transcript. Copy any important manually written notes before retrying a summary that may update the note.
+2. Check the provider selected for that summary. Screenpipe allowance, ChatGPT sign-in, an Anthropic API key, and Ollama are different access paths. See [AI access requirements](/local-or-cloud-ai#screenpipe-plans-and-ai-subscriptions).
+3. Test one small question against recent recordings. For a custom provider, use its AI preset's **Run diagnostics**. A successful text response still needs a successful recording-tool call.
+4. Follow the error's recovery action: sign in for authentication errors, wait for the specified rate-limit interval, or correct the endpoint/model. Avoid repeatedly launching duplicate runs.
+5. Retry the meeting summary once the failing step works. Confirm the result is saved to the intended meeting and matches its transcript and time range.
+
+## Error: invalid bundled pi compaction patch
+
+This message concerns Screenpipe's bundled AI runtime patch. It is not the name of a transcription setting, and toggling live captions will not repair it.
+
+Record your app version, OS, exact error, and whether the failure happens in chat, a meeting summary, or a scheduled task. Check for an available app update through the normal update flow, quit Screenpipe fully once, reopen it, and retry a small task. Do not delete `~/.screenpipe`, erase recordings, or replace a globally installed Pi package as a workaround for a bundled-runtime error.
+
+If it persists, contact [support](https://discord.gg/screenpipe) with the details below. A source-code fix or newer version number alone is not proof that your installed build contains a fix; report the version you actually tested.
+
+## What to include when asking for help
+
+- Screenpipe version and OS version
+- Meeting date, approximate time, and timezone
+- Whether audio, transcript, and summary each exist
+- Transcription engine, live-caption provider, and summary model
+- Exact error and the diagnostic step that failed
+- A short reproduction and what happened after one retry
+
+Redact credentials and private meeting content. Share diagnostic logs through the support route you are using, not a public transcript dump. Support needs enough information to identify the failing stage, not your entire recording history.

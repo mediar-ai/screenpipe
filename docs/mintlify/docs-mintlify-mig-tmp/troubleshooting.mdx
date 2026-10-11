@@ -1,7 +1,7 @@
 ---
 title: "Troubleshoot Screenpipe: install, permissions, and scheduled tasks"
 sidebarTitle: "Troubleshooting"
-description: "Fix common Screenpipe issues including installation errors, screen and microphone permissions, missing audio, scheduled task failures, and MCP connection problems."
+description: "Fix common Screenpipe issues: installation errors, screen and microphone permissions, missing audio, scheduled task failures, and MCP connection problems."
 icon: "wrench"
 ---
 
@@ -13,6 +13,7 @@ icon: "wrench"
 
 | Symptom | First check | Deeper guide |
 | --- | --- | --- |
+| Download asks for payment or a credit card | Compare official app and source-build licensing | [Installation options](/getting-started#free-and-paid-installation-options) |
 | App says free after purchase | Sign out/in with purchase email | [FAQ](/faq) |
 | Cannot find receipt | Account billing area and purchase email | [FAQ](/faq) |
 | Desktop timeline missing after CLI install | Install desktop app, not only CLI | [Getting started](/getting-started) |
@@ -20,6 +21,8 @@ icon: "wrench"
 | AI tool cannot see Screenpipe | MCP config, Node 18+, app running | [MCP server](/mcp-server) |
 | Scheduled task fails or hangs | Scheduled task logs, provider auth, permissions | [Scheduled task debugging](/task-troubleshooting) |
 | Windows command window flashes during scheduled task run | Scheduled task exits immediately; check logs | [Scheduled task debugging](/task-troubleshooting) |
+| Meeting summary fails or shows a Pi compaction patch error | Preserve the transcript, record the error, check the provider and app version | [Meeting recovery](/meeting-recovery) |
+| Cannot find the real-time transcription toggle | Enable audio, then find Live meeting notes | [Live meeting notes](/meeting-intelligence#enable-real-time-transcription-with-live-meeting-notes) |
 | Meeting transcript is empty | Microphone, system audio, transcription engine | [Meeting intelligence](/meeting-intelligence) |
 | `/api/search` returns 404 | Use `/search` on `localhost:3030` | [API recipes](/api-recipes) |
 | Privacy question | local/cloud path and enabled toggles | [Privacy data flow](/privacy-data-flow) |
