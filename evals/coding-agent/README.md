@@ -1855,3 +1855,25 @@ The hidden fixture and runtime link appear only at grading. Synthetic loopback
 responses establish logical invalidation and active-session accounting, not heap
 reclamation, disconnect cleanup, LAN authentication, concurrency, agent isolation
 or model performance.
+
+### Fresh-process offline vault locking
+
+`app-vault-lock-fresh-process-key` executes the unchanged CLI handler and full
+vault crate in a minimal Cargo workspace. Synthetic ports supply a temporary
+data directory and password; setup, lock, status and unlock use fresh processes.
+Four outcome groups check encrypted database/WAL/SHM/nested media roundtrip,
+wrong-password preservation, unconfigured refusal and repeated-setup refusal.
+The roundtrip also preserves locked bytes after wrong unlock and repeated lock.
+
+Run `bun test evals/coding-agent/calibrate-vault-cli.test.js` for historical
+parent/reference/current, equivalent, unused-helper, response-only, blanket
+refusal, skipped-media, ignored-password and missing-source controls. Offline
+Cargo compilation has a 180-second bound; setup errors cannot count as behavior
+failures. The hidden fixture appears only at grading and uses no dependency or
+build-cache links. The copied diagnostic lock may resolve the smaller workspace;
+repository package and lock files are unchanged.
+
+This does not execute the packaged engine, TTY password handling, online HTTP
+routes, migration/daemon integration, crash recovery or production recordings.
+Current daemon and hybrid-storage refusal policies are separate contracts, not
+historical online-lock-success expectations. No model trial or isolation claim.
