@@ -212,7 +212,7 @@ If your chat window freezes, try these fixes in order:
 1. **Restart Screenpipe** — closes stalled message queues
 2. **Check health:** `curl http://localhost:3030/health` — if it fails, backend is stuck
 3. **Verify you have data** — Screenpipe needs screen/audio history; wait 1-2 minutes after startup
-4. **Verify AI provider connection** — settings → model selector. For ChatGPT/Claude, sign out/back in
+4. **Verify AI provider connection:** check the selected preset. Refresh ChatGPT sign-in if needed; for Claude API, check the Anthropic API key and API account.
 5. **Reduce load** — disable unused scheduled tasks under **Scheduled tasks → My tasks**, switch to a faster, lighter model in your configured provider, and check logs for “timeout” errors
 
 ### Chat messages disappear
@@ -221,9 +221,10 @@ If assistant replies vanish when navigating away, **update to the latest version
 
 ### AI model connection fails
 
-1. Verify subscription active: [openai.com](https://openai.com) (ChatGPT Plus/Pro) or [claude.ai](https://claude.ai) (Claude Pro)
-2. Sign out/in: settings → model selector → sign out, restart, sign back in
-3. If still failing, your tokens expired — try again
+1. Identify the selected provider and preset. Check [AI access requirements](/local-or-cloud-ai#screenpipe-plans-and-ai-subscriptions); app licensing, provider subscriptions, and API billing are separate.
+2. For ChatGPT sign-in errors, reconnect that account. For API providers, verify the endpoint, model, key, and provider billing. For Ollama, verify the local server and model.
+3. Run **Run diagnostics** in the AI preset and inspect the failing step. Follow any rate-limit retry interval instead of repeatedly restarting the app.
+4. Once basic chat works, [verify access to a real recording](/mcp-server#verify-a-real-retrieval). For meeting-specific failures, use [meeting recovery](/meeting-recovery).
 
 ---
 
