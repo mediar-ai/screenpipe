@@ -17,6 +17,7 @@ use crate::{
     analytics,
     history_access::HistoryAccessPolicy,
     hot_frame_cache::HotFrameCache,
+    origin_guard::{is_allowed_local_origin, origin_guard, OriginGuard},
     routes::{
         activity_ledger::get_activity_ledger,
         activity_summary::get_activity_summary,
@@ -324,31 +325,6 @@ fn should_advertise_mdns(addr: SocketAddr) -> bool {
     !addr.ip().is_loopback()
 }
 
-fn is_allowed_local_origin(origin: &axum::http::HeaderValue) -> bool {
-    let Ok(origin) = origin.to_str() else {
-        return false;
-    };
-    let Ok(uri) = origin.parse::<axum::http::Uri>() else {
-        return false;
-    };
-    let Some(scheme) = uri.scheme_str() else {
-        return false;
-    };
-    let Some(host) = uri.host() else {
-        return false;
-    };
-
-    matches!(
-        (scheme, host),
-        ("http", "localhost")
-            | ("https", "localhost")
-            | ("tauri", "localhost")
-            | ("http", "tauri.localhost")
-            | ("http", "127.0.0.1")
-            | ("https", "127.0.0.1")
-    )
-}
-
 fn is_api_auth_exempt_path(path: &str) -> bool {
     path == "/health"
         || path == "/ws/health"
@@ -359,7 +335,28 @@ fn is_api_auth_exempt_path(path: &str) -> bool {
         || path == "/connections/browser/pair/start"
         || path == "/connections/browser/pair/status"
         || path == "/notify"
-        || path.starts_with("/pipes/store")
+        || is_pipe_store_route(path)
+}
+
+/// Registry routes: `/pipes/store`, `/pipes/store/:segment`, and
+/// `/pipes/store/:slug/review`. Matched by shape, not prefix, because the
+/// `/pipes/:id/...` routes also serve a pipe whose name merely starts with
+/// `store` or is exactly `store`, and `/pipes/:id/stream` outranks
+/// `/pipes/store/:slug`.
+fn is_pipe_store_route(path: &str) -> bool {
+    let Some(rest) = path.strip_prefix("/pipes/store") else {
+        return false;
+    };
+    if rest.is_empty() {
+        return true;
+    }
+    let Some(rest) = rest.strip_prefix('/') else {
+        return false;
+    };
+    match rest.split_once('/') {
+        None => !rest.is_empty() && rest != "stream",
+        Some((slug, tail)) => !slug.is_empty() && tail == "review",
+    }
 }
 
 fn is_api_auth_token_authorized(
@@ -1685,6 +1682,12 @@ impl SCServer {
                 )
             })
             .layer(cors)
+            // Outside CORS, so a foreign preflight is refused instead of being
+            // answered by the CORS layer.
+            .layer(axum::middleware::from_fn_with_state(
+                OriginGuard::for_bind_address(self.addr),
+                origin_guard,
+            ))
             .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
     }
 }
@@ -1709,11 +1712,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        catch_router_build_panic, is_allowed_local_origin, is_api_auth_exempt_path,
-        is_api_auth_token_authorized, search_query_concurrency, should_advertise_mdns,
-        CORS_EXPOSED_HEADERS,
+        catch_router_build_panic, is_api_auth_exempt_path, is_api_auth_token_authorized,
+        search_query_concurrency, should_advertise_mdns, CORS_EXPOSED_HEADERS,
     };
-    use axum::http::{header, HeaderValue};
+    use axum::http::header;
     use dashmap::DashMap;
     use screenpipe_core::pipes::permissions::PipePermissions;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -1917,35 +1919,6 @@ mod tests {
     }
 
     #[test]
-    fn cors_allows_exact_local_origins() {
-        for origin in [
-            "http://localhost:1420",
-            "https://localhost:3030",
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "http://127.0.0.1:3030",
-            "https://127.0.0.1:3030",
-        ] {
-            let origin = HeaderValue::from_static(origin);
-            assert!(is_allowed_local_origin(&origin));
-        }
-    }
-
-    #[test]
-    fn cors_rejects_localhost_prefix_origins() {
-        for origin in [
-            "http://localhost.evil.example",
-            "https://localhost.evil.example",
-            "http://localhost@evil.example",
-            "http://127.0.0.1.evil.example",
-            "http://tauri.localhost.evil.example",
-        ] {
-            let origin = HeaderValue::from_static(origin);
-            assert!(!is_allowed_local_origin(&origin));
-        }
-    }
-
-    #[test]
     fn frame_routes_are_not_api_auth_exempt() {
         for path in [
             "/frames/123",
@@ -1963,6 +1936,23 @@ mod tests {
     #[test]
     fn pipe_stream_is_not_api_auth_exempt() {
         assert!(!is_api_auth_exempt_path("/pipes/daily-summary/stream"));
+    }
+
+    #[test]
+    fn pipe_store_exemption_covers_only_registry_routes() {
+        for path in [
+            "/pipes/storefront/run",
+            "/pipes/store-report/executions",
+            "/pipes/store/executions/1",
+            "/pipes/store/session/1",
+            "/pipes/store/stream",
+            "/pipes/store//review",
+        ] {
+            assert!(!is_api_auth_exempt_path(path), "{path}");
+        }
+        for path in ["/pipes/store/foo/review", "/pipes/store/install"] {
+            assert!(is_api_auth_exempt_path(path), "{path}");
+        }
     }
 
     #[test]

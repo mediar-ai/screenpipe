@@ -73,6 +73,7 @@ pub mod meeting_export;
 pub mod meeting_summary;
 pub mod meeting_watcher;
 mod oauth_result_page;
+mod origin_guard;
 pub mod permission_monitor;
 pub mod piggyback_telemetry;
 pub mod pipe_permissions_middleware;
