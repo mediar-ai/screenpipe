@@ -137,6 +137,33 @@ before considering them complete. This command queues its initial native
 compile across all local Screenpipe worktrees, then releases the queue slot for
 the live app; see [`docs/macos-dev-builds.md`](../../docs/macos-dev-builds.md).
 
+## n8n Automations preview
+
+Automations → n8n connects an instance through the existing MCP editor. The
+builder button checks the advertised creation, validation and schema tools
+before handing a request to Screenpipe chat. Accounts for workflow nodes are
+connected in n8n. The request asks the agent to save an unpublished draft;
+existing runtime tool permissions continue to apply.
+
+In `bun run dev:web`, open `/home?section=pipes&tab=n8n` for setup, or append
+`&n8nFixture=connected`, `limited`, `unreachable`, or `list-error` for fictional
+connection and workflow states. Browser mocks do not sign in, create workflows,
+or run the agent. Connection writes return an explicit preview error. The normal
+chat handoff is exercised, but its native runtime requires desktop validation.
+
+Focused checks:
+
+```sh
+bun run test:vitest lib/n8n.test.ts components/n8n-automations.test.tsx components/__tests__/pipe-store-error-state.test.tsx
+```
+
+Before considering provider integration verified, connect a disposable n8n
+instance, build a draft with missing app credentials, read its real ID back,
+connect the accounts in n8n, and explicitly test it. Also check an instance with
+execution-only MCP tools, expired authorization, and an interrupted create call
+(the agent must look for the existing draft before retrying). A successful UI
+fixture or prompt assertion is not an agent trial or an execution receipt.
+
 ## localization integration
 
 `gt.config.json` owns the source language and bundled languages. The initial

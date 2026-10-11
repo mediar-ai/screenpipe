@@ -62,6 +62,7 @@ import { MemoizedReactMarkdown } from "@/components/markdown";
 import remarkGfm from "remark-gfm";
 import posthog from "posthog-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { N8nAutomations } from "@/components/n8n-automations";
 import { PipesSection } from "@/components/settings/pipes-section";
 import { NotificationBell } from "@/components/notification-bell";
 import { ChatPrefillData } from "@/lib/chat-utils";
@@ -350,7 +351,7 @@ export function PipeStoreView() {
       .catch(() => setInstalledCount(0));
   }, []);
 
-  const [activeTab, setActiveTab] = useState<"discover" | "my-pipes">("my-pipes");
+  const [activeTab, setActiveTab] = useState<"discover" | "my-pipes" | "n8n">("my-pipes");
 
   // listen for tab switch events from empty state button
   useEventListener("switch-pipes-tab", (e) => {
@@ -362,6 +363,7 @@ export function PipeStoreView() {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
     if (tab === "discover") setActiveTab("discover");
+    else if (tab === "n8n") setActiveTab("n8n");
     else if (tab === "my-pipes") setActiveTab("my-pipes");
     if (tab) {
       params.delete("tab");
@@ -373,19 +375,22 @@ export function PipeStoreView() {
   useEffect(() => {
     if (installedCount !== null && installedCount === 0) {
       const params = new URLSearchParams(window.location.search);
-      if (!params.get("tab")) setActiveTab("discover");
+      if (!params.get("tab")) setActiveTab((current) => current === "n8n" ? current : "discover");
     }
   }, [installedCount]);
 
   const tabs = [
     { key: "my-pipes" as const, label: ui("My tasks") },
     { key: "discover" as const, label: ui("Discover") },
+    { key: "n8n" as const, label: "n8n" },
   ];
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {activeTab === "discover"
+        {activeTab === "n8n"
+          ? ui("Build workflows with your connected apps in n8n.")
+          : activeTab === "discover"
           ? ui("Browse, install, and review community automations")
           : ui("Run tasks on a schedule, after meetings, or when events happen.")}
       </p>
@@ -415,7 +420,9 @@ export function PipeStoreView() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "discover" ? (
+      {activeTab === "n8n" ? (
+        <N8nAutomations />
+      ) : activeTab === "discover" ? (
         <DiscoverView onInstalled={() => setActiveTab("my-pipes")} />
       ) : (
         <PipesSection />

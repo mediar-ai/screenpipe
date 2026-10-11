@@ -117,7 +117,7 @@ describe("pipe store error state", () => {
     expect(mocks.invalidatePrefix).toHaveBeenCalledWith("pipes/store");
   });
 
-  it("keeps Automations scoped to scheduled tasks", async () => {
+  it("keeps scheduled tasks and discovery alongside the n8n entry", async () => {
     mocks.localFetch.mockImplementation(async (url: string) => {
       if (url === "/pipes") {
         return jsonResponse([{ config: { name: "installed" } }]);
@@ -129,6 +129,7 @@ describe("pipe store error state", () => {
 
     expect(screen.getByTestId("tab-my-pipes")).toBeTruthy();
     expect(screen.getByTestId("tab-discover")).toBeTruthy();
+    expect(screen.getByTestId("tab-n8n")).toBeTruthy();
     expect(screen.queryByTestId("tab-connections")).toBeNull();
     expect(screen.queryByTestId("provider-skill-catalog")).toBeNull();
   });

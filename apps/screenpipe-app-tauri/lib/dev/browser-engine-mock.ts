@@ -207,6 +207,24 @@ export function mockLocalApiResponse(
   }
 
   const method = (init?.method ?? "GET").toUpperCase();
+  // Fictional n8n states for the maintained Automations browser preview.
+  // No provider, OAuth or agent request is made in browser-mock mode.
+  if (url.pathname.startsWith("/mcp-servers")) {
+    const fixture = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("n8nFixture");
+    const tools = ["search_workflows", ...(fixture === "limited" ? [] : ["get_workflow_sdk_reference", "search_nodes", "get_node_types", "validate_workflow", "create_workflow_from_code"])].map((name) => ({ name, description: "Fictional browser preview tool" }));
+    if (url.pathname === "/mcp-servers") return Response.json({ data: fixture ? [{ id: "preview-n8n", name: "n8n", url: "https://studio.example.com/mcp-server/http", enabled: true, header_names: [], created_at: 0 }] : [] });
+    if (url.pathname.endsWith("/tools") || url.pathname.endsWith("/test")) {
+      if (fixture === "unreachable") return Response.json({ error: "Preview connection unavailable" }, { status: 502 });
+      return Response.json({ data: { tools, count: tools.length } });
+    }
+    if (url.pathname.endsWith("/call")) return Response.json({ data: fixture === "list-error" ? { isError: true, content: [{ type: "text", text: "Preview access denied" }] } : { structuredContent: { data: [
+      { id: "invoice-demo", name: "Save invoice attachments to Drive and Sheets", active: false },
+      { id: "support-demo", name: "Route support requests to Slack", active: false },
+      { id: "report-demo", name: "Weekly team report", active: true },
+    ], count: 3 } } });
+    if (url.pathname.endsWith("/oauth/status")) return Response.json({ data: { connected: false, has_refresh_token: false } });
+    return Response.json({ error: "Connection changes require the desktop engine. This preview only simulates saved connections." }, { status: 409 });
+  }
   if (url.pathname === "/starred-sessions") {
     if (method === "POST") {
       const value = JSON.parse(String(init?.body));

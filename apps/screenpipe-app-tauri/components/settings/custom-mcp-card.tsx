@@ -457,7 +457,7 @@ function ServerRow({
 // Editor body
 // ---------------------------------------------------------------------------
 
-function ServerEditor({
+export function ServerEditor({
   initial,
   initialHeaders,
   existingServers,
