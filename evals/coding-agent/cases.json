@@ -4739,7 +4739,7 @@
         "preserved-behavior"
       ],
       "agent_timeout_seconds": 1200,
-      "prompt": "Streaming requests through the OpenAI provider lose the caller's tool-selection policy, although ordinary completions preserve it. Repair the existing provider behavior so required, auto, none and named-function tool_choice values reach the provider unchanged on streaming and non-streaming requests. An unspecified choice must remain unspecified, including requests without tools. Preserve the selected model, messages, exact tool schemas and input object. If an OpenAI-compatible server rejects stream_options.include_usage, the supported retry must omit that option while retaining the original tools and tool choice. Preserve streamed content, native tool-call identity/name/arguments, tool_calls finish reason, prompt/completion/total/cached usage and exactly one completion terminator. Do not change routing/model policy or authentication. Use synthetic SDK transport without live API calls or executing tools; no specific implementation shape is required. This task concerns provider request/response behavior, not native Pi configuration, model adherence to the tool policy or full gateway authentication.",
+      "prompt": "Streaming requests through the OpenAI provider lose the caller's tool-selection policy, although ordinary completions preserve it. Repair the existing provider behavior so required, auto, none and named-function tool_choice values reach the provider unchanged on streaming and non-streaming requests. An unspecified choice must remain unspecified, including requests without tools. Preserve the selected model, messages, exact tool schemas and input object. If an OpenAI-compatible server rejects stream_options.include_usage, the supported retry must omit that option while retaining the original tools and tool choice. Preserve streamed content, native tool-call identity/name/arguments, tool_calls finish reason, prompt/completion/total/cached usage and exactly one completion terminator. Do not change routing/model policy or authentication. Use synthetic SDK transport without live API calls or executing tools; no specific implementation shape is required. This task concerns provider request/response behavior, not native Pi configuration, model adherence to the tool policy or full gateway authentication. All streamed content, tool fragments, finish reason and usage must arrive before the single completion terminator; clients stop consuming at that terminator.",
       "grader": {
         "timeout_seconds": 60,
         "fixtures": [
@@ -6055,6 +6055,168 @@
           }
         ],
         "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config manual-grant.config.mjs"
+      }
+    },
+    {
+      "id": "ai-gateway-vertex-string-tool-calls",
+      "name": "Preserve tool-call history across Vertex message content shapes",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "85b0f37c6e7efbcdde83bfeea21b601f8da79ca7"
+      },
+      "base_ref": "9371579352e01a088bc153d287323d54601a954f",
+      "oracle_ref": "85b0f37c6e7efbcdde83bfeea21b601f8da79ca7",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "tool-calling",
+        "provider-compatibility"
+      ],
+      "prompt": "Valid tool conversations sent through Vertex MaaS fail after an assistant response whose content is a string, even though it includes tool calls and the following tool outputs reference those calls. Preserve every valid call identifier, function name, serialized arguments and matching tool result in outbound JSON and streaming requests. Support empty, whitespace, null and nonempty assistant content; preserve nonempty text and accept either empty-string or null representation for absent text. Preserve array text with top-level calls, ordinary system/user/assistant text and image messages, request tools and tool choice, zero temperature and token limits, and returned response content. Preserve the existing model endpoint, POST method and bearer authentication header, and send one completion request on ordinary success. Tool outputs appearing before their matching call, or with missing, empty or unknown identifiers, must still be filtered when no missing-id call can be repaired. Preserve valid neighboring pairs and do not mutate the caller message array or nested calls. Exercise the existing public completion methods. No particular private helper or implementation is required. Use synthetic transport and credentials only; do not call a live model, change authentication policy or publish releases.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/vertex-tool-content.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-vertex-tool-content.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-tool-content.test.ts"
+      }
+    },
+    {
+      "id": "app-mcp-session-lifecycle",
+      "name": "Preserve HTTP MCP sessions and explicit deletion",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "5e0b1bdbe72f1628bd9b0a82acb63c3d79aba136"
+      },
+      "base_ref": "5aa887630cb04307c4734366b18b9d8ddccca45a",
+      "oracle_ref": "5e0b1bdbe72f1628bd9b0a82acb63c3d79aba136",
+      "oracle_paths": [
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "tags": [
+        "regression",
+        "mcp",
+        "sessions",
+        "lifecycle"
+      ],
+      "prompt": "HTTP MCP clients initialize successfully but cannot reliably reuse or delete their sessions. Repair the public HTTP session lifecycle. Initialization must return a nonempty session ID; repeated tools/list requests using it must succeed and include search_content. Independently initialized clients need distinct IDs and must remain usable independently. The unauthenticated health endpoint must report status ok and the accurate number of active initialized sessions, beginning at zero. An explicit DELETE of an initialized session succeeds, removes it from the active count and makes that ID unusable without disturbing other sessions. Closing every session returns the count to zero; a later initialization gets a fresh usable identity. Unknown or deleted session IDs must receive an HTTP error instead of tools, without entering the active count. Preserve unauthenticated loopback access, HTTP 404 for unknown routes and HTTP 204 for OPTIONS. Exercise synthetic loopback requests only; no actual screen recordings, credentials, live services or particular helper/storage implementation is required. This task checks public responses, active-session accounting and logical invalidation, not heap reclamation, dropped TCP connections, LAN authentication, stdio or concurrency guarantees.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "packages/screenpipe-mcp/node_modules",
+          "destination_path": "packages/screenpipe-mcp/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/mcp-session-lifecycle.fixture.ts.txt",
+            "destination_path": "packages/screenpipe-mcp/src/eval-session.test.ts"
+          }
+        ],
+        "command": "cd packages/screenpipe-mcp && SCREENPIPE_DISABLE_TELEMETRY=1 SCREENPIPE_MCP_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 node node_modules/vitest/vitest.mjs run src/eval-session.test.ts"
+      }
+    },
+    {
+      "id": "app-vault-lock-fresh-process-key",
+      "name": "Lock and unlock an offline vault from fresh CLI processes",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "7d171cc2de988c92b0d38a940fecd8dfb27816b0"
+      },
+      "base_ref": "5dd6c7f0db9a38aa1ffbf71ae9bf5ef46f420a6d",
+      "oracle_ref": "7d171cc2de988c92b0d38a940fecd8dfb27816b0",
+      "oracle_paths": [
+        "crates/screenpipe-engine/src/cli/vault.rs",
+        "crates/screenpipe-engine/src/routes/vault.rs",
+        "crates/screenpipe-vault/src/lib.rs",
+        "crates/screenpipe-vault/src/manager.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-engine/src/cli/vault.rs",
+        "crates/screenpipe-vault"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "vault",
+        "data-integrity",
+        "preserved-behavior"
+      ],
+      "prompt": "Offline vault setup succeeds, but a later CLI invocation cannot lock the existing vault. Repair the actual CLI flow so setup, lock and unlock can run in independent processes. Setup must leave database, WAL, SHM and nested media bytes unchanged and report unlocked. Lock with the correct password must succeed, report locked, encrypt all those files using the existing SPVAULT1-compatible format without leaving their plaintext content, and allow a fresh unlock process to restore identical original bytes and report unlocked. A wrong lock password must fail while preserving plaintext and unlocked state. A wrong unlock password and a second lock of an already-locked vault must fail without changing encrypted bytes or locked state. Lock before setup must fail without creating vault metadata or altering data. Repeated setup must fail without changing metadata or plaintext. Preserve command status behavior and compatible existing callers; no particular helper or key-storage implementation is required. Grading executes the actual CLI handler and complete vault crate in a minimal offline Cargo workspace, with synthetic filesystem paths and password input, separate processes, and an offline daemon port. It does not run the packaged engine, terminal input, HTTP routes, live recordings or customer files. Do not broaden online locking or migration policy; current daemon and hybrid-storage restrictions remain separate preserved contracts.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 240,
+        "fixtures": [
+          {
+            "local_path": "graders/vault-cli.fixture.js",
+            "destination_path": "vault-cli.eval.js"
+          }
+        ],
+        "command": "bun --no-env-file vault-cli.eval.js"
+      }
+    },
+    {
+      "id": "app-mcp-package-http-dispatch",
+      "name": "Dispatch the published package HTTP flag while preserving stdio",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "2c687b0b530623c750fdafda7bcc8985ee755a87"
+      },
+      "base_ref": "e4341ef7c9bc4ade2dfb5ea3bcb6a149bae28146",
+      "oracle_ref": "2c687b0b530623c750fdafda7bcc8985ee755a87",
+      "oracle_paths": [
+        "packages/screenpipe-mcp/package.json",
+        "packages/screenpipe-mcp/src/cli.ts",
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/screenpipe-mcp/package.json",
+        "packages/screenpipe-mcp/src/cli.ts",
+        "packages/screenpipe-mcp/src/index.ts",
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "tags": [
+        "regression",
+        "mcp",
+        "cli",
+        "transport"
+      ],
+      "prompt": "Invoking the screenpipe-mcp package with --http still starts its stdio transport. Repair the package entry point. After compiling its TypeScript, launching the screenpipe-mcp bin declared in package.json with --http either before or after --port must open HTTP on that requested loopback port. Preserve the separate screenpipe-mcp-http bin without requiring --http. Both HTTP entry points must return unauthenticated /health with status ok and zero initial sessions, HTTP 404 for unknown routes, and a successful MCP initialize response advertising tools. Without --http, including the unrelated --httpish flag, the primary bin must preserve newline JSON-RPC stdio initialization and tools/list containing search-content. HTTP requests with --port 0 or --listen-on-lan without --api-key must refuse startup with exit 2 and a diagnostic. Use synthetic loopback probes only, disable telemetry and supply a synthetic local API key with an empty home. No particular dispatch helper or source filename is required. This task covers compiled package bins, not registry installation, packaged installers, external API calls, HTTP session reuse, authorized LAN serving or deployed recordings.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "packages/screenpipe-mcp/node_modules",
+          "destination_path": "packages/screenpipe-mcp/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 90,
+        "fixtures": [
+          {
+            "local_path": "graders/mcp-package-dispatch.fixture.js.txt",
+            "destination_path": "packages/screenpipe-mcp/src/eval-package-dispatch.test.js"
+          }
+        ],
+        "command": "cd packages/screenpipe-mcp && bun test src/eval-package-dispatch.test.js"
       }
     }
   ]

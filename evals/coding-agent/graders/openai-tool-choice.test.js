@@ -49,7 +49,9 @@ test('unsupported usage retry retains the exact tool policy and tools', async ()
 test('ordinary streams preserve content, native tool fragments, usage and one terminator', async () => {
   const output = await invoke(true, undefined, false); expect(requests).toHaveLength(1); expect(requests[0].tool_choice).toBeUndefined();
   expect(output.split('data: [DONE]').length - 1).toBe(1);
-  const events = output.split('\n').filter(line => line.startsWith('data: ') && line !== 'data: [DONE]').map(line => JSON.parse(line.slice(6)));
+  const frames = output.split('\n').filter(line => line.startsWith('data: '));
+  expect(frames.at(-1)).toBe('data: [DONE]');
+  const events = frames.slice(0, -1).map(line => JSON.parse(line.slice(6)));
   expect(events.map(e => e.choices?.[0]?.delta?.content || '').join('')).toBe('plain answer');
   expect(events.flatMap(e => e.choices?.[0]?.delta?.tool_calls || [])).toEqual([fragment]);
   expect(events.find(e => e.choices?.[0]?.finish_reason)?.choices[0].finish_reason).toBe('tool_calls');

@@ -29,3 +29,19 @@ test('forcing required tool policy is rejected',()=>fail(grade('forced-required'
 test('losing schemas is rejected',()=>fail(grade('lost-tools',item.oracle_ref,d=>{const p=join(d,provider);writeFileSync(p,readFileSync(p,'utf8').replaceAll("tools: body.tools as ChatCompletionCreateParams['tools'],",'tools: [],'));})));
 test('losing native stream fragments is rejected',()=>fail(grade('lost-fragments',item.oracle_ref,d=>change(d,provider,'const toolCalls = choice?.delta?.tool_calls;','const toolCalls = undefined;'))));
 test('missing provider is setup failure',()=>{const r=grade('missing',item.oracle_ref,d=>rmSync(join(d,provider)));expect(r.status).toBe(1);expect(r.stderr).toContain('Cannot find module');expect(r.stderr).toContain('0 pass');});
+
+function prematureDone(cwd, point) {
+ const path = join(cwd, provider), source = readFileSync(path, 'utf8');
+ const done = "controller.enqueue(new TextEncoder().encode('data: [DONE]\\n\\n'));";
+ expect(source.split(done)).toHaveLength(3);
+ const withoutDone = source.replace(done, '');
+ let index;
+ if (point === 'content') index = withoutDone.indexOf('let finishReason: string | null = null;');
+ else if (point === 'finish') index = withoutDone.lastIndexOf('controller.enqueue(', withoutDone.indexOf("finish_reason: finishReason || 'stop'"));
+ else index = withoutDone.indexOf('// Emit usage before [DONE]');
+ expect(index).toBeGreaterThan(0);
+ writeFileSync(path, withoutDone.slice(0, index) + done + '\n' + withoutDone.slice(index));
+}
+for (const point of ['content', 'finish', 'usage']) {
+ test(`completion terminator before ${point} is rejected`, () => fail(grade(`early-done-${point}`, item.oracle_ref, cwd => prematureDone(cwd, point))));
+}
