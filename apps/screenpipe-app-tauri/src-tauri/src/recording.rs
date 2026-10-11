@@ -643,8 +643,38 @@ async fn has_fresh_interrupted_meeting(state: &RecordingState) -> bool {
         })
 }
 
+/// Only the meeting watcher ends an auto-detected meeting. In a session without
+/// one (audio or meeting detection off) the meeting would stay live with no
+/// audio, and a later restart would stretch it over the gap. A manual meeting
+/// is ended by the user, so it always comes back.
+fn reopens_after_restart(
+    interrupted: &InterruptedMeeting,
+    restarted_session_detects_meetings: bool,
+) -> bool {
+    interrupted.manual || restarted_session_detects_meetings
+}
+
+/// End an interrupted meeting at the time the restart began, as the watcher's
+/// shutdown hook would have.
+async fn end_meeting_at_restart(
+    db: &screenpipe_db::DatabaseManager,
+    interrupted: &InterruptedMeeting,
+) -> Result<(), String> {
+    let ended_at = chrono::Utc::now()
+        - chrono::Duration::from_std(interrupted.captured_at.elapsed()).unwrap_or_default();
+    db.end_meeting(
+        interrupted.id,
+        &ended_at.to_rfc3339(),
+        Some(screenpipe_db::MEETING_END_REASON_SHUTDOWN),
+    )
+    .await
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 async fn restore_interrupted_meeting_for_capture_restart(
     state: &RecordingState,
+    restarted_session_detects_meetings: bool,
 ) -> Result<(), String> {
     let interrupted = {
         let mut guard = state.interrupted_meeting.lock().await;
@@ -673,6 +703,19 @@ async fn restore_interrupted_meeting_for_capture_restart(
         .await
         .map_err(|e| e.to_string())?
         .is_some();
+    if !reopens_after_restart(&interrupted, restarted_session_detects_meetings) {
+        // The old watcher ends its meeting on shutdown, but nothing waits for
+        // that write, and a watcher never tracks a row reopened after it
+        // started.
+        if already_active {
+            end_meeting_at_restart(&server.db, &interrupted).await?;
+        }
+        info!(
+            "ended auto-detected meeting across restart: the restarted session does not detect meetings (id={}, app={})",
+            interrupted.id, interrupted.app
+        );
+        return Ok(());
+    }
     if !already_active {
         server
             .db
@@ -874,13 +917,17 @@ async fn start_capture_inner(
         ));
     }
 
-    restore_interrupted_meeting_for_capture_restart(&state).await?;
+    let config = build_config(&app)?;
+    restore_interrupted_meeting_for_capture_restart(
+        &state,
+        crate::capture_session::detects_meetings(&config),
+    )
+    .await?;
 
     let server_guard = state.server.lock().await;
     let server = server_guard
         .as_ref()
         .ok_or_else(|| "Server not running — cannot start capture".to_string())?;
-    let config = build_config(&app)?;
     let session = CaptureSession::start(server, &config, false).await?;
     drop(server_guard);
 
@@ -1656,6 +1703,7 @@ async fn spawn_screenpipe_after_migration(
     // to. `interrupted_meeting` is in-memory, so a real crash still finds it
     // empty here and sweeps normally.
     let close_orphaned_meetings_on_start = !has_fresh_interrupted_meeting(&state).await;
+    let config_detects_meetings = crate::capture_session::detects_meetings(&recording_config);
     // Wire the DB-wedge auto-recovery hook onto every (re)created DB. Captured into
     // the dedicated server thread so the freshly-built `ServerCore` gets the hook
     // before it starts writing.
@@ -1838,7 +1886,13 @@ async fn spawn_screenpipe_after_migration(
             // coordinator; without this the full-restart path (unlike the
             // capture-only path) left the call transcribing on the delayed
             // background chunker only, with no live notes and no way back.
-            if let Err(e) = restore_interrupted_meeting_for_capture_restart(&state).await {
+            // Without a capture session, nothing detects meetings either.
+            let session_detects_meetings =
+                config_detects_meetings && state.capture.lock().await.is_some();
+            if let Err(e) =
+                restore_interrupted_meeting_for_capture_restart(&state, session_detects_meetings)
+                    .await
+            {
                 warn!("failed to restore interrupted meeting after restart: {}", e);
             }
             let spawn_epoch = std::time::SystemTime::now()
@@ -1899,14 +1953,18 @@ pub(crate) async fn start_capture_internal(
         return Ok(());
     }
 
-    restore_interrupted_meeting_for_capture_restart(state).await?;
+    let config = build_config(app)?;
+    restore_interrupted_meeting_for_capture_restart(
+        state,
+        crate::capture_session::detects_meetings(&config),
+    )
+    .await?;
 
     let server_guard = state.server.lock().await;
     let server = server_guard
         .as_ref()
         .ok_or_else(|| "Server not running".to_string())?;
 
-    let config = build_config(app)?;
     let session = CaptureSession::start(server, &config, false).await?;
     drop(server_guard);
 
@@ -2193,6 +2251,83 @@ mod capture_intent_tests {
         wants_recording.store(false, Ordering::SeqCst);
 
         assert!(!capture_intended_now(&wants_recording));
+    }
+}
+
+#[cfg(test)]
+mod meeting_restore_tests {
+    use super::{end_meeting_at_restart, reopens_after_restart, InterruptedMeeting};
+    use crate::capture_session::detects_meetings;
+    use crate::store::SettingsStore;
+    use screenpipe_db::{DatabaseManager, MEETING_END_REASON_SHUTDOWN};
+    use std::time::{Duration, Instant};
+
+    fn interrupted(manual: bool) -> InterruptedMeeting {
+        InterruptedMeeting {
+            id: 7,
+            app: "zoom".into(),
+            title: None,
+            detection_source: "app".into(),
+            manual,
+            captured_at: Instant::now(),
+        }
+    }
+
+    /// Stopping audio mid-meeting restarts the engine. With audio off no
+    /// watcher runs, so a reopened auto-detected meeting would never end.
+    #[test]
+    fn auto_detected_meetings_reopen_only_into_a_session_that_detects_meetings() {
+        let mut config =
+            SettingsStore::default().to_recording_config(std::path::PathBuf::from("test-data"));
+        config.disable_audio = false;
+        config.disable_meeting_detector = false;
+        assert!(detects_meetings(&config));
+        assert!(reopens_after_restart(&interrupted(false), true));
+
+        config.disable_audio = true;
+        assert!(!detects_meetings(&config));
+        assert!(!reopens_after_restart(&interrupted(false), false));
+        // The user ends a manual meeting, so it still comes back.
+        assert!(reopens_after_restart(&interrupted(true), false));
+
+        config.disable_audio = false;
+        config.disable_meeting_detector = true;
+        assert!(!detects_meetings(&config));
+    }
+
+    /// Nothing waits for the old watcher's shutdown write, so the restart ends
+    /// a meeting it will not reopen, at the time the restart began.
+    #[tokio::test]
+    async fn a_meeting_the_restart_does_not_reopen_ends_when_the_restart_began() {
+        let root = tempfile::tempdir().unwrap();
+        let db = DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        let mut meeting = interrupted(false);
+        meeting.id = db.insert_meeting("zoom", "app", None, None).await.unwrap();
+        meeting.captured_at = Instant::now() - Duration::from_secs(30);
+
+        end_meeting_at_restart(&db, &meeting).await.unwrap();
+
+        assert!(db
+            .get_active_meeting_by_id(meeting.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            db.meeting_end_reason(meeting.id).await.unwrap().as_deref(),
+            Some(MEETING_END_REASON_SHUTDOWN)
+        );
+        let meeting_end = db.get_meeting_by_id(meeting.id).await.unwrap().meeting_end;
+        let ended = chrono::DateTime::parse_from_rfc3339(&meeting_end.unwrap()).unwrap();
+        let seconds_ago = chrono::Utc::now()
+            .signed_duration_since(ended)
+            .num_seconds();
+        assert!((29..=40).contains(&seconds_ago), "ended {seconds_ago}s ago");
+        db.close().await;
     }
 }
 

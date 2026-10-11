@@ -490,6 +490,12 @@ fn log_capture_transcription_config(config: &RecordingConfig, options: &AudioMan
     }
 }
 
+/// Whether a session started with `config` runs the meeting detector, and with
+/// it the meeting watcher, the only thing that ends an auto-detected meeting.
+pub(crate) fn detects_meetings(config: &RecordingConfig) -> bool {
+    !config.disable_audio && !config.disable_meeting_detector
+}
+
 async fn reconfigure_audio_manager(
     server: &ServerCore,
     config: &RecordingConfig,
@@ -526,14 +532,14 @@ async fn reconfigure_audio_manager(
         .transcription_mode(config.transcription_mode.clone())
         .openai_compatible_config(openai_compatible_config);
 
-    let meeting_detector = if config.disable_audio {
+    let meeting_detector = if detects_meetings(config) {
+        Some(Arc::new(MeetingDetector::new()))
+    } else if config.disable_audio {
         info!("meeting detector disabled because audio capture is disabled");
         None
-    } else if config.disable_meeting_detector {
+    } else {
         info!("meeting detector disabled by settings");
         None
-    } else {
-        Some(Arc::new(MeetingDetector::new()))
     };
 
     if let Some(ref detector) = meeting_detector {
