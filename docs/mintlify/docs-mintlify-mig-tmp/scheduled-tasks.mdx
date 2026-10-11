@@ -1,7 +1,7 @@
 ---
 title: "Build and manage scheduled tasks"
 sidebarTitle: "Build scheduled tasks"
-description: "Build custom AI automations that run on your screen data. Scheduled tasks are scheduled AI agents written in plain markdown — prompt plus schedule, no code required."
+description: "Build scheduled tasks in Screenpipe: AI agents written in plain markdown with a prompt and schedule that run automatically on your screen data, no code."
 icon: "wand-sparkles"
 ---
 
@@ -398,32 +398,14 @@ Screenpipe auto-creates a default preset using Screenpipe cloud.
 
 ## AI providers
 
-By default, scheduled tasks use **Screenpipe cloud** — no setup needed if you have a Screenpipe account.
+Choose and test an AI preset in **Settings → AI settings**, then assign it in **Scheduled tasks → My tasks**. Check the account and allowance for the selected provider before running a task.
 
-To use your own AI subscription (Claude Pro, ChatGPT Plus, Gemini, or API keys), scheduled tasks reuse [pi's native auth system](https://github.com/badlogic/pi-mono):
+- **Screenpipe:** use your signed-in account and its available AI allowance.
+- **ChatGPT:** use the supported sign-in flow in Screenpipe.
+- **Claude API, Gemini, or another API provider:** configure that provider's API key and billing. Claude Pro/Max is not an Anthropic API key.
+- **Ollama:** choose a downloaded, tool-capable model and [verify retrieval](/ollama#3-verify-one-useful-answer) before scheduling it.
 
-### Option 1: subscription (free with existing plan)
-
-```bash
-# run pi interactively and use /login
-pi
-# then type: /login
-# select Claude Pro, ChatGPT Plus, GitHub Copilot, or Google Gemini
-```
-
-### Option 2: API key
-
-Add to `~/.pi/agent/auth.json`:
-
-```json
-{
-  "anthropic": { "type": "api_key", "key": "sk-ant-..." },
-  "openai": { "type": "api_key", "key": "sk-..." },
-  "google": { "type": "api_key", "key": "..." }
-}
-```
-
-Or set environment variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
+Screenpipe manages an isolated Pi runtime configuration. Logging into a separate global `pi` installation or editing `~/.pi/agent/auth.json` is not a reliable way to update an existing Screenpipe task's credentials. Use the app's provider controls. See [plans and AI subscriptions](/local-or-cloud-ai#screenpipe-plans-and-ai-subscriptions).
 
 ### Using in a scheduled task
 

@@ -29,6 +29,17 @@ Moving from Granola? Connect both servers to your assistant and use the [copyabl
 The MCP server talks to the local Screenpipe API. If MCP works but returns empty results, first check `curl http://localhost:3030/health` and `curl "http://localhost:3030/search?limit=1"`.
 </Tip>
 
+## Verify a real retrieval
+
+1. Keep Screenpipe running and verify `curl --fail-with-body http://localhost:3030/health`.
+2. Display a harmless, distinctive phrase in a text editor for a few seconds. Note the time and confirm that moment appears in the timeline.
+3. Open a new session in your connected assistant and ask it to search Screenpipe for that phrase in the last five minutes, returning the source app and timestamp.
+4. Confirm that a Screenpipe tool actually ran and its result matches the timeline. An installed connection or a plausible answer is not proof of access.
+
+If protected API requests return `401`, retrieve the local token with `npx -y screenpipe@latest auth token` and configure `SCREENPIPE_LOCAL_API_KEY` in the MCP process environment. Never paste the token into a conversation. An empty search with successful authentication needs a [capture and filter check](/missing-recordings).
+
+An MCP connection to a documentation website searches documentation. It does not connect that assistant to your computer's recordings. Use the local Screenpipe MCP server described here for screen and audio history.
+
 ## Claude desktop
 
 ### Quick setup (recommended)
@@ -160,25 +171,22 @@ If you need remote MCP access or prefer HTTP over stdio, the `screenpipe-mcp` np
 ### Localhost only (default)
 
 ```bash
-npx -y screenpipe-mcp-http --port 3031
+npx -y --package screenpipe-mcp screenpipe-mcp-http --port 3031
 ```
 
-This starts an HTTP MCP server on `http://127.0.0.1:3031`. Useful for tools like [Msty](https://msty.studio) that support HTTP MCP transport.
+Set your HTTP MCP client URL to `http://127.0.0.1:3031/mcp`. Check server health with `curl --fail-with-body http://127.0.0.1:3031/health`. The binary is included in the `screenpipe-mcp` package; it is not a separate npm package.
 
 ### Expose to your LAN
 
 To access the server from other machines on your network, use `--listen-on-lan`. **this requires an API key for security:**
 
 ```bash
-npx -y screenpipe-mcp-http --port 3031 --listen-on-lan --api-key your-secret-key
+npx -y --package screenpipe-mcp screenpipe-mcp-http --port 3031 --listen-on-lan --api-key your-secret-key
 ```
 
-Then from a remote machine, call the server with the bearer token:
+In the remote MCP client, set the server URL to `http://<your-machine-ip>:3031/mcp` and configure the `Authorization: Bearer` header with the chosen key. `/mcp` is a protocol endpoint, not a REST search route; `/mcp/search` does not exist. Use a trusted private network and a transport appropriate for protecting the token and recording data.
 
-```bash
-curl -H "Authorization: Bearer your-secret-key" \
-  http://<your-machine-ip>:3031/mcp/search?q=example
-```
+The HTTP MCP access key and the recorder's local API token serve different connections. If MCP reaches the server but recording tools return `401`, check the recorder token in [Verify a real retrieval](#verify-a-real-retrieval).
 
 <Warning>
 HTTP MCP can expose screen history. When using `--listen-on-lan`, always set an `--api-key` — Screenpipe will refuse to start without it. Keep the key secret and only share with trusted services.

@@ -1,11 +1,26 @@
 ---
 title: "Choose local or cloud AI for recorded work"
 sidebarTitle: "Local or cloud AI"
-description: "Choose the AI provider separately from your recording and storage settings."
+description: "Choose between local and cloud AI providers for Screenpipe, and understand what transcription, AI requests, sync, and connected apps send off your device."
 icon: "cloud"
 ---
 
 Choose the AI provider separately from your recording and storage settings. Local capture does not mean every AI request stays local. Cloud transcription, cloud AI, media analysis, sync, and connected apps each create their own data path.
+
+## Screenpipe plans and AI subscriptions
+
+| Where you ask | What access it uses |
+| --- | --- |
+| Screenpipe chat with the Screenpipe provider | Your Screenpipe account and its available AI allowance; inspect [usage and controls](/ai-usage-and-controls) |
+| Screenpipe chat with ChatGPT | The supported ChatGPT sign-in flow and that account's limits |
+| Screenpipe chat with Claude API | An Anthropic API key and API billing, separate from Claude Pro/Max |
+| Claude Desktop or Claude Code connected through MCP | Your access to that Claude client; Screenpipe supplies local recordings through MCP |
+| Screenpipe chat with Ollama | A local Ollama server and a model that supports the required tools |
+| Another API provider | That provider's supported endpoint, credentials, billing, and limits |
+
+A Screenpipe subscription does not include a separate Claude Pro/Max or ChatGPT subscription. A provider subscription does not replace a Screenpipe app license. Selecting a Claude model offered by a Screenpipe plan is different from owning a Claude subscription.
+
+For **Day Recap**, first verify that the selected provider can answer one small question about recent recordings. Then run the recap for a day that has captured data. Check its dates and source evidence before relying on the summary. See [your first useful result](/first-useful-result).
 
 ## Start here
 

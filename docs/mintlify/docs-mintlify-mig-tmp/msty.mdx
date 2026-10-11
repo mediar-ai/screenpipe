@@ -30,10 +30,10 @@ icon: "brain"
 
 ### HTTP mode
 
-If you need remote access, use the HTTP transport instead. Start the HTTP MCP server:
+For a client using HTTP transport on the same computer, start the HTTP MCP server:
 
 ```bash
-npx -y screenpipe-mcp-http --port 3031
+npx -y --package screenpipe-mcp screenpipe-mcp-http --port 3031
 ```
 
 Then point Msty's Toolbox at the HTTP endpoint:
@@ -47,6 +47,8 @@ Then point Msty's Toolbox at the HTTP endpoint:
   }
 }
 ```
+
+The default server listens on loopback only. For another machine, use the authenticated [LAN setup](/mcp-server#expose-to-your-lan). Verify [a real retrieval](/mcp-server#verify-a-real-retrieval) after connecting.
 
 ## Usage
 
