@@ -6172,6 +6172,52 @@
         ],
         "command": "bun --no-env-file vault-cli.eval.js"
       }
+    },
+    {
+      "id": "app-mcp-package-http-dispatch",
+      "name": "Dispatch the published package HTTP flag while preserving stdio",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "2c687b0b530623c750fdafda7bcc8985ee755a87"
+      },
+      "base_ref": "e4341ef7c9bc4ade2dfb5ea3bcb6a149bae28146",
+      "oracle_ref": "2c687b0b530623c750fdafda7bcc8985ee755a87",
+      "oracle_paths": [
+        "packages/screenpipe-mcp/package.json",
+        "packages/screenpipe-mcp/src/cli.ts",
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/screenpipe-mcp/package.json",
+        "packages/screenpipe-mcp/src/cli.ts",
+        "packages/screenpipe-mcp/src/index.ts",
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "tags": [
+        "regression",
+        "mcp",
+        "cli",
+        "transport"
+      ],
+      "prompt": "Invoking the screenpipe-mcp package with --http still starts its stdio transport. Repair the package entry point. After compiling its TypeScript, launching the screenpipe-mcp bin declared in package.json with --http either before or after --port must open HTTP on that requested loopback port. Preserve the separate screenpipe-mcp-http bin without requiring --http. Both HTTP entry points must return unauthenticated /health with status ok and zero initial sessions, HTTP 404 for unknown routes, and a successful MCP initialize response advertising tools. Without --http, including the unrelated --httpish flag, the primary bin must preserve newline JSON-RPC stdio initialization and tools/list containing search-content. HTTP requests with --port 0 or --listen-on-lan without --api-key must refuse startup with exit 2 and a diagnostic. Use synthetic loopback probes only, disable telemetry and supply a synthetic local API key with an empty home. No particular dispatch helper or source filename is required. This task covers compiled package bins, not registry installation, packaged installers, external API calls, HTTP session reuse, authorized LAN serving or deployed recordings.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "packages/screenpipe-mcp/node_modules",
+          "destination_path": "packages/screenpipe-mcp/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 90,
+        "fixtures": [
+          {
+            "local_path": "graders/mcp-package-dispatch.fixture.js.txt",
+            "destination_path": "packages/screenpipe-mcp/src/eval-package-dispatch.test.js"
+          }
+        ],
+        "command": "cd packages/screenpipe-mcp && bun test src/eval-package-dispatch.test.js"
+      }
     }
   ]
 }

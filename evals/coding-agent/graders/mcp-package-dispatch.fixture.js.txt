@@ -1,0 +1,102 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { test, expect } from 'bun:test';
+import { spawn, execFileSync } from 'node:child_process';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createServer } from 'node:net';
+
+// Build and collect observations before registering assertions. Compilation,
+// missing binaries and unresponsive processes remain Bun setup errors.
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+execFileSync(process.env.NODE_BIN || 'node', ['node_modules/typescript/bin/tsc'], { timeout: 30000, stdio: 'pipe' });
+const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+  protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-dispatch-eval', version: '1' },
+}};
+const contracts = [
+  ['HTTP flag before options', 'screenpipe-mcp', ['--http'], 'http'],
+  ['HTTP flag after options', 'screenpipe-mcp', [], 'http'],
+  ['default stdio', 'screenpipe-mcp', [], 'stdio'],
+  ['similar flag preserves stdio', 'screenpipe-mcp', ['--httpish'], 'stdio'],
+  ['direct HTTP alias', 'screenpipe-mcp-http', [], 'http'],
+  ['invalid HTTP port refuses startup', 'screenpipe-mcp', ['--http', '--port', '0'], 'rejected'],
+  ['LAN without key refuses startup', 'screenpipe-mcp', ['--http', '--listen-on-lan'], 'rejected'],
+];
+const delay = ms => new Promise(r => setTimeout(r, ms));
+async function freePort() {
+  const s = createServer(); await new Promise((r, reject) => { s.once('error', reject); s.listen(0, '127.0.0.1', r); });
+  const p = s.address().port; await new Promise(r => s.close(r)); return p;
+}
+function decode(text) {
+  for (const line of text.split('\n')) { try { const v = JSON.parse(line.replace(/^data:\s*/, '')); if (v && typeof v === 'object') return v; } catch {} }
+}
+function rpcLines(text) { return text.split('\n').map(decode).filter(Boolean); }
+async function observe(name, alias, options) {
+  const port = await freePort(), home = mkdtempSync(join(tmpdir(), 'mcp-dispatch-home-'));
+  const args = name === 'HTTP flag after options' ? ['--port', String(port), '--http'] :
+    name === 'invalid HTTP port refuses startup' ? options : [...options, '--port', String(port)];
+  if (!pkg.bin?.[alias]) throw new Error(`Package bin missing: ${alias}`);
+  const child = spawn(process.env.NODE_BIN || 'node', [resolve(pkg.bin[alias]), ...args], {
+    env: { PATH: process.env.PATH, HOME: home, SCREENPIPE_LOCAL_API_KEY: 'sp-synthetic-eval-only',
+      SCREENPIPE_DISABLE_TELEMETRY: '1', SCREENPIPE_MCP_SENTRY_DISABLED: '1', SENTRY_DISABLED: '1', DO_NOT_TRACK: '1' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let stdout = '', stderr = '', spawnError;
+  child.on('error', e => { spawnError = e; }); child.stdin.on('error', () => {});
+  child.stdout.on('data', b => { stdout += b; }); child.stderr.on('data', b => { stderr += b; });
+  const closed = new Promise(r => child.once('close', r));
+  child.stdin.write(JSON.stringify(initialize) + '\n');
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const end = Date.now() + 5000;
+    while (Date.now() < end) {
+      if (spawnError) throw spawnError;
+      const stdio = rpcLines(stdout).find(v => v.id === 1);
+      if (stdio) {
+        if (!stdio.result) throw new Error(`Stdio setup failed: ${JSON.stringify(stdio)}`);
+        child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n' +
+          JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) + '\n');
+        const listEnd = Date.now() + 2000;
+        while (Date.now() < listEnd) {
+          const list = rpcLines(stdout).find(v => v.id === 2);
+          if (list) return { transport: 'stdio', initialize: stdio, tools: list.result?.tools ?? [] };
+          await delay(20);
+        }
+        throw new Error('Stdio list response unavailable during setup');
+      }
+      if (child.exitCode !== null) {
+        if (child.exitCode === 2 && stderr.trim()) return { transport: 'rejected', code: 2, stderr };
+        throw new Error(`Package startup failed (${child.exitCode}): ${stderr}`);
+      }
+      let health;
+      try { const r = await fetch(base + '/health', { signal: AbortSignal.timeout(150) }); if (r.status === 200) health = await r.json(); } catch {}
+      if (health) {
+        const unknown = await fetch(base + '/not-a-route', { signal: AbortSignal.timeout(2000) }); await unknown.text();
+        const response = await fetch(base + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify(initialize), signal: AbortSignal.timeout(2000) });
+        return { transport: 'http', health, unknownStatus: unknown.status, status: response.status, initialize: decode(await response.text()) };
+      }
+      await delay(20);
+    }
+    throw new Error(`Package setup produced no responsive transport: ${stderr}`);
+  } finally {
+    if (child.exitCode === null) child.kill('SIGTERM');
+    await Promise.race([closed, delay(1000)]);
+    if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await closed; }
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+const observations = [];
+for (const [name, alias, options, expected] of contracts) observations.push({ name, expected, observed: await observe(name, alias, options) });
+for (const { name, expected, observed } of observations) test(name, () => {
+  expect(observed.transport).toBe(expected);
+  if (expected === 'http') {
+    expect(observed.health).toEqual({ status: 'ok', sessions: 0 });
+    expect(observed.unknownStatus).toBe(404);
+    expect(observed.status).toBe(200);
+    expect(observed.initialize?.result?.capabilities).toHaveProperty('tools');
+  } else if (expected === 'stdio') {
+    expect(observed.initialize.result.capabilities).toHaveProperty('tools');
+    expect(observed.tools.some(t => t.name === 'search-content')).toBe(true);
+  } else { expect(observed.code).toBe(2); expect(observed.stderr.trim().length).toBeGreaterThan(0); }
+});

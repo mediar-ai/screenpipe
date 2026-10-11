@@ -1877,3 +1877,11 @@ This does not execute the packaged engine, TTY password handling, online HTTP
 routes, migration/daemon integration, crash recovery or production recordings.
 Current daemon and hybrid-storage refusal policies are separate contracts, not
 historical online-lock-success expectations. No model trial or isolation claim.
+
+The `app-mcp-package-http-dispatch` case compiles historical package sources and
+launches their declared bins. Seven public outcomes cover HTTP dispatch, flag
+ordering, stdio preservation, the direct HTTP alias and invalid HTTP startup
+refusal. Grading uses synthetic loopback requests, an empty home and disabled
+telemetry; it does not install from npm or call upstream tools. Compilation and
+unresponsive startup stop collection as setup errors. Calibrate with
+`bun test evals/coding-agent/calibrate-mcp-package-dispatch.test.js`.
