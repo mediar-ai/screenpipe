@@ -47,11 +47,11 @@ vi.mock("@/components/chat/standalone/chat-message-list", async () => {
       pendingSend,
     }: {
       messages: Message[];
-      pendingSend?: { text: string } | null;
+      pendingSend?: { message: Message } | null;
     }) => {
       ReactModule.useEffect(() => () => messageListUnmounted(), []);
       return (
-        <div data-testid="message-list" data-pending-send={pendingSend?.text}>
+        <div data-testid="message-list" data-pending-send={pendingSend?.message.content}>
           {messages.length}
         </div>
       );
@@ -223,10 +223,13 @@ describe("ChatMainPane", () => {
       <ChatMainPane
         {...paneProps("chat", [existingMessage])}
         pendingSend={{
-          messageId: "follow-up",
+          message: {
+            id: "follow-up",
+            role: "user",
+            content: "follow-up message",
+            timestamp: Date.now(),
+          },
           replyId: "follow-up-reply",
-          sentAt: Date.now(),
-          text: "follow-up message",
         }}
       />,
     );

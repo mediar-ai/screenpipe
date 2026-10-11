@@ -78,7 +78,7 @@ function formatMessageFullTime(timestamp: number): string | null {
 export interface ChatMessageListProps {
   messages: Message[];
   /** The send whose durable rows have not landed yet. It owns the live turn. */
-  pendingSend?: Omit<PendingSend, "sessionId"> | null;
+  pendingSend?: Pick<PendingSend, "message" | "replyId"> | null;
   isLoading: boolean;
   isStreaming: boolean;
   activeAcpAgentId?: string | null;
@@ -124,7 +124,7 @@ export interface ChatMessageListProps {
 
 export function ChatMessageList({
   messages,
-  pendingSend,
+  pendingSend: dispatchedSend,
   isLoading,
   isStreaming,
   activeAcpAgentId,
@@ -211,17 +211,17 @@ export function ChatMessageList({
     if (message.role !== "assistant") return true;
     return hasRenderableAssistantBody(message) || isSteeredAssistantMessage(message);
   });
-  // The pending send renders as the row that replaces it: same key, same
-  // markup. React keeps that element through the swap, so nothing moves.
-  if (pendingSend) {
-    visibleMessages.push({
-      id: pendingSend.messageId,
-      role: "user",
-      content: pendingSend.text,
-      ...(pendingSend.displayLabel ? { displayContent: pendingSend.displayLabel } : {}),
-      timestamp: pendingSend.sentAt,
-    });
-  }
+  // Store-backed chats (pipe watches, imported Codex/Claude chats) get the
+  // durable row from a store update, separate from the one that clears the
+  // pending send, and React may render the store's first. The durable row wins
+  // as soon as it exists, so the shared key never renders twice.
+  const pendingSend = dispatchedSend &&
+    !messages.some((message) => message.id === dispatchedSend.message.id)
+    ? dispatchedSend
+    : null;
+  // The pending send is the row that replaces it: same key, same content.
+  // React keeps that element through the swap, so nothing moves.
+  if (pendingSend) visibleMessages.push(pendingSend.message);
   // The transport-owned message id is the authoritative owner of the live
   // turn. The visible-message fallback only covers hydration before that id
   // reaches this surface; it must never promote an older completed answer.
@@ -306,7 +306,7 @@ export function ChatMessageList({
               !expandedSteerWorkIds.has(item.hideIntentLabelWhenCollapsedBy);
             const intentLabel = shouldSuppressIntentLabel ? null : getMessageIntentLabel(message);
             const isSteerUserMessage = message.role === "user" && message.intent === "steer";
-            const isPendingSend = message.id === pendingSend?.messageId;
+            const isPendingSend = message.id === pendingSend?.message.id;
             const canEditMessage = message.role === "user" && !isSteerUserMessage && !isLoading;
             const canShowMessageActions = !item.showActionsWhenExpandedBy ||
               expandedSteerWorkIds.has(item.showActionsWhenExpandedBy);
@@ -360,7 +360,9 @@ export function ChatMessageList({
                 // message appears in place, in the frame the user pressed Send.
                 initial={isPendingSend ? false : { y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+                // A pending row only exits when its send failed. The text is
+                // already back in the composer, so the bubble leaves at once.
+                exit={isPendingSend ? undefined : { opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
                 className={cn(
                   "relative flex min-w-0 transition-[background-color,box-shadow] duration-150",
@@ -731,7 +733,7 @@ export function ChatMessageList({
               <TurnStatus
                 signals={signals}
                 turnKey={pendingSend?.replyId ?? lastAssistant?.id ?? "pending-turn"}
-                startedAt={pendingSend?.sentAt ?? lastAssistant?.timestamp ?? null}
+                startedAt={pendingSend?.message.timestamp ?? lastAssistant?.timestamp ?? null}
               />
             </motion.div>
           );

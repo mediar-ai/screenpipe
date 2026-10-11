@@ -9,6 +9,7 @@ import { ChatMessageList, type ChatMessageListProps } from "./chat-message-list"
 import type { Message } from "@/lib/chat/types";
 
 import { useAcpBootState } from "@/lib/stores/acp-boot-state";
+import { useChatStore, type StoredMessage } from "@/lib/stores/chat-store";
 
 beforeEach(() => useAcpBootState.getState().clearAll());
 
@@ -401,13 +402,21 @@ describe("ChatMessageList pending send", () => {
     timestamp: sentAt - 5 * 60_000,
     contentBlocks: [{ type: "text", text: "Here is your summary." }],
   };
-  const pendingSend = {
-    messageId: "follow-up",
-    replyId: "follow-up-reply",
-    sentAt,
-    text: "And what about yesterday?",
+  // The transport builds the user row at Send and saves it unchanged.
+  const savedMessage: Message = {
+    id: "follow-up",
+    role: "user",
+    content: "And what about yesterday?",
+    timestamp: sentAt,
   };
+  const pendingSend = { message: savedMessage, replyId: "follow-up-reply" };
   const history = [userMessage, previousAnswer];
+  const reply: Message = {
+    id: pendingSend.replyId,
+    role: "assistant",
+    content: "Processing...",
+    timestamp: sentAt + 1,
+  };
 
   const rowFor = (container: HTMLElement, id: string) =>
     container.querySelector(`[data-message-id="${id}"]`) as HTMLElement;
@@ -418,7 +427,9 @@ describe("ChatMessageList pending send", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(sentAt);
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("renders the pending message in place, after history and before the turn status", () => {
     const { container } = render(<ChatMessageList {...messageListProps({
@@ -436,6 +447,31 @@ describe("ChatMessageList pending send", () => {
     expect(isBefore(pendingRow, status)).toBe(true);
   });
 
+  it("shows a document send's cards, not its raw text, while pending", () => {
+    const documentSend: Message = {
+      id: "document-send",
+      role: "user",
+      content: "Summarize this\n\n<attached file: notes.md>\nprivate notes\n</attached file>",
+      displayContent: "Summarize this",
+      attachments: [{ name: "notes.md", ext: "md", charCount: 13, truncated: false }],
+      images: ["data:image/png;base64,AAAA"],
+      timestamp: sentAt,
+    };
+    render(<ChatMessageList {...messageListProps({
+      messages: history,
+      isLoading: true,
+      pendingSend: { message: documentSend, replyId: "document-send-reply" },
+    })} />);
+
+    const pendingRow = screen.getByTestId("chat-pending-user-message");
+    expect(within(pendingRow).getByText("notes.md")).toBeInTheDocument();
+    expect(within(pendingRow).getByAltText("Attached 1")).toBeInTheDocument();
+    // A bubble without its attachments offered this expander, which revealed
+    // the whole extracted document.
+    expect(within(pendingRow).queryByTitle("Show full prompt")).not.toBeInTheDocument();
+    expect(pendingRow).not.toHaveTextContent("private notes");
+  });
+
   it("keeps the same row and turn clock when the saved rows replace the pending send", () => {
     const props = messageListProps({ messages: history, isLoading: true, pendingSend });
     const { container, rerender } = render(<ChatMessageList {...props} />);
@@ -443,18 +479,6 @@ describe("ChatMessageList pending send", () => {
     act(() => vi.advanceTimersByTime(3_000));
     expect(screen.getByTestId("chat-turn-status")).toHaveTextContent("analyzing · 3s");
 
-    const savedMessage: Message = {
-      id: pendingSend.messageId,
-      role: "user",
-      content: pendingSend.text,
-      timestamp: sentAt,
-    };
-    const reply: Message = {
-      id: pendingSend.replyId,
-      role: "assistant",
-      content: "Processing...",
-      timestamp: sentAt + 3_000,
-    };
     rerender(<ChatMessageList {...props}
       messages={[...history, savedMessage, reply]}
       isStreaming
@@ -492,5 +516,81 @@ describe("ChatMessageList pending send", () => {
     })} />);
 
     expect(screen.getByTestId("chat-turn-status")).toHaveTextContent("starting Claude Code");
+  });
+
+  it("renders the row once when a store-backed chat saves it before the pending send clears", () => {
+    const sessionId = "imported-codex-chat";
+    useChatStore.setState({
+      sessions: {
+        [sessionId]: {
+          id: sessionId,
+          title: "Codex",
+          preview: "",
+          status: "idle",
+          messageCount: history.length,
+          createdAt: sentAt,
+          updatedAt: sentAt,
+          pinned: false,
+          unread: false,
+          messages: history as StoredMessage[],
+        },
+      },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    let clearPendingSend = () => {};
+    let mostCopies = 0;
+    // Mirrors standalone-chat: pipe watches and imported Codex/Claude chats
+    // read their rows from the store, and the pending send from local state.
+    function StoreBackedChat() {
+      const messages = useChatStore((state) => state.sessions[sessionId]?.messages) as Message[];
+      const [pending, setPending] = React.useState<typeof pendingSend | null>(pendingSend);
+      clearPendingSend = () => setPending(null);
+      React.useLayoutEffect(() => {
+        mostCopies = Math.max(
+          mostCopies,
+          document.querySelectorAll(`[data-message-id="${pendingSend.message.id}"]`).length,
+        );
+      });
+      return <ChatMessageList {...messageListProps({ messages, isLoading: true, pendingSend: pending })} />;
+    }
+
+    const { container } = render(<StoreBackedChat />);
+    const pendingRow = screen.getByTestId("chat-pending-user-message");
+    // The transport clears the pending send and then mirrors the rows into the
+    // store. React may render the store's update first (React 18 does here).
+    act(() => {
+      const { actions } = useChatStore.getState();
+      actions.appendMessage(sessionId, savedMessage as StoredMessage);
+      actions.appendMessage(sessionId, reply as StoredMessage);
+    });
+    act(() => clearPendingSend());
+
+    expect(mostCopies).toBe(1);
+    expect(rowFor(container, savedMessage.id)).toBe(pendingRow);
+    expect(pendingRow).toHaveAttribute("data-testid", "chat-message-user");
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    consoleError.mockRestore();
+  });
+
+  it("keeps the time since Send when the turn status remounts mid-turn", () => {
+    // Returning to the chat mounts a fresh status. Its clock comes from the
+    // reply row, which carries the Send time, so the startup wait still counts.
+    vi.setSystemTime(sentAt + 8_500);
+    render(<ChatMessageList {...messageListProps({
+      messages: [...history, savedMessage, reply],
+      isLoading: true,
+      activeSourceFooterMessageId: reply.id,
+    })} />);
+
+    expect(screen.getByTestId("chat-turn-status")).toHaveTextContent("analyzing · 8s");
+  });
+
+  it("removes a failed send's bubble at once", () => {
+    const props = messageListProps({ messages: history, isLoading: true, pendingSend });
+    const { rerender } = render(<ChatMessageList {...props} />);
+
+    rerender(<ChatMessageList {...props} isLoading={false} pendingSend={null} />);
+
+    expect(screen.queryByTestId("chat-pending-user-message")).not.toBeInTheDocument();
   });
 });
