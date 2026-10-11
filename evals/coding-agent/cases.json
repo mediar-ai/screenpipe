@@ -6132,6 +6132,46 @@
         ],
         "command": "cd packages/screenpipe-mcp && SCREENPIPE_DISABLE_TELEMETRY=1 SCREENPIPE_MCP_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 node node_modules/vitest/vitest.mjs run src/eval-session.test.ts"
       }
+    },
+    {
+      "id": "app-vault-lock-fresh-process-key",
+      "name": "Lock and unlock an offline vault from fresh CLI processes",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "7d171cc2de988c92b0d38a940fecd8dfb27816b0"
+      },
+      "base_ref": "5dd6c7f0db9a38aa1ffbf71ae9bf5ef46f420a6d",
+      "oracle_ref": "7d171cc2de988c92b0d38a940fecd8dfb27816b0",
+      "oracle_paths": [
+        "crates/screenpipe-engine/src/cli/vault.rs",
+        "crates/screenpipe-engine/src/routes/vault.rs",
+        "crates/screenpipe-vault/src/lib.rs",
+        "crates/screenpipe-vault/src/manager.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-engine/src/cli/vault.rs",
+        "crates/screenpipe-vault"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "vault",
+        "data-integrity",
+        "preserved-behavior"
+      ],
+      "prompt": "Offline vault setup succeeds, but a later CLI invocation cannot lock the existing vault. Repair the actual CLI flow so setup, lock and unlock can run in independent processes. Setup must leave database, WAL, SHM and nested media bytes unchanged and report unlocked. Lock with the correct password must succeed, report locked, encrypt all those files using the existing SPVAULT1-compatible format without leaving their plaintext content, and allow a fresh unlock process to restore identical original bytes and report unlocked. A wrong lock password must fail while preserving plaintext and unlocked state. A wrong unlock password and a second lock of an already-locked vault must fail without changing encrypted bytes or locked state. Lock before setup must fail without creating vault metadata or altering data. Repeated setup must fail without changing metadata or plaintext. Preserve command status behavior and compatible existing callers; no particular helper or key-storage implementation is required. Grading executes the actual CLI handler and complete vault crate in a minimal offline Cargo workspace, with synthetic filesystem paths and password input, separate processes, and an offline daemon port. It does not run the packaged engine, terminal input, HTTP routes, live recordings or customer files. Do not broaden online locking or migration policy; current daemon and hybrid-storage restrictions remain separate preserved contracts.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 240,
+        "fixtures": [
+          {
+            "local_path": "graders/vault-cli.fixture.js",
+            "destination_path": "vault-cli.eval.js"
+          }
+        ],
+        "command": "bun --no-env-file vault-cli.eval.js"
+      }
     }
   ]
 }
