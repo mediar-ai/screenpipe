@@ -318,6 +318,22 @@ pub(crate) struct InterruptedMeeting {
     captured_at: Instant,
 }
 
+impl InterruptedMeeting {
+    /// `manual_id` is in memory, so a relaunch clears it. The startup sweep
+    /// keeps a user-started meeting open, so its row's source still marks it as
+    /// manual, the same rule the meeting watcher uses when it reattaches.
+    fn from_active_meeting(meeting: screenpipe_db::MeetingRecord, manual_id: Option<i64>) -> Self {
+        Self {
+            manual: manual_id == Some(meeting.id) || meeting.detection_source == "manual",
+            id: meeting.id,
+            app: meeting.meeting_app,
+            title: meeting.title,
+            detection_source: meeting.detection_source,
+            captured_at: Instant::now(),
+        }
+    }
+}
+
 /// Two-phase state: server (long-lived) + capture (togglable).
 ///
 /// **Lock ordering**: acquire `server_lifecycle` first for a full stop/start,
@@ -614,15 +630,7 @@ async fn remember_active_meeting_from_server(state: &RecordingState, server: &Se
         return;
     };
 
-    let meeting_id = meeting.id;
-    let interrupted = InterruptedMeeting {
-        id: meeting_id,
-        app: meeting.meeting_app,
-        title: meeting.title,
-        detection_source: meeting.detection_source,
-        manual: manual_id == Some(meeting_id),
-        captured_at: Instant::now(),
-    };
+    let interrupted = InterruptedMeeting::from_active_meeting(meeting, manual_id);
     info!(
         "remembering active meeting across capture restart (id={}, app={}, manual={})",
         interrupted.id, interrupted.app, interrupted.manual
@@ -643,45 +651,60 @@ async fn has_fresh_interrupted_meeting(state: &RecordingState) -> bool {
         })
 }
 
+/// Make an interrupted meeting's row match the restarted session, and return
+/// whether the meeting continues in it.
+///
 /// Only the meeting watcher ends an auto-detected meeting. In a session without
 /// one (audio or meeting detection off) the meeting would stay live with no
-/// audio, and a later restart would stretch it over the gap. A manual meeting
-/// is ended by the user, so it always comes back.
-fn reopens_after_restart(
-    interrupted: &InterruptedMeeting,
-    restarted_session_detects_meetings: bool,
-) -> bool {
-    interrupted.manual || restarted_session_detects_meetings
-}
-
-/// End an interrupted meeting at the time the restart began, as the watcher's
-/// shutdown hook would have.
-async fn end_meeting_at_restart(
+/// audio, and a later restart would stretch it over the gap, so it ends at the
+/// time the restart began. The old watcher ends its meeting on shutdown, but
+/// nothing waits for that write, and a watcher never tracks a row reopened
+/// after it started. A manual meeting is ended by the user, so it always
+/// continues.
+async fn settle_interrupted_meeting(
     db: &screenpipe_db::DatabaseManager,
     interrupted: &InterruptedMeeting,
-) -> Result<(), String> {
-    let ended_at = chrono::Utc::now()
-        - chrono::Duration::from_std(interrupted.captured_at.elapsed()).unwrap_or_default();
-    db.end_meeting(
-        interrupted.id,
-        &ended_at.to_rfc3339(),
-        Some(screenpipe_db::MEETING_END_REASON_SHUTDOWN),
-    )
-    .await
-    .map(|_| ())
-    .map_err(|e| e.to_string())
+    restarted_session_detects_meetings: bool,
+) -> Result<bool, String> {
+    let active = db
+        .get_active_meeting_by_id(interrupted.id)
+        .await
+        .map_err(|e| e.to_string())?
+        .is_some();
+    if !interrupted.manual && !restarted_session_detects_meetings {
+        if active {
+            let ended_at = chrono::Utc::now()
+                - chrono::Duration::from_std(interrupted.captured_at.elapsed()).unwrap_or_default();
+            db.end_meeting(
+                interrupted.id,
+                &ended_at.to_rfc3339(),
+                Some(screenpipe_db::MEETING_END_REASON_SHUTDOWN),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+        return Ok(false);
+    }
+    if !active {
+        db.reopen_meeting(interrupted.id)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(true)
 }
 
+/// Meeting bookkeeping never blocks the capture start that calls this, so a
+/// failure is logged, not returned.
 async fn restore_interrupted_meeting_for_capture_restart(
     state: &RecordingState,
     restarted_session_detects_meetings: bool,
-) -> Result<(), String> {
+) {
     let interrupted = {
         let mut guard = state.interrupted_meeting.lock().await;
         guard.take()
     };
     let Some(interrupted) = interrupted else {
-        return Ok(());
+        return;
     };
 
     if interrupted.captured_at.elapsed() > CAPTURE_RESTART_MEETING_REATTACH_WINDOW {
@@ -689,39 +712,32 @@ async fn restore_interrupted_meeting_for_capture_restart(
             "skipping stale interrupted meeting restore (id={}, app={})",
             interrupted.id, interrupted.app
         );
-        return Ok(());
+        return;
     }
 
     let server_guard = state.server.lock().await;
     let Some(server) = server_guard.as_ref() else {
-        return Ok(());
+        return;
     };
 
-    let already_active = server
-        .db
-        .get_active_meeting_by_id(interrupted.id)
+    match settle_interrupted_meeting(&server.db, &interrupted, restarted_session_detects_meetings)
         .await
-        .map_err(|e| e.to_string())?
-        .is_some();
-    if !reopens_after_restart(&interrupted, restarted_session_detects_meetings) {
-        // The old watcher ends its meeting on shutdown, but nothing waits for
-        // that write, and a watcher never tracks a row reopened after it
-        // started.
-        if already_active {
-            end_meeting_at_restart(&server.db, &interrupted).await?;
+    {
+        Ok(true) => {}
+        Ok(false) => {
+            info!(
+                "ended auto-detected meeting across restart: the restarted session does not detect meetings (id={}, app={})",
+                interrupted.id, interrupted.app
+            );
+            return;
         }
-        info!(
-            "ended auto-detected meeting across restart: the restarted session does not detect meetings (id={}, app={})",
-            interrupted.id, interrupted.app
-        );
-        return Ok(());
-    }
-    if !already_active {
-        server
-            .db
-            .reopen_meeting(interrupted.id)
-            .await
-            .map_err(|e| e.to_string())?;
+        Err(e) => {
+            warn!(
+                "failed to restore interrupted meeting after restart (id={}): {}",
+                interrupted.id, e
+            );
+            return;
+        }
     }
 
     if interrupted.manual {
@@ -766,7 +782,6 @@ async fn restore_interrupted_meeting_for_capture_restart(
         "restored active meeting across capture restart (id={}, app={}, source={}, title={:?})",
         interrupted.id, interrupted.app, interrupted.detection_source, interrupted.title
     );
-    Ok(())
 }
 
 /// Probe `/health`, retrying once before declaring the server dead. A single
@@ -922,7 +937,7 @@ async fn start_capture_inner(
         &state,
         crate::capture_session::detects_meetings(&config),
     )
-    .await?;
+    .await;
 
     let server_guard = state.server.lock().await;
     let server = server_guard
@@ -1007,11 +1022,21 @@ pub(crate) async fn stop_screenpipe_inner(state: &RecordingState) -> Result<(), 
 pub(crate) async fn restart_keeping_capture_intent(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<RecordingState>();
     let _lifecycle = state.server_lifecycle.lock().await;
+    restart_keeping_capture_intent_locked(&state, app).await
+}
+
+/// [`restart_keeping_capture_intent`] for a caller that already holds
+/// `server_lifecycle`. With nothing running and capture paused there is nothing
+/// to restart; the next start reads the settings.
+pub(crate) async fn restart_keeping_capture_intent_locked(
+    state: &RecordingState,
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
     if !state.capture_intended() && state.server.lock().await.is_none() {
         return Ok(());
     }
-    stop_screenpipe_inner(&state).await?;
-    spawn_screenpipe_inner(&state, app.clone()).await
+    stop_screenpipe_inner(state).await?;
+    spawn_screenpipe_inner(state, app.clone()).await
 }
 
 async fn shutdown_server<T, F, Fut>(
@@ -1889,12 +1914,7 @@ async fn spawn_screenpipe_after_migration(
             // Without a capture session, nothing detects meetings either.
             let session_detects_meetings =
                 config_detects_meetings && state.capture.lock().await.is_some();
-            if let Err(e) =
-                restore_interrupted_meeting_for_capture_restart(&state, session_detects_meetings)
-                    .await
-            {
-                warn!("failed to restore interrupted meeting after restart: {}", e);
-            }
+            restore_interrupted_meeting_for_capture_restart(&state, session_detects_meetings).await;
             let spawn_epoch = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -1958,7 +1978,7 @@ pub(crate) async fn start_capture_internal(
         state,
         crate::capture_session::detects_meetings(&config),
     )
-    .await?;
+    .await;
 
     let server_guard = state.server.lock().await;
     let server = server_guard
@@ -2256,49 +2276,13 @@ mod capture_intent_tests {
 
 #[cfg(test)]
 mod meeting_restore_tests {
-    use super::{end_meeting_at_restart, reopens_after_restart, InterruptedMeeting};
+    use super::{settle_interrupted_meeting, InterruptedMeeting};
     use crate::capture_session::detects_meetings;
     use crate::store::SettingsStore;
     use screenpipe_db::{DatabaseManager, MEETING_END_REASON_SHUTDOWN};
     use std::time::{Duration, Instant};
 
-    fn interrupted(manual: bool) -> InterruptedMeeting {
-        InterruptedMeeting {
-            id: 7,
-            app: "zoom".into(),
-            title: None,
-            detection_source: "app".into(),
-            manual,
-            captured_at: Instant::now(),
-        }
-    }
-
-    /// Stopping audio mid-meeting restarts the engine. With audio off no
-    /// watcher runs, so a reopened auto-detected meeting would never end.
-    #[test]
-    fn auto_detected_meetings_reopen_only_into_a_session_that_detects_meetings() {
-        let mut config =
-            SettingsStore::default().to_recording_config(std::path::PathBuf::from("test-data"));
-        config.disable_audio = false;
-        config.disable_meeting_detector = false;
-        assert!(detects_meetings(&config));
-        assert!(reopens_after_restart(&interrupted(false), true));
-
-        config.disable_audio = true;
-        assert!(!detects_meetings(&config));
-        assert!(!reopens_after_restart(&interrupted(false), false));
-        // The user ends a manual meeting, so it still comes back.
-        assert!(reopens_after_restart(&interrupted(true), false));
-
-        config.disable_audio = false;
-        config.disable_meeting_detector = true;
-        assert!(!detects_meetings(&config));
-    }
-
-    /// Nothing waits for the old watcher's shutdown write, so the restart ends
-    /// a meeting it will not reopen, at the time the restart began.
-    #[tokio::test]
-    async fn a_meeting_the_restart_does_not_reopen_ends_when_the_restart_began() {
+    async fn database() -> (tempfile::TempDir, DatabaseManager) {
         let root = tempfile::tempdir().unwrap();
         let db = DatabaseManager::new(
             root.path().join("db.sqlite").to_str().unwrap(),
@@ -2306,27 +2290,108 @@ mod meeting_restore_tests {
         )
         .await
         .unwrap();
-        let mut meeting = interrupted(false);
-        meeting.id = db.insert_meeting("zoom", "app", None, None).await.unwrap();
-        meeting.captured_at = Instant::now() - Duration::from_secs(30);
+        (root, db)
+    }
 
-        end_meeting_at_restart(&db, &meeting).await.unwrap();
+    /// Remember the open meeting the way a restart does, with the in-memory
+    /// manual id the server holds (`None` after a relaunch).
+    async fn remember(db: &DatabaseManager, manual_id: Option<i64>) -> InterruptedMeeting {
+        let row = db.get_most_recent_active_meeting().await.unwrap().unwrap();
+        let mut interrupted = InterruptedMeeting::from_active_meeting(row, manual_id);
+        interrupted.captured_at = Instant::now() - Duration::from_secs(30);
+        interrupted
+    }
 
-        assert!(db
-            .get_active_meeting_by_id(meeting.id)
-            .await
-            .unwrap()
-            .is_none());
+    async fn is_active(db: &DatabaseManager, id: i64) -> bool {
+        db.get_active_meeting_by_id(id).await.unwrap().is_some()
+    }
+
+    #[test]
+    fn meetings_are_detected_only_with_audio_and_the_meeting_detector_on() {
+        let mut config =
+            SettingsStore::default().to_recording_config(std::path::PathBuf::from("test-data"));
+        config.disable_audio = false;
+        config.disable_meeting_detector = false;
+        assert!(detects_meetings(&config));
+        config.disable_audio = true;
+        assert!(!detects_meetings(&config));
+        config.disable_audio = false;
+        config.disable_meeting_detector = true;
+        assert!(!detects_meetings(&config));
+    }
+
+    /// Stopping audio mid-meeting restarts the engine. With audio off no
+    /// watcher runs, so a reopened auto-detected meeting would never end.
+    #[tokio::test]
+    async fn an_auto_detected_meeting_ends_when_the_restart_began_if_nothing_detects_meetings() {
+        let (_root, db) = database().await;
+        let id = db.insert_meeting("zoom", "app", None, None).await.unwrap();
+        let meeting = remember(&db, None).await;
+        assert!(!meeting.manual);
+
         assert_eq!(
-            db.meeting_end_reason(meeting.id).await.unwrap().as_deref(),
+            settle_interrupted_meeting(&db, &meeting, false).await,
+            Ok(false)
+        );
+
+        assert!(!is_active(&db, id).await);
+        assert_eq!(
+            db.meeting_end_reason(id).await.unwrap().as_deref(),
             Some(MEETING_END_REASON_SHUTDOWN)
         );
-        let meeting_end = db.get_meeting_by_id(meeting.id).await.unwrap().meeting_end;
+        let meeting_end = db.get_meeting_by_id(id).await.unwrap().meeting_end;
         let ended = chrono::DateTime::parse_from_rfc3339(&meeting_end.unwrap()).unwrap();
         let seconds_ago = chrono::Utc::now()
             .signed_duration_since(ended)
             .num_seconds();
         assert!((29..=40).contains(&seconds_ago), "ended {seconds_ago}s ago");
+        db.close().await;
+    }
+
+    /// The old watcher ends its meeting on shutdown; a session that detects
+    /// meetings picks it back up.
+    #[tokio::test]
+    async fn an_auto_detected_meeting_reopens_into_a_session_that_detects_meetings() {
+        let (_root, db) = database().await;
+        let id = db.insert_meeting("zoom", "app", None, None).await.unwrap();
+        let meeting = remember(&db, None).await;
+        db.end_meeting(
+            id,
+            &chrono::Utc::now().to_rfc3339(),
+            Some(MEETING_END_REASON_SHUTDOWN),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            settle_interrupted_meeting(&db, &meeting, true).await,
+            Ok(true)
+        );
+
+        assert!(is_active(&db, id).await);
+        db.close().await;
+    }
+
+    /// A relaunch clears the in-memory manual id, and the startup sweep keeps a
+    /// user-started meeting open. Turning audio off afterwards must not end it.
+    #[tokio::test]
+    async fn a_user_started_meeting_survives_a_relaunch_and_an_audio_off_restart() {
+        let (_root, db) = database().await;
+        let id = db
+            .insert_meeting("manual", "manual", None, None)
+            .await
+            .unwrap();
+        db.close_orphaned_meetings().await.unwrap();
+        assert!(is_active(&db, id).await, "the startup sweep kept it open");
+        let meeting = remember(&db, None).await;
+        assert!(meeting.manual);
+
+        assert_eq!(
+            settle_interrupted_meeting(&db, &meeting, false).await,
+            Ok(true)
+        );
+
+        assert!(is_active(&db, id).await);
         db.close().await;
     }
 }

@@ -97,9 +97,10 @@ fn save_disable_audio<R: tauri::Runtime>(
         .ok_or("settings unavailable")?;
     let mut next = current.clone();
     next["disableAudio"] = serde_json::json!(disable_audio);
-    // Older configs, policy, or the API can turn audio off with this mode,
-    // which Settings no longer offers. The engine honors it over
-    // `disableAudio`, so turning audio on has to clear it too.
+    // Policy, the settings API, or a hand-edited config can turn audio off with
+    // this mode; Settings doesn't offer it. The engine honors it over
+    // `disableAudio`, so turning audio on has to clear it too. `always` is what
+    // an unset mode means, and it records right away, as the confirmation says.
     if !disable_audio
         && next["audioCaptureMode"]
             .as_str()
@@ -124,6 +125,20 @@ fn save_disable_audio<R: tauri::Runtime>(
         return Err(error);
     }
     Ok(AudioSettingChange::Saved)
+}
+
+/// Whether a press has to restart the engine to take effect. A saved change
+/// always does. Otherwise the running session (`None` while paused) can still
+/// disagree with the setting: Settings saves its Audio Recording switch at once
+/// but applies it only on "Apply & Restart", and `/audio/stop` stops audio
+/// without changing the setting.
+fn restart_needed(
+    change: &AudioSettingChange,
+    enabled: bool,
+    session_records_audio: Option<bool>,
+) -> bool {
+    *change == AudioSettingChange::Saved
+        || session_records_audio.is_some_and(|records| records != enabled)
 }
 
 static AUDIO_SHORTCUT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -215,18 +230,17 @@ fn set_audio_recording(app: &AppHandle, enabled: bool) {
                 AudioShortcutResult::SaveFailed
             }
             Ok(change) => {
-                // Settings saves its Audio Recording switch at once but applies
-                // it only on "Apply & Restart", so a running session can
-                // disagree with a setting that is already saved.
-                let restart = change == AudioSettingChange::Saved
-                    || app
-                        .state::<crate::recording::RecordingState>()
-                        .capture
-                        .lock()
-                        .await
-                        .as_ref()
-                        .is_some_and(|session| session.audio_disabled() != disable_audio);
-                if !restart {
+                let session_records_audio = match app
+                    .state::<crate::recording::RecordingState>()
+                    .capture
+                    .lock()
+                    .await
+                    .as_ref()
+                {
+                    Some(session) => Some(session.records_audio().await),
+                    None => None,
+                };
+                if !restart_needed(&change, enabled, session_records_audio) {
                     AudioShortcutResult::Applied
                 } else if let Err(error) =
                     crate::recording::restart_keeping_capture_intent(&app).await
@@ -248,7 +262,7 @@ fn set_audio_recording(app: &AppHandle, enabled: bool) {
         crate::notifications::client::send_typed_with_priority(
             title,
             body,
-            "system",
+            crate::notifications::gate::USER_ACTION_NOTIFICATION_TYPE,
             auto_dismiss_ms,
             priority,
         );
@@ -766,8 +780,8 @@ pub fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        audio_shortcut_notice, save_disable_audio, search_transition_succeeded, AudioSettingChange,
-        AudioShortcutResult,
+        audio_shortcut_notice, restart_needed, save_disable_audio, search_transition_succeeded,
+        AudioSettingChange, AudioShortcutResult,
     };
     use crate::notifications::store::NotificationPriority;
     use crate::store::SettingsStore;
@@ -878,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn starting_audio_clears_the_legacy_disabled_capture_mode() {
+    fn starting_audio_clears_a_disabled_capture_mode() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("store.bin");
         let mut settings = json!(SettingsStore::default());
@@ -956,5 +970,38 @@ mod tests {
             audio_shortcut_notice(true, true, &AudioShortcutResult::Applied).1,
             "Audio will be recorded when recording resumes."
         );
+    }
+
+    /// Off, on, off within a few minutes is three answers to three presses.
+    /// As `system` alerts, the third was muted as a repeat of the first.
+    #[test]
+    fn audio_shortcut_confirmations_are_never_muted_as_repeats() {
+        use crate::notifications::gate::{repeat_suppressed_now, USER_ACTION_NOTIFICATION_TYPE};
+
+        for enabled in [false, true, false, true] {
+            let (title, body, _) =
+                audio_shortcut_notice(enabled, false, &AudioShortcutResult::Applied);
+            assert!(
+                !repeat_suppressed_now(Some(USER_ACTION_NOTIFICATION_TYPE), None, &title, &body),
+                "{title} was muted"
+            );
+        }
+    }
+
+    #[test]
+    fn audio_shortcuts_restart_only_when_the_running_session_disagrees() {
+        use AudioSettingChange::{AlreadySet, Saved};
+
+        assert!(restart_needed(&Saved, true, None));
+        assert!(restart_needed(&Saved, false, Some(true)));
+        // Paused: nothing runs, and the next start reads the saved setting.
+        assert!(!restart_needed(&AlreadySet, true, None));
+        // A repeat press while the session already agrees.
+        assert!(!restart_needed(&AlreadySet, true, Some(true)));
+        assert!(!restart_needed(&AlreadySet, false, Some(false)));
+        // Settings saved its switch, but "Apply & Restart" never ran.
+        assert!(restart_needed(&AlreadySet, false, Some(true)));
+        // `/audio/stop` stopped audio without changing the setting.
+        assert!(restart_needed(&AlreadySet, true, Some(false)));
     }
 }
