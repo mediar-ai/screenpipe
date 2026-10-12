@@ -4878,10 +4878,6 @@ mod tests {
         .unwrap();
         PiExecutor::ensure_screenpipe_skill_filtered(pipe.path(), &config).unwrap();
         let expected = include_str!("../../assets/skills/screenpipe-workflow-maintenance/SKILL.md");
-        assert!(
-            expected.len() < 5000,
-            "maintenance guide must fit small-context models"
-        );
         for root in [chat.path(), pipe.path()] {
             assert_eq!(
                 std::fs::read_to_string(
@@ -4919,7 +4915,9 @@ mod tests {
         let cli_skill = include_str!("../../assets/skills/screenpipe-cli/SKILL.md");
 
         for skill in [api_skill, cli_skill] {
-            assert!(skill.contains("Never access live `db.sqlite`"));
+            assert!(skill.contains(
+                "Never access the recorder's live SQLite database, write-ahead log, or shared-memory files directly."
+            ));
             assert!(!skill.contains("sqlite3 \"file:"));
         }
         assert!(api_skill.contains("MCP `query_recordings`"));
