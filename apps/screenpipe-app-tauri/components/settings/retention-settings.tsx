@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { localFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { commands } from "@/lib/utils/tauri";
+import { commands, type StorageMigrationStatus } from "@/lib/utils/tauri";
 import { useGT } from "gt-react";
 import { msg, useMessages } from "gt-react";
 import { localizeDefinitions } from "@/lib/i18n/definitions";
@@ -112,7 +112,9 @@ export function RetentionSettings({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [pendingRecent, setPendingRecent] = useState<number | null>(null);
   const [deletingRecent, setDeletingRecent] = useState(false);
-  const [pendingCompact, setPendingCompact] = useState(false);
+  const [storageStatus, setStorageStatus] = useState<StorageMigrationStatus | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [pendingCompact, setPendingCompact] = useState<StorageMigrationStatus | null>(null);
   const [compacting, setCompacting] = useState(false);
   const [lowDiskThreshold, setLowDiskThreshold] = useState<string>(
     "the safety reserve",
@@ -124,7 +126,7 @@ export function RetentionSettings({
     (settings.localRetentionMode as RetentionMode | undefined) ?? "media";
   const effective: EffectiveMode = enabled ? mode : "off";
   const compactRequiredBytes =
-    databaseBytes && databaseBytes > 0
+    storageStatus && !storageStatus.generation && databaseBytes && databaseBytes > 0
       ? databaseBytes * COMPACT_FREE_SPACE_MULTIPLIER +
         COMPACT_FREE_SPACE_HEADROOM
       : null;
@@ -148,6 +150,20 @@ export function RetentionSettings({
     fetchStatus();
   }, [fetchStatus]);
   useInterval(fetchStatus, 10000);
+
+  const fetchStorageStatus = useCallback(async () => {
+    try {
+      const result = await commands.getStorageMigrationStatus();
+      if (result.status === "error") throw new Error(String(result.error));
+      setStorageStatus(result.data);
+      setStorageError(null);
+    } catch (error) {
+      setStorageStatus(null);
+      setStorageError(String(error));
+    }
+  }, []);
+  useEffect(() => { void fetchStorageStatus(); }, [fetchStorageStatus, settings.dataDir]);
+  useInterval(fetchStorageStatus, 10000);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,9 +340,29 @@ export function RetentionSettings({
   };
 
   const confirmCompact = async () => {
-    setPendingCompact(false);
+    if (!pendingCompact) return;
+    const target = pendingCompact;
+    setPendingCompact(null);
     setCompacting(true);
     try {
+      const current = await commands.getStorageMigrationStatus();
+      if (current.status === "error") throw new Error(String(current.error));
+      if (current.data.root !== target.root || current.data.generation !== target.generation) {
+        throw new Error(ui("Storage changed. Review storage and confirm compaction again."));
+      }
+      if (current.data.busy || current.data.pending || current.data.blocked_reason) {
+        throw new Error(current.data.blocked_reason || ui("Storage is busy. Wait for it to finish before compacting."));
+      }
+      if (target.generation) {
+        const result = await commands.compactStorage(target.root, target.generation);
+        if (result.status === "error") throw new Error(String(result.error));
+        toast({
+          title: ui("Database compacted"),
+          description: ui("Your history is ready. Your recording preference has been restored."),
+        });
+        onStorageChanged?.();
+        return;
+      }
       const res = await localFetch("/data/compact", { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -350,6 +386,7 @@ export function RetentionSettings({
       });
     } finally {
       setCompacting(false);
+      void fetchStorageStatus();
     }
   };
 
@@ -569,9 +606,8 @@ export function RetentionSettings({
             </div>
           )}
 
-          {/* Compact — physically shrink db.sqlite by rebuilding it (full
-              VACUUM). Cleanup/lean stop the DB growing and reuse freed pages,
-              but the file only returns space to the drive when compacted. */}
+          {/* Compressed storage needs native offline maintenance; legacy SQLite
+              keeps its existing online VACUUM and scratch-space preflight. */}
           <div className="flex flex-wrap items-center gap-3 pl-6 border-t border-border pt-3">
             <div className="flex-1 min-w-[180px]">
               <p className="text-sm font-medium">Reclaim disk space</p>
@@ -580,6 +616,9 @@ export function RetentionSettings({
                 drive. Cleanup keeps the database from growing; compacting is
                 what actually shrinks the file.
               </p>
+              {storageError && <p className="text-xs text-destructive" role="alert">{storageError}</p>}
+              {storageStatus?.blocked_reason && <p className="text-xs text-muted-foreground">{storageStatus.blocked_reason}</p>}
+              {storageStatus?.pending && <p className="text-xs text-muted-foreground">Finish storage migration before compacting.</p>}
               {compactRequiredBytes !== null &&
                 availableBytes !== undefined && (
                   <p
@@ -599,8 +638,8 @@ export function RetentionSettings({
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => setPendingCompact(true)}
-              disabled={compacting || !compactHasEnoughSpace}
+              onClick={() => setPendingCompact(storageStatus)}
+              disabled={compacting || !storageStatus || storageStatus.busy || storageStatus.pending || Boolean(storageStatus.blocked_reason) || !compactHasEnoughSpace}
             >
               {compacting ? (
                 <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
@@ -615,18 +654,19 @@ export function RetentionSettings({
 
       {/* Compact confirmation */}
       <AlertDialog
-        open={pendingCompact}
+        open={pendingCompact !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingCompact(false);
+          if (!open) setPendingCompact(null);
         }}
       >
         <AlertDialogContent data-testid="retention-compact-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle>Compact the database?</AlertDialogTitle>
             <AlertDialogDescription>
-              Screenpipe will rebuild db.sqlite to return freed space to your
-              drive. Recording briefly pauses while it runs, and the data size
-              may temporarily grow before dropping when compaction finishes.
+              Screenpipe will reclaim unused database space while keeping your
+              history. Recording and history access pause until it finishes,
+              then your recording preference is restored. Keep Screenpipe open.
+              {pendingCompact?.generation && ui(" Available space is checked against the work needed before compaction starts.")}
               {compactRequiredBytes !== null && availableBytes !== undefined
                 ? ui(" needs about {value1} free; you have {value2}.", { value1: formatBytes(compactRequiredBytes), value2: formatBytes(availableBytes) })
                 : ui(" larger databases take longer.")}

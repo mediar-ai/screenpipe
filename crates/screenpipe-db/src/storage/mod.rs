@@ -36,7 +36,7 @@ pub use lifecycle::{
     recover_interrupted_migration_with_progress, MigrationOptions, MigrationProgress,
     MigrationReport,
 };
-pub use maintenance::{compact, export_sqlite};
+pub use maintenance::{compact, export_sqlite, recover_interrupted_compaction};
 pub use reader::StorageReadToken;
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};

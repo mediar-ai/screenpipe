@@ -317,6 +317,18 @@ async codingWorkspacePrepare(conversationId: string, prompt: string, startingPat
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Explicit Settings action. Keep exclusive lifecycle ownership through reopen,
+ * including after a failure, even if the requesting webview closes.
+ */
+async compactStorage(root: string, generation: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("compact_storage", { root, generation }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async completeOnboarding() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("complete_onboarding") };

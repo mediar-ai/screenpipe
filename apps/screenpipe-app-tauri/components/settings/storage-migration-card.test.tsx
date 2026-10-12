@@ -44,6 +44,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("storage migration", () => {
+  it("recognizes compressed storage after compaction advances its generation", async () => {
+    migrated({ completed: false, source_bytes: 0, can_delete_source: false });
+    mount();
+    expect(await screen.findByText("Your recordings use the new compressed storage.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Migrate storage" })).toBeNull();
+  });
   it("shows physical savings without a deletion action for in-place migrations", async () => {
     migrated({ in_place: true, source_bytes: 0, bytes_saved: 4 * 1024 ** 3, can_delete_source: false });
     mount();

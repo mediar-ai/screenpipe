@@ -396,6 +396,12 @@ impl ServerCore {
             message
         })?;
 
+        screenpipe_db::storage::recover_interrupted_compaction(
+            &local_data_dir,
+            config.db_config.clone(),
+        )
+        .await
+        .map_err(|error| format!("Failed to restore storage after compaction: {error}"))?;
         screenpipe_db::storage::recover_interrupted_migration(
             &local_data_dir,
             config.db_config.clone(),

@@ -1418,9 +1418,38 @@ mod tests {
         .unwrap();
         db.close().await;
         // Run the real preflight and persist its outcome before collecting it.
-        let error = screenpipe_db::storage::compact(root.path(), Default::default())
-            .await
-            .unwrap_err();
+        let error = screenpipe_db::storage::diagnostics::observe(
+            root.path(),
+            "compact",
+            |_, _| {},
+            async {
+                let result = screenpipe_db::storage::compact(root.path(), Default::default()).await;
+                // Desktop keeps one attempt through failed compaction and reopen.
+                // Recovery must not overwrite the originating preflight failure.
+                screenpipe_db::storage::diagnostics::stage("restoring_recording_after_compact");
+                screenpipe_db::storage::recover_interrupted_compaction(
+                    root.path(),
+                    Default::default(),
+                )
+                .await
+                .unwrap();
+                let reopened = screenpipe_db::DatabaseManager::new(
+                    root.path().join("db.sqlite").to_str().unwrap(),
+                    Default::default(),
+                )
+                .await
+                .unwrap();
+                reopened
+                    .insert_audio_chunk("recording-after-refused-compaction.wav", None)
+                    .await
+                    .unwrap();
+                reopened.close().await;
+                result
+            },
+        )
+        .await
+        .unwrap_err();
+        wait_for_migration_failure(root.path()).await;
         assert!(error
             .to_string()
             .contains("insufficient compact disk reserve"));

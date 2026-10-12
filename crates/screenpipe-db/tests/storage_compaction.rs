@@ -161,7 +161,7 @@ async fn interrupted_candidates_cancel_or_resume_without_losing_payloads() {
         "compact_ready",
         "compact_activated",
     ] {
-        for cancel in [false, true] {
+        for action in ["resume", "cancel", "startup"] {
             let root = tempfile::tempdir().unwrap();
             let source = fixture(root.path(), 0, 4).await;
             let before = observations(root.path()).await;
@@ -182,7 +182,17 @@ async fn interrupted_candidates_cancel_or_resume_without_losing_payloads() {
                 "{point}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            if cancel {
+            if action == "startup" {
+                storage::recover_interrupted_compaction(root.path(), Default::default())
+                    .await
+                    .unwrap();
+                if point != "compact_activated" {
+                    assert_eq!(
+                        StorageDescriptor::read(root.path()).unwrap().unwrap(),
+                        source
+                    );
+                }
+            } else if action == "cancel" {
                 let output = cli(root.path(), "cancel", None);
                 if point == "compact_activated" {
                     assert!(!output.status.success());
@@ -207,10 +217,20 @@ async fn interrupted_candidates_cancel_or_resume_without_losing_payloads() {
             assert_eq!(
                 observations(root.path()).await,
                 before,
-                "{point} cancel={cancel}"
+                "{point} action={action}"
             );
             assert_eq!(observations(root.path()).await, before, "second restart");
-            eprintln!("recovery passed: {point}, cancel={cancel}");
+            let db = open(root.path()).await;
+            db.insert_audio_chunk("recording-after-compaction.wav", None)
+                .await
+                .unwrap();
+            db.close().await;
+            let db = open(root.path()).await;
+            let recorded: i64 = sqlx::query_scalar("SELECT count(*) FROM audio_chunks WHERE file_path='recording-after-compaction.wav'")
+                .fetch_one(&db.pool).await.unwrap();
+            assert_eq!(recorded, 1);
+            db.close().await;
+            eprintln!("recovery passed: {point}, action={action}");
         }
     }
 }

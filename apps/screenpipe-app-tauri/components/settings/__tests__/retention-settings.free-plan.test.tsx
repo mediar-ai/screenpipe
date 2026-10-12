@@ -30,7 +30,7 @@ vi.mock("@/components/ui/use-toast", () => ({
 }));
 vi.mock("@/lib/api", () => ({ localFetch: mocks.localFetch }));
 vi.mock("@/lib/utils/tauri", () => ({
-  commands: { getLowDiskGuardConfig: mocks.getLowDiskGuardConfig },
+  commands: { getLowDiskGuardConfig: mocks.getLowDiskGuardConfig, getStorageMigrationStatus: vi.fn(() => new Promise(() => {})) },
 }));
 vi.mock("../setting-previews", () => ({
   RetentionModePreview: () => null,

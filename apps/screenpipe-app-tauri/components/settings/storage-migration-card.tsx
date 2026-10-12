@@ -93,7 +93,7 @@ export function StorageMigrationCard({ dataDirectory, onBusyChange }: {
           <div className="min-w-0 flex-1 space-y-1">
             <h3 className="text-sm font-medium">Database storage</h3>
             <p className="text-xs text-muted-foreground">
-              {status?.completed && status.using_new_storage
+              {status?.using_new_storage
                 ? ui("Your recordings use the new compressed storage.")
                 : ui("Reduce database size while keeping your recorded history searchable.")}
             </p>
