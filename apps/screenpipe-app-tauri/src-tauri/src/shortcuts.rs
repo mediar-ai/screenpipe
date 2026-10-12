@@ -97,7 +97,7 @@ fn save_disable_audio<R: tauri::Runtime>(
         .ok_or("settings unavailable")?;
     let mut next = current.clone();
     next["disableAudio"] = serde_json::json!(disable_audio);
-    // Policy, the settings API, or a hand-edited config can turn audio off with
+    // Enterprise policy or a hand-edited settings file can turn audio off with
     // this mode; Settings doesn't offer it. The engine honors it over
     // `disableAudio`, so turning audio on has to clear it too. `always` is what
     // an unset mode means, and it records right away, as the confirmation says.
