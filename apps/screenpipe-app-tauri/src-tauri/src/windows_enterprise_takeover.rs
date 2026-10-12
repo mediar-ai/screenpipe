@@ -136,7 +136,7 @@ pub(crate) async fn enterprise_is_present(
             );
             cause
         })?;
-        if product_name.eq_ignore_ascii_case(ENTERPRISE_PRODUCT_NAME) {
+        if product_name.is_some_and(|name| name.eq_ignore_ascii_case(ENTERPRISE_PRODUCT_NAME)) {
             record(
                 "consumer_blocked",
                 &format!("legacy Enterprise ProductName verified for pid={pid} port={port}"),
@@ -176,7 +176,7 @@ fn process_executable(pid: u32) -> Result<PathBuf, String> {
     )?))
 }
 
-fn executable_product_name(path: &Path) -> Result<String, String> {
+fn executable_product_name(path: &Path) -> Result<Option<String>, String> {
     use std::ffi::c_void;
 
     #[link(name = "version")]
@@ -199,10 +199,14 @@ fn executable_product_name(path: &Path) -> Result<String, String> {
     let path_wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
     let size = unsafe { GetFileVersionInfoSizeW(path_wide.as_ptr(), std::ptr::null_mut()) };
     if size == 0 {
+        let error = std::io::Error::last_os_error();
+        if matches!(error.raw_os_error(), Some(1812..=1815)) {
+            return Ok(None);
+        }
         return Err(format!(
             "{} has no readable PE version resource: {}",
             path.display(),
-            std::io::Error::last_os_error()
+            error
         ));
     }
     let mut data = vec![0u8; size as usize];
@@ -233,7 +237,7 @@ fn executable_product_name(path: &Path) -> Result<String, String> {
             &mut translation_len,
         ) == 0
         {
-            return Err(format!("{} has no PE translation table", path.display()));
+            return Ok(None);
         }
     }
     if translation_len < 4 || translation.is_null() {
@@ -258,11 +262,11 @@ fn executable_product_name(path: &Path) -> Result<String, String> {
             &mut product_len,
         ) == 0
         {
-            return Err(format!("{} has no ProductName", path.display()));
+            return Ok(None);
         }
     }
     if product_len == 0 || product.is_null() {
-        return Err(format!("{} has an empty ProductName", path.display()));
+        return Ok(None);
     }
     let product = unsafe {
         std::slice::from_raw_parts(
@@ -271,6 +275,7 @@ fn executable_product_name(path: &Path) -> Result<String, String> {
         )
     };
     String::from_utf16(product)
+        .map(Some)
         .map_err(|error| format!("{} has an invalid ProductName: {error}", path.display()))
 }
 
@@ -506,15 +511,27 @@ fn same_path(left: &Path, right: &Path) -> bool {
 }
 
 fn verify_current_session(pid: u32) -> Result<(), String> {
-    if !is_current_session(pid)? {
+    let session = query_session(pid)?;
+    if !session.is_current {
         return Err(format!(
-            "refused to terminate pid={pid} outside the Enterprise session"
+            "refused to terminate pid={pid} in session {}; Enterprise is in session {}",
+            session.owner, session.current
         ));
     }
     Ok(())
 }
 
 fn is_current_session(pid: u32) -> Result<bool, String> {
+    Ok(query_session(pid)?.is_current)
+}
+
+struct SessionQuery {
+    owner: u32,
+    current: u32,
+    is_current: bool,
+}
+
+fn query_session(pid: u32) -> Result<SessionQuery, String> {
     use windows::Win32::System::{
         RemoteDesktop::ProcessIdToSessionId, Threading::GetCurrentProcessId,
     };
@@ -526,7 +543,11 @@ fn is_current_session(pid: u32) -> Result<bool, String> {
         ProcessIdToSessionId(GetCurrentProcessId(), &mut current_session)
             .map_err(|error| format!("could not inspect Enterprise session: {error}"))?;
     }
-    Ok(owner_session == current_session)
+    Ok(SessionQuery {
+        owner: owner_session,
+        current: current_session,
+        is_current: owner_session == current_session,
+    })
 }
 
 async fn listening_pid(port: u16) -> Result<Option<u32>, String> {
@@ -724,6 +745,73 @@ mod tests {
         drop(enterprise.stdin.take());
         assert!(enterprise.wait().unwrap().success());
         assert!(!enterprise_is_present(control_port, api_port).await.unwrap());
+    }
+
+    #[cfg(not(feature = "enterprise-build"))]
+    #[tokio::test]
+    async fn consumer_allows_screenpipe_owner_without_product_metadata() {
+        let control_port = unused_port();
+        let api_port = unused_port();
+        let temp = tempfile::tempdir().unwrap();
+        let fixture_exe = temp.path().join("screenpipe.exe");
+        std::fs::copy(std::env::current_exe().unwrap(), &fixture_exe).unwrap();
+        remove_version_resource(&fixture_exe);
+        assert_eq!(executable_product_name(&fixture_exe).unwrap(), None);
+
+        let mut owner = spawn_owner_fixture(control_port, Some(&fixture_exe));
+        wait_for_fixture(control_port).await;
+
+        assert!(!enterprise_is_present(control_port, api_port).await.unwrap());
+        assert!(owner.try_wait().unwrap().is_none());
+        owner.kill().unwrap();
+        let _ = owner.wait().unwrap();
+    }
+
+    fn remove_version_resource(path: &Path) {
+        use std::ffi::c_void;
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn BeginUpdateResourceW(filename: *const u16, delete_existing: i32) -> *mut c_void;
+            fn UpdateResourceW(
+                update: *mut c_void,
+                resource_type: *const u16,
+                name: *const u16,
+                language: u16,
+                data: *const c_void,
+                size: u32,
+            ) -> i32;
+            fn EndUpdateResourceW(update: *mut c_void, discard: i32) -> i32;
+        }
+
+        let path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let update = unsafe { BeginUpdateResourceW(path.as_ptr(), 0) };
+        assert!(
+            !update.is_null(),
+            "BeginUpdateResourceW failed: {}",
+            std::io::Error::last_os_error()
+        );
+        assert_ne!(
+            unsafe {
+                UpdateResourceW(
+                    update,
+                    16usize as *const u16,
+                    1usize as *const u16,
+                    0x0409,
+                    std::ptr::null(),
+                    0,
+                )
+            },
+            0,
+            "UpdateResourceW failed: {}",
+            std::io::Error::last_os_error()
+        );
+        assert_ne!(
+            unsafe { EndUpdateResourceW(update, 0) },
+            0,
+            "EndUpdateResourceW failed: {}",
+            std::io::Error::last_os_error()
+        );
     }
 
     #[test]

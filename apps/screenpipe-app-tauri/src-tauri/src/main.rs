@@ -506,6 +506,16 @@ async fn main() {
     // See `dev_isolation`.
     dev_isolation::apply();
 
+    let focus_port: u16 = std::env::var("SCREENPIPE_FOCUS_PORT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(11435);
+    #[cfg(target_os = "windows")]
+    let api_port: u16 = std::env::var("SCREENPIPE_PORT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_else(|| recording::LocalApiContext::default().port);
+
     // Enterprise owns an edition marker before either build can initialize
     // Tauri, the store, database, or recorder. Consumer exits based on this
     // kernel-backed build identity even while Enterprise has not bound a port
@@ -513,15 +523,6 @@ async fn main() {
     #[cfg(target_os = "windows")]
     if !arguments.iter().any(|argument| argument == "--cpu-smoke")
     {
-        let focus_port = std::env::var("SCREENPIPE_FOCUS_PORT")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(11435);
-        let api_port = std::env::var("SCREENPIPE_PORT")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or_else(|| recording::LocalApiContext::default().port);
-
         #[cfg(feature = "enterprise-build")]
         if let Err(error) =
             windows_enterprise_takeover::publish_enterprise_presence(focus_port, api_port)
@@ -657,17 +658,8 @@ async fn main() {
         #[cfg(not(target_os = "macos"))]
         let launchd_job_label: Option<String> = None;
 
-        let focus_port: u16 = std::env::var("SCREENPIPE_FOCUS_PORT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(11435);
-
         #[cfg(all(target_os = "windows", feature = "enterprise-build"))]
         let enterprise_duplicate = {
-            let api_port = std::env::var("SCREENPIPE_PORT")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or_else(|| recording::LocalApiContext::default().port);
             match windows_enterprise_takeover::take_over_screenpipe_owners(focus_port, api_port)
                 .await
             {
@@ -1882,10 +1874,6 @@ async fn main() {
             let app_handle = app.handle().clone();
 
             // Initialize server first (core service)
-            let focus_port: u16 = std::env::var("SCREENPIPE_FOCUS_PORT")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(11435);
             let server_shutdown_tx = spawn_server(app_handle.clone(), focus_port);
             app.manage(server_shutdown_tx);
 
