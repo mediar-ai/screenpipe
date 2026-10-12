@@ -117,11 +117,29 @@ impl DatabaseManager {
         .await
     }
 
-    /// Pin an export against deletion and privacy changes, while allowing
-    /// new captures to continue. Each page still uses its own consistent read;
-    /// ordinary inserts must not invalidate an already prepared upload.
+    /// Remember deletion/privacy revisions before assembling an export. Each
+    /// page owns its payload snapshot; the export itself only needs metadata.
+    /// Do not queue this check behind payload readers or pin their files for
+    /// the duration of a network upload. Final admission still rejects any
+    /// deletion/privacy change committed since this single-statement read.
     pub async fn storage_export_token(&self) -> Result<StorageReadToken, sqlx::Error> {
-        self.read_snapshot(self.storage_read_token()).await?
+        let Some(storage) = &self.storage else {
+            return self.storage_read_token().await;
+        };
+        if storage.closing.is_cancelled() {
+            return Err(sqlx::Error::PoolClosed);
+        }
+        let (revision, revocation) = sqlx::query_as(
+            "SELECT revision,(SELECT revision FROM _storage_revocation WHERE id=1) FROM storage_metadata WHERE singleton=1",
+        )
+        .fetch_one(&mut *self.acquire_read().await?)
+        .await?;
+        Ok(StorageReadToken {
+            revision,
+            revocation: Some(revocation),
+            storage: Some(Arc::clone(storage)),
+            _lease: None,
+        })
     }
 
     pub fn storage_mode(&self) -> super::StorageMode {
@@ -510,6 +528,88 @@ fn read_projection(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test]
+    async fn export_metadata_does_not_wait_for_payload_read_lanes() {
+        let root = tempfile::tempdir().unwrap();
+        let db = Arc::new(
+            DatabaseManager::new_hybrid(
+                root.path(),
+                screenpipe_config::DbConfig {
+                    read_pool_max: 2,
+                    read_pool_min: 1,
+                    ..Default::default()
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        let reader = Arc::clone(&db);
+        let pending = tokio::spawn(async move {
+            reader
+                .read_snapshot(async {
+                    started.send(()).unwrap();
+                    released.await.unwrap();
+                })
+                .await
+                .unwrap();
+        });
+        ready.await.unwrap();
+        // The only payload lane is occupied. Its reserved pool connection is
+        // still available for metadata and final privacy admission.
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-12','capture while reading')").await.unwrap();
+        let export =
+            tokio::time::timeout(std::time::Duration::from_secs(1), db.storage_export_token())
+                .await;
+        release.send(()).unwrap();
+        pending.await.unwrap();
+        let token = export
+            .expect("metadata queued behind payload reads")
+            .unwrap();
+        drop(token.admit(&db.pool).await.unwrap());
+        let payloads = db.frame_payloads(&[1], Projection::All).await.unwrap();
+        assert_eq!(
+            payloads[&1].full_text.as_deref(),
+            Some("capture while reading")
+        );
+        drop(token);
+        db.close().await;
+    }
+
+    #[tokio::test]
+    async fn export_metadata_during_a_write_still_revokes_on_commit() {
+        let root = tempfile::tempdir().unwrap();
+        let db = DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap();
+        db.execute_raw_sql_write(
+            "INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-12','private')",
+        )
+        .await
+        .unwrap();
+        let mut writer = db.begin_immediate_with_retry().await.unwrap();
+        sqlx::query("DELETE FROM frames WHERE id=1")
+            .execute(&mut **writer.conn())
+            .await
+            .unwrap();
+        let export =
+            tokio::time::timeout(std::time::Duration::from_secs(1), db.storage_export_token())
+                .await;
+        writer.commit().await.unwrap();
+        let token = export
+            .expect("metadata waited for writer admission")
+            .unwrap();
+        assert!(is_revision_change(
+            &token.admit(&db.pool).await.unwrap_err()
+        ));
+        // Metadata has no payload files to pin for an entire network upload.
+        assert!(db.storage.as_ref().unwrap().leases.try_write().is_ok());
+        drop(token);
+        db.close().await;
+    }
 
     #[tokio::test]
     async fn export_admission_allows_recording_but_revokes_deleted_or_redacted_data() {

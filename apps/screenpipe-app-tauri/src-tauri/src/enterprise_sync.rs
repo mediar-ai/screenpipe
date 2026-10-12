@@ -203,10 +203,13 @@ mod imp {
         async fn begin(
             db: Arc<screenpipe_db::DatabaseManager>,
         ) -> Result<Self, EnterpriseSyncError> {
-            let token = db
-                .storage_export_token()
-                .await
-                .map_err(|error| EnterpriseSyncError::Configuration(error.to_string()))?;
+            let token =
+                db.storage_export_token()
+                    .await
+                    .map_err(|error| EnterpriseSyncError::Storage {
+                        operation: "prepare export",
+                        cause: error.to_string(),
+                    })?;
             Ok(Self { db, token })
         }
     }
@@ -219,7 +222,10 @@ mod imp {
             self.token
                 .admit(&self.db.pool)
                 .await
-                .map_err(|error| EnterpriseSyncError::Configuration(error.to_string()))
+                .map_err(|error| EnterpriseSyncError::Storage {
+                    operation: "admit export",
+                    cause: error.to_string(),
+                })
         }
     }
 
@@ -2024,10 +2030,15 @@ mod imp {
                 let result =
                     sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new()).await;
                 if delete_selected {
-                    assert!(result
-                        .unwrap_err()
-                        .to_string()
-                        .contains("read revision changed"));
+                    let error = result.unwrap_err();
+                    assert!(matches!(
+                        &error,
+                        EnterpriseSyncError::Storage {
+                            operation: "admit export",
+                            ..
+                        }
+                    ));
+                    assert!(error.to_string().contains("read revision changed"));
                     assert!(
                         !cfg.cursor_path.exists(),
                         "revoked data must not be checkpointed"
@@ -2054,6 +2065,17 @@ mod imp {
                     "upload admission must preserve the new recording"
                 );
                 db.close().await;
+                let error = StorageExport::begin(db)
+                    .await
+                    .err()
+                    .expect("closed storage refused");
+                assert!(matches!(
+                    error,
+                    EnterpriseSyncError::Storage {
+                        operation: "prepare export",
+                        ..
+                    }
+                ));
             }
         }
 
