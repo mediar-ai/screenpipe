@@ -5,6 +5,7 @@
 //! control port. This runs before Tauri or the embedded database is opened.
 
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -15,6 +16,7 @@ use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
 pub(crate) const LOG_NAME: &str = "enterprise-takeover.log";
 const MAX_LOG_BYTES: u64 = 32 * 1024;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+const ENTERPRISE_PRODUCT_NAME: &str = "screenpipe enterprise";
 static LOG_WRITER: Mutex<()> = Mutex::new(());
 static ENTERPRISE_PRESENCE: OnceLock<OwnedHandle> = OnceLock::new();
 
@@ -30,10 +32,7 @@ fn presence_name(control_port: u16, api_port: u16) -> String {
 /// crash, so Consumer cannot mistake a stale file or unhealthy HTTP endpoint
 /// for a live Enterprise instance.
 #[cfg(feature = "enterprise-build")]
-pub(crate) fn publish_enterprise_presence(
-    control_port: u16,
-    api_port: u16,
-) -> Result<(), String> {
+pub(crate) fn publish_enterprise_presence(control_port: u16, api_port: u16) -> Result<(), String> {
     use windows::core::HSTRING;
     use windows::Win32::System::Threading::CreateMutexW;
 
@@ -43,7 +42,11 @@ pub(crate) fn publish_enterprise_presence(
     let name = HSTRING::from(presence_name(control_port, api_port));
     let handle = unsafe { CreateMutexW(None, false, &name) }.map_err(|error| {
         let cause = format!("could not publish Enterprise presence: {error}");
-        record("presence_publish_failed", &cause, "enterprise_start_aborted");
+        record(
+            "presence_publish_failed",
+            &cause,
+            "enterprise_start_aborted",
+        );
         cause
     })?;
     // SAFETY: CreateMutexW returned an owned kernel handle, transferred once.
@@ -54,7 +57,10 @@ pub(crate) fn publish_enterprise_presence(
 
 /// Consumer must stop while the Enterprise build owns its session marker.
 #[cfg(not(feature = "enterprise-build"))]
-pub(crate) fn enterprise_is_present(control_port: u16, api_port: u16) -> Result<bool, String> {
+pub(crate) async fn enterprise_is_present(
+    control_port: u16,
+    api_port: u16,
+) -> Result<bool, String> {
     use windows::core::HSTRING;
     use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
     use windows::Win32::System::Threading::{OpenMutexW, SYNCHRONIZATION_ACCESS_RIGHTS};
@@ -71,15 +77,201 @@ pub(crate) fn enterprise_is_present(control_port: u16, api_port: u16) -> Result<
                 ),
                 "consumer_start_aborted",
             );
-            Ok(true)
+            return Ok(true);
         }
-        Err(error) if error.code() == ERROR_FILE_NOT_FOUND.to_hresult() => Ok(false),
+        Err(error) if error.code() == ERROR_FILE_NOT_FOUND.to_hresult() => {}
         Err(error) => {
             let cause = format!("could not inspect Enterprise presence: {error}");
             record("presence_check_failed", &cause, "consumer_start_aborted");
-            Err(cause)
+            return Err(cause);
         }
     }
+
+    for port in [control_port, api_port] {
+        let Some(pid) = listening_pid(port).await.map_err(|error| {
+            let cause = format!("could not inspect legacy Enterprise owner: {error}");
+            record(
+                "legacy_presence_check_failed",
+                &cause,
+                "consumer_start_aborted",
+            );
+            cause
+        })?
+        else {
+            continue;
+        };
+        if pid == std::process::id() {
+            continue;
+        }
+        let same_session = is_current_session(pid).map_err(|error| {
+            let cause = format!("could not inspect legacy Enterprise owner session: {error}");
+            record(
+                "legacy_presence_check_failed",
+                &cause,
+                "consumer_start_aborted",
+            );
+            cause
+        })?;
+        if !same_session {
+            continue;
+        }
+        let exe = process_executable(pid).map_err(|error| {
+            let cause = format!("could not identify legacy Enterprise owner: {error}");
+            record(
+                "legacy_presence_check_failed",
+                &cause,
+                "consumer_start_aborted",
+            );
+            cause
+        })?;
+        if !looks_like_screenpipe_exe(&exe) {
+            continue;
+        }
+        let product_name = executable_product_name(&exe).map_err(|error| {
+            let cause = format!("could not inspect legacy Enterprise metadata: {error}");
+            record(
+                "legacy_presence_check_failed",
+                &cause,
+                "consumer_start_aborted",
+            );
+            cause
+        })?;
+        if product_name.eq_ignore_ascii_case(ENTERPRISE_PRODUCT_NAME) {
+            record(
+                "consumer_blocked",
+                &format!("legacy Enterprise ProductName verified for pid={pid} port={port}"),
+                "consumer_start_aborted",
+            );
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn process_executable(pid: u32) -> Result<PathBuf, String> {
+    use windows::core::PWSTR;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }
+        .map_err(|error| format!("could not open owner pid={pid}: {error}"))?;
+    // SAFETY: OpenProcess returned an owned kernel handle, transferred once.
+    let process = unsafe { OwnedHandle::from_raw_handle(process.0 as *mut _) };
+    let mut path = vec![0u16; 32_768];
+    let mut length = path.len() as u32;
+    unsafe {
+        QueryFullProcessImageNameW(
+            windows::Win32::Foundation::HANDLE(process.as_raw_handle()),
+            PROCESS_NAME_FORMAT(0),
+            PWSTR(path.as_mut_ptr()),
+            &mut length,
+        )
+        .map_err(|error| format!("could not query owner pid={pid} executable: {error}"))?;
+    }
+    path.truncate(length as usize);
+    Ok(PathBuf::from(String::from_utf16(&path).map_err(
+        |error| format!("owner pid={pid} returned an invalid executable path: {error}"),
+    )?))
+}
+
+fn executable_product_name(path: &Path) -> Result<String, String> {
+    use std::ffi::c_void;
+
+    #[link(name = "version")]
+    extern "system" {
+        fn GetFileVersionInfoSizeW(filename: *const u16, handle: *mut u32) -> u32;
+        fn GetFileVersionInfoW(
+            filename: *const u16,
+            handle: u32,
+            length: u32,
+            data: *mut c_void,
+        ) -> i32;
+        fn VerQueryValueW(
+            block: *const c_void,
+            sub_block: *const u16,
+            buffer: *mut *mut c_void,
+            length: *mut u32,
+        ) -> i32;
+    }
+
+    let path_wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let size = unsafe { GetFileVersionInfoSizeW(path_wide.as_ptr(), std::ptr::null_mut()) };
+    if size == 0 {
+        return Err(format!(
+            "{} has no readable PE version resource: {}",
+            path.display(),
+            std::io::Error::last_os_error()
+        ));
+    }
+    let mut data = vec![0u8; size as usize];
+    unsafe {
+        if GetFileVersionInfoW(
+            path_wide.as_ptr(),
+            0,
+            size,
+            data.as_mut_ptr().cast::<c_void>(),
+        ) == 0
+        {
+            return Err(format!(
+                "could not read {}: {}",
+                path.display(),
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+
+    let translation_query: Vec<u16> = "\\VarFileInfo\\Translation\0".encode_utf16().collect();
+    let mut translation = std::ptr::null_mut::<c_void>();
+    let mut translation_len = 0u32;
+    unsafe {
+        if VerQueryValueW(
+            data.as_ptr().cast::<c_void>(),
+            translation_query.as_ptr(),
+            &mut translation,
+            &mut translation_len,
+        ) == 0
+        {
+            return Err(format!("{} has no PE translation table", path.display()));
+        }
+    }
+    if translation_len < 4 || translation.is_null() {
+        return Err(format!(
+            "{} has an invalid PE translation table",
+            path.display()
+        ));
+    }
+    let translation = unsafe { std::slice::from_raw_parts(translation.cast::<u16>(), 2) };
+    let product_query = format!(
+        "\\StringFileInfo\\{:04x}{:04x}\\ProductName\0",
+        translation[0], translation[1]
+    );
+    let product_query: Vec<u16> = product_query.encode_utf16().collect();
+    let mut product = std::ptr::null_mut::<c_void>();
+    let mut product_len = 0u32;
+    unsafe {
+        if VerQueryValueW(
+            data.as_ptr().cast::<c_void>(),
+            product_query.as_ptr(),
+            &mut product,
+            &mut product_len,
+        ) == 0
+        {
+            return Err(format!("{} has no ProductName", path.display()));
+        }
+    }
+    if product_len == 0 || product.is_null() {
+        return Err(format!("{} has an empty ProductName", path.display()));
+    }
+    let product = unsafe {
+        std::slice::from_raw_parts(
+            product.cast::<u16>(),
+            product_len.saturating_sub(1) as usize,
+        )
+    };
+    String::from_utf16(product)
+        .map_err(|error| format!("{} has an invalid ProductName: {error}", path.display()))
 }
 
 pub(crate) fn is_takeover_log(name: &str) -> bool {
@@ -222,8 +414,8 @@ async fn resolve_verified_owner(port: u16) -> Result<Option<Owner>, String> {
     let exe = process.exe().to_path_buf();
     let start_time = process.start_time();
     #[cfg(test)]
-    let is_current_test_harness = std::env::current_exe()
-        .is_ok_and(|current_exe| same_path(&exe, &current_exe));
+    let is_current_test_harness =
+        std::env::current_exe().is_ok_and(|current_exe| same_path(&exe, &current_exe));
     #[cfg(not(test))]
     let is_current_test_harness = false;
     if !looks_like_screenpipe_exe(&exe) && !is_current_test_harness {
@@ -314,6 +506,15 @@ fn same_path(left: &Path, right: &Path) -> bool {
 }
 
 fn verify_current_session(pid: u32) -> Result<(), String> {
+    if !is_current_session(pid)? {
+        return Err(format!(
+            "refused to terminate pid={pid} outside the Enterprise session"
+        ));
+    }
+    Ok(())
+}
+
+fn is_current_session(pid: u32) -> Result<bool, String> {
     use windows::Win32::System::{
         RemoteDesktop::ProcessIdToSessionId, Threading::GetCurrentProcessId,
     };
@@ -325,12 +526,7 @@ fn verify_current_session(pid: u32) -> Result<(), String> {
         ProcessIdToSessionId(GetCurrentProcessId(), &mut current_session)
             .map_err(|error| format!("could not inspect Enterprise session: {error}"))?;
     }
-    if owner_session != current_session {
-        return Err(format!(
-            "refused to terminate pid={pid} in session {owner_session}; Enterprise is in session {current_session}"
-        ));
-    }
-    Ok(())
+    Ok(owner_session == current_session)
 }
 
 async fn listening_pid(port: u16) -> Result<Option<u32>, String> {
@@ -496,8 +692,8 @@ mod tests {
     }
 
     #[cfg(not(feature = "enterprise-build"))]
-    #[test]
-    fn consumer_blocks_until_live_enterprise_presence_exits() {
+    #[tokio::test]
+    async fn consumer_blocks_until_live_enterprise_presence_exits() {
         use std::io::{BufRead, BufReader};
         use std::process::{Command, Stdio};
 
@@ -524,10 +720,10 @@ mod tests {
             ready.push_str(&line);
         }
 
-        assert!(enterprise_is_present(control_port, api_port).unwrap());
+        assert!(enterprise_is_present(control_port, api_port).await.unwrap());
         drop(enterprise.stdin.take());
         assert!(enterprise.wait().unwrap().success());
-        assert!(!enterprise_is_present(control_port, api_port).unwrap());
+        assert!(!enterprise_is_present(control_port, api_port).await.unwrap());
     }
 
     #[test]

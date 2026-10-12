@@ -511,6 +511,7 @@ async fn main() {
     // kernel-backed build identity even while Enterprise has not bound a port
     // or its HTTP endpoints are unhealthy.
     #[cfg(target_os = "windows")]
+    if !arguments.iter().any(|argument| argument == "--cpu-smoke")
     {
         let focus_port = std::env::var("SCREENPIPE_FOCUS_PORT")
             .ok()
@@ -530,7 +531,7 @@ async fn main() {
         }
 
         #[cfg(not(feature = "enterprise-build"))]
-        match windows_enterprise_takeover::enterprise_is_present(focus_port, api_port) {
+        match windows_enterprise_takeover::enterprise_is_present(focus_port, api_port).await {
             Ok(true) => {
                 eprintln!("screenpipe: Enterprise is running; Consumer startup is blocked.");
                 std::process::exit(0);
