@@ -1,5 +1,14 @@
 # Coding-agent regression evals
 
+`ai-gateway-outbound-chat-compatibility` executes the actual provider through its
+completion and streaming methods with synthetic SDK and telemetry ports. Nine
+outcomes cover response-only field removal, orphan and valid tool history,
+rejected-temperature recovery, unchanged errors and preserved text/images.
+Run `bun test evals/coding-agent/calibrate-outbound-chat.test.js` for calibration.
+Hidden fixtures appear only at grading and require no dependency links. This
+historical case does not test live SDK transport, gateway admission, other
+providers, billing, production activation, execution isolation or model trials.
+
 `ai-gateway-vertex-string-tool-calls` executes the complete Vertex MaaS provider
 through its JSON and streaming completion methods with synthetic authentication
 and HTTP replies. Twelve outcomes preserve tool calls and matching results across

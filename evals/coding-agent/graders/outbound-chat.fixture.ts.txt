@@ -1,0 +1,20 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import {test,expect,mock} from 'bun:test';
+mock.module('@sentry/cloudflare',()=>({captureException:()=>{}}));
+globalThis.fetch=async()=>{throw new Error('network forbidden in diagnostic')};
+let upstream: (params: any) => Promise<any>;
+mock.module('openai',()=>({default:class { chat={completions:{create:(params:any)=>upstream(params)}}; baseURL='https://synthetic.invalid'; }}));
+const {OpenAIProvider}=await import('./src/providers/openai');
+const make=(invoke:any)=>{upstream=invoke;return new OpenAIProvider('synthetic-key')};
+const response=()=>({choices:[{message:{content:'synthetic answer',role:'assistant'}}]});
+const body:any={model:'synthetic-model',messages:[{role:'user',content:'synthetic request'}]};
+const error=(status:number,param:string)=>Object.assign(new Error(`Unsupported value: '${param}'`),{status});
+async function capture(messages:any[]){let captured:any;const p=make(async(v:any)=>{captured=structuredClone(v);return response()});expect((await (await p.createCompletion({...body,messages})).json()).choices[0].message.content).toBe('synthetic answer');return captured.messages}
+test('outbound request omits response-only refusal',async()=>{const messages=await capture(body.messages);expect(messages[0]).not.toHaveProperty('refusal')});
+test('orphan tool output is removed without losing ordinary text',async()=>{const messages=await capture([...body.messages,{role:'tool',tool_call_id:'missing',content:'orphan'},{role:'user',content:'continue'}]);expect(messages.map((m:any)=>m.content)).toEqual(['synthetic request','continue'])});
+test('valid tool-call identity survives dispatch',async()=>{const call={id:'known',type:'function',function:{name:'synthetic_tool',arguments:'{}'}};const messages=await capture([{role:'assistant',content:'',tool_calls:[call]},{role:'tool',tool_call_id:'known',content:'synthetic result'}]);expect(messages[0].tool_calls).toEqual([call]);expect(messages[1].tool_call_id).toBe('known');expect(messages[1].content).toBe('synthetic result')});
+for(const stream of [false,true])test(`unsupported supplied temperature recovers stream=${stream}`,async()=>{const calls:any[]=[];const p=make(async(v:any)=>{calls.push(structuredClone(v));if(calls.length===1)throw error(400,'temperature');return stream?(async function*(){yield{choices:[{delta:{content:'synthetic answer'}}]}})():response()});const b={...body,temperature:0.3,max_tokens:40};const output=stream?await new Response(await p.createStreamingCompletion(b)).text():await(await p.createCompletion(b)).text();expect(output).toContain('synthetic answer');expect(calls).toHaveLength(2);expect(calls[0].temperature).toBe(0.3);expect(calls[1]).not.toHaveProperty('temperature');expect(calls[1].messages).toEqual(calls[0].messages);expect(calls[1].max_tokens).toBe(40)});
+for(const [status,param]of [[500,'temperature'],[400,'top_p']] as const)test(`unrelated rejection preserves error without retry ${status}/${param}`,async()=>{let count=0;const failure=error(status,param);const p=make(async()=>{count++;throw failure});await expect(p.createCompletion({...body,temperature:0.3})).rejects.toBe(failure);expect(count).toBe(1)});
+test('persistent supplied-parameter rejection terminates',async()=>{let count=0;const failure=error(400,'temperature');const p=make(async()=>{count++;throw failure});await expect(p.createCompletion({...body,temperature:0.3})).rejects.toBe(failure);expect(count).toBeLessThanOrEqual(2)});
+test('ordinary image and text survive formatting',async()=>{const content=[{type:'text',text:'look'},{type:'image_url',image_url:{url:'data:image/png;base64,AA',detail:'high'}}];const messages=await capture([{role:'user',content}]);expect(messages[0].content).toEqual(content)});

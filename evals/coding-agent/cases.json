@@ -6218,6 +6218,41 @@
         ],
         "command": "cd packages/screenpipe-mcp && bun test src/eval-package-dispatch.test.js"
       }
+    },
+    {
+      "id": "ai-gateway-outbound-chat-compatibility",
+      "name": "Preserve outbound chat compatibility and recover rejected sampling",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "ee62f61129503c9400c845b9c25b88e37fc510ea"
+      },
+      "base_ref": "ece9d58bb90d88a4a232d0277bb74bbce11714ab",
+      "oracle_ref": "ee62f61129503c9400c845b9c25b88e37fc510ea",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/openai.ts"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "hosted-ai",
+        "tools",
+        "recovery"
+      ],
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/openai.ts"
+      ],
+      "prompt": "Chat requests can be rejected after conversation history changes or when an upstream model refuses an explicitly supplied temperature. Repair the existing OpenAIProvider public completion and streaming methods. Outbound messages must omit the response-only refusal field, remove tool outputs whose tool_call_id has no preceding assistant call, and preserve ordinary conversation text plus valid assistant calls and their matching tool output IDs/content. When an HTTP400 Unsupported value error names the supplied temperature, recover in both streaming and non-streaming calls by retrying without that parameter; retain messages and token limits and return the resulting answer. Do not retry HTTP500 failures or errors naming a parameter that was not sent. A repeated identical temperature refusal must terminate with the original upstream error after at most one retry. Preserve ordinary text and image_url content, including image detail. Keep the existing public interfaces compatible; no private helper, field, or implementation structure is required. Grading runs the actual provider with synthetic SDK and telemetry ports and no live network. This historical task does not establish HTTP gateway admission, other providers, billing, SDK transport behavior, production activation, agent isolation or model performance. Current support for repairing several different upstream rejections is a separate contract.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/outbound-chat.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-outbound-chat.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-outbound-chat.test.ts"
+      }
     }
   ]
 }
