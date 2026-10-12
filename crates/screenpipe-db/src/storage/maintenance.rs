@@ -213,6 +213,48 @@ async fn compact_inner(root: &Path, config: DbConfig) -> Result<(), sqlx::Error>
         .open(root.join(".storage.lock"))?;
     fs2::FileExt::try_lock_exclusive(&lock)
         .map_err(|_| storage_error("storage lifecycle is already owned"))?;
+    compact_locked(&root, config).await
+}
+
+/// Restore a usable database without starting another compaction. Before
+/// activation, discard only the private candidate; afterwards finish verifying
+/// and retiring the old index. Both paths preserve referenced payloads.
+pub async fn recover_interrupted_compaction(
+    root: &Path,
+    config: DbConfig,
+) -> Result<(), sqlx::Error> {
+    if !root.join("storage-maintenance.json").exists() {
+        return Ok(());
+    }
+    let root = root.canonicalize()?;
+    let lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(root.join(".storage.lock"))?;
+    fs2::FileExt::try_lock_exclusive(&lock)
+        .map_err(|_| storage_error("storage lifecycle is already owned"))?;
+    diagnostics::observe_offline(&root, "compact_recovery", async {
+        if !root.join("storage-maintenance.json").exists() {
+            return Ok(());
+        }
+        let journal: CompactJournal =
+            serde_json::from_slice(&std::fs::read(root.join("storage-maintenance.json"))?)
+                .map_err(storage_error)?;
+        let active = StorageDescriptor::read(&root)?
+            .ok_or_else(|| storage_error("active storage missing"))?;
+        journal.validate(&root, &active)?;
+        if active == journal.source {
+            cancel_locked(&root, config).await
+        } else {
+            compact_locked(&root, config).await
+        }
+    })
+    .await
+}
+
+async fn compact_locked(root: &Path, config: DbConfig) -> Result<(), sqlx::Error> {
     let journal_path = root.join("storage-maintenance.json");
     let active = StorageDescriptor::read(&root)?
         .ok_or_else(|| storage_error("compact requires hybrid storage"))?;

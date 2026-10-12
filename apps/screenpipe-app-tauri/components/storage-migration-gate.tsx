@@ -145,7 +145,7 @@ export function StorageMigrationGate({ offerMigration = false, utilityWindow = f
         </div>
         <div className="flex items-center gap-3 text-sm" role="status" aria-live="polite">
           <Loader2 className="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-          <span>{unavailable ? ui("Waiting for migration status…") : `${activity.message || "Preparing migration"}…`}</span>
+          <span>{unavailable ? ui("Waiting for storage status…") : `${activity.message || "Preparing storage"}…`}</span>
         </div>
         {percentage !== null && <div className="space-y-2">
           <div className="flex justify-between gap-4 text-sm tabular-nums">
@@ -160,7 +160,7 @@ export function StorageMigrationGate({ offerMigration = false, utilityWindow = f
           {activity.available_bytes != null && <p>Free space: {migrationBytes(activity.available_bytes)}</p>}
         </div>
         <p className="border-t border-border pt-4 text-xs text-muted-foreground">
-          Keep Screenpipe open until storage is ready. If interrupted, Screenpipe restores recording from the saved progress before migration can be retried.
+          Keep Screenpipe open until storage is ready. If interrupted, Screenpipe restores recording from the saved progress before you retry.
         </p>
         <UpdateBanner compact />
       </div>

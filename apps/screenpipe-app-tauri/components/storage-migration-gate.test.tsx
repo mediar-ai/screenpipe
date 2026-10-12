@@ -168,7 +168,7 @@ describe("app-wide migration modal", () => {
     mock.getActivity.mockRejectedValue(new Error("IPC unavailable"));
     render(<StorageMigrationGate />);
     notify(running);
-    await screen.findByText("Waiting for migration status…", {}, { timeout: 2500 });
+    await screen.findByText("Waiting for storage status…", {}, { timeout: 2500 });
     expect(screen.getByRole("dialog")).toBeTruthy();
     notify(idle);
     expect(screen.queryByRole("dialog")).toBeNull();

@@ -239,21 +239,39 @@ const RECORDING_PREFERENCE: &str = "pendingStorageMigration";
 struct RecordingPreference {
     root: PathBuf,
     recording: bool,
+    #[serde(default)]
+    compaction: bool,
 }
 
 fn saved_recording_preference(app: &tauri::AppHandle, root: &Path) -> Result<Option<bool>, String> {
+    Ok(saved_recording_state(app, root)?.map(|saved| saved.recording))
+}
+
+fn saved_recording_state(
+    app: &tauri::AppHandle,
+    root: &Path,
+) -> Result<Option<RecordingPreference>, String> {
     let store = crate::store::get_store(app, None).map_err(|e| e.to_string())?;
     let Some(value) = store.get(RECORDING_PREFERENCE) else {
         return Ok(None);
     };
     let saved: RecordingPreference = serde_json::from_value(value).map_err(|e| e.to_string())?;
-    Ok((root.canonicalize().map_err(|e| e.to_string())? == saved.root).then_some(saved.recording))
+    Ok((root.canonicalize().map_err(|e| e.to_string())? == saved.root).then_some(saved))
 }
 
 fn save_recording_preference(
     app: &tauri::AppHandle,
     root: &Path,
     recording: Option<bool>,
+) -> Result<(), String> {
+    save_recording_state(app, root, recording, false)
+}
+
+fn save_recording_state(
+    app: &tauri::AppHandle,
+    root: &Path,
+    recording: Option<bool>,
+    compaction: bool,
 ) -> Result<(), String> {
     // A separate key in the existing atomic app store survives frontend settings
     // writes. This is application activation state, not batch progress.
@@ -263,7 +281,8 @@ fn save_recording_preference(
             RECORDING_PREFERENCE,
             serde_json::json!(RecordingPreference {
                 root: root.to_path_buf(),
-                recording
+                recording,
+                compaction,
             }),
         );
     } else {
@@ -285,23 +304,44 @@ pub(crate) async fn resume_before_startup(
         .map_err(|e| e.to_string())?;
     let pending =
         screenpipe_db::storage::migration_requires_resume(&root).map_err(|e| e.to_string())?;
-    let preference = saved_recording_preference(app, &root)?;
-    if !pending && preference.is_none() {
+    let preference = saved_recording_state(app, &root)?;
+    let compact_pending = root.join("storage-maintenance.json").exists();
+    if !pending && !compact_pending && preference.is_none() {
         return Ok(None);
     }
     if recording.server.lock().await.is_some() {
         return Err("Stop Screenpipe before resuming migration.".into());
     }
     let root = root.canonicalize().map_err(|e| e.to_string())?;
-    if let Some(wants_recording) = preference {
+    if let Some(saved) = &preference {
         recording.set_capture_intent(
-            wants_recording && crate::recording::recording_access_allowed(app, &settings),
+            saved.recording && crate::recording::recording_access_allowed(app, &settings),
         );
     }
     // An explicit migration already owns progress, the wake lock and final
     // activation verification. Its reopen must not start a second operation.
     if is_running(app) {
         return Ok(None);
+    }
+    if compact_pending || preference.as_ref().is_some_and(|saved| saved.compaction) {
+        let awake = screenpipe_engine::power::KeepAwakeGuard::acquire_async().await?;
+        update_operation(app, |operation| {
+            *operation = Operation {
+                root: Some(root.clone()),
+                busy: true,
+                recovering: true,
+                message: "restoring recording after database compaction".into(),
+                started_at: Some(Instant::now()),
+                ..Default::default()
+            };
+        });
+        // ServerCore recovers the journal before opening the active database.
+        // The existing recovery completion verifies queries and capture intent.
+        return Ok(Some(StartupMigration {
+            root,
+            recovering: true,
+            _awake: awake,
+        }));
     }
     if pending || saved_migration_error(&root).is_some() {
         let error = saved_migration_error(&root).unwrap_or_else(|| INTERRUPTED_MIGRATION.into());
@@ -718,6 +758,105 @@ pub async fn start_storage_migration(
     start_storage_migration_inner(app, recording, root, false).await
 }
 
+/// Explicit Settings action. Keep exclusive lifecycle ownership through reopen,
+/// including after a failure, even if the requesting webview closes.
+#[tauri::command]
+#[specta::specta]
+pub async fn compact_storage(
+    app: tauri::AppHandle,
+    recording: State<'_, RecordingState>,
+    root: String,
+    generation: String,
+) -> Result<(), String> {
+    require_selected_root(&app, &root)?;
+    let _lifecycle = recording.server_lifecycle.lock().await;
+    let root = require_selected_root(&app, &root)?;
+    let descriptor = StorageDescriptor::read(&root)
+        .map_err(|e| e.to_string())?
+        .ok_or("Compressed storage is no longer active. Review storage and try again.")?;
+    if descriptor.generation != generation {
+        return Err("Storage changed. Review storage and confirm compaction again.".into());
+    }
+    {
+        let server = recording.server.lock().await;
+        if let Some(server) = server.as_ref() {
+            if server.data_dir.canonicalize().map_err(|e| e.to_string())? != root
+                || server.db.storage_descriptor() != Some(&descriptor)
+            {
+                return Err(
+                    "Apply the data directory change and restart before compacting.".into(),
+                );
+            }
+        }
+    }
+    if root.join("storage-migration.json").exists()
+        || root.join("vault.meta").exists()
+        || root.join(".vault_locked").exists()
+    {
+        return Err("Finish storage migration or unlock storage before compacting.".into());
+    }
+    let settings = SettingsStore::get(&app)
+        .map_err(|e| e.to_string())?
+        .ok_or("Storage settings are unavailable.")?;
+    let config = settings.to_recording_config(root.clone()).db_config;
+    let _awake = screenpipe_engine::power::KeepAwakeGuard::acquire_async()
+        .await
+        .map_err(|error| format!("Could not prevent sleep. Compaction has not started: {error}"))?;
+    save_recording_state(&app, &root, Some(recording.capture_intended()), true)?;
+    update_operation(&app, |operation| {
+        *operation = Operation {
+            root: Some(root.clone()),
+            busy: true,
+            message: "compacting database; recording and history are paused".into(),
+            started_at: Some(Instant::now()),
+            ..Default::default()
+        };
+    });
+    let result = screenpipe_db::storage::diagnostics::observe(&root, "compact", |_, _| {}, async {
+        screenpipe_db::storage::diagnostics::app_version(app.package_info().version.to_string());
+        screenpipe_db::storage::diagnostics::stage("pausing_recording");
+        let compact = async {
+            crate::recording::stop_screenpipe_inner(&recording).await?;
+            screenpipe_db::storage::compact(&root, config)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        .await;
+        update_operation(&app, |operation| {
+            operation.message = "reopening history and restoring recording".into();
+        });
+        screenpipe_db::storage::diagnostics::stage("restoring_recording_after_compact");
+        // Restart on success AND failure. Startup cancels an unactivated
+        // candidate or finishes activated verification; it never rebuilds it.
+        let reopen = async {
+            require_selected_root(&app, &root.display().to_string())?;
+            crate::recording::spawn_screenpipe_inner(&recording, app.clone()).await?;
+            verify_running(&app, &root).await
+        }
+        .await;
+        match (compact, reopen) {
+            (Ok(()), result) => result,
+            (Err(cause), Ok(())) => Err(cause),
+            (Err(cause), Err(recovery)) => {
+                Err(format!("{cause}\nRecording recovery failed: {recovery}"))
+            }
+        }
+    })
+    .await;
+    if let Err(error) = &result {
+        tracing::error!(%error, "database compaction failed");
+    }
+    update_operation(&app, |operation| {
+        operation.elapsed_seconds = operation.activity().elapsed_seconds;
+        operation.started_at = None;
+        operation.busy = false;
+        // Compaction is not a migration result and must not trigger its Home prompt.
+        operation.completed = false;
+        operation.message = String::new();
+    });
+    result
+}
+
 async fn acquire_migration_lifecycle(
     lifecycle: Arc<tokio::sync::Mutex<()>>,
     background: bool,
@@ -1101,6 +1240,28 @@ pub async fn delete_original_storage_database(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compaction_recording_preference_survives_restart_and_reads_older_migrations() {
+        let old: RecordingPreference = serde_json::from_value(serde_json::json!({
+            "root": "/fixture", "recording": false,
+        }))
+        .unwrap();
+        assert!(!old.compaction);
+        assert!(!old.recording);
+        for recording in [false, true] {
+            let saved = RecordingPreference {
+                root: "/fixture".into(),
+                recording,
+                compaction: true,
+            };
+            let reopened: RecordingPreference =
+                serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap();
+            assert_eq!(reopened.recording, recording);
+            assert!(reopened.compaction);
+            assert_eq!(reopened.root, saved.root);
+        }
+    }
 
     #[test]
     fn migration_diagnostics_keep_useful_errors_and_scrub_sensitive_values() {
