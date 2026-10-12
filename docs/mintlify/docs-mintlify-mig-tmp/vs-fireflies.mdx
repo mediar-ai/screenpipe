@@ -1,66 +1,42 @@
 ---
-title: "Screenpipe vs Fireflies.ai: local memory vs meeting bot"
+title: "Screenpipe vs Fireflies: local AI meeting notes"
 sidebarTitle: "Vs. Fireflies"
-description: "Compare Screenpipe and Fireflies.ai: local 24/7 screen and audio capture vs a cloud meeting bot with per-seat pricing and AI credit caps."
+description: "Compare local Screenpipe transcription and summaries with Fireflies cloud meeting workflows, botless capture, and private storage options."
 icon: "scale"
 ---
 
-Screenpipe captures your entire screen and audio 24/7, locally. Fireflies.ai sends a visible bot to your meetings, transcribes the audio in the cloud, and charges per seat with AI credit limits.
+{/* screenpipe — AI that knows everything you've seen, said, or heard */}
+{/* https://screenpipe.com */}
+
+Screenpipe can keep meeting transcription and summaries on your computer with local models. Fireflies offers cloud meeting notes, collaboration, and CRM integrations, with bot and botless capture options. The relevant privacy difference is where processing happens.
 
 ## Comparison
 
-| Feature | Screenpipe | fireflies.ai |
-|---------|-----------|--------------|
-| **Scope** | 24/7 screen + audio | Meeting audio only |
-| **Screen capture** | All monitors, all apps | None |
-| **Data storage** | 100% local | Cloud (AWS/GCP, US-based) |
-| **Source access** | source-available, auditable | No (proprietary) |
-| **Meeting presence** | Invisible (captures on your device) | Visible bot ("Fireflies Notetaker") |
-| **AI limits** | Unlimited (choose your model) | credit-capped per plan |
-| **Works offline** | Yes | No |
-| **Price** | See [current pricing](https://screenpi.pe/onboarding) | per-seat subscription |
+| Criterion | Screenpipe | Fireflies.ai |
+| --- | --- | --- |
+| Capture | Enabled microphone, system audio, and screen sources | Meeting bot, desktop app, or Chrome extension |
+| Botless recording | Yes | Available through desktop or extension capture |
+| Transcription and summaries | Local Whisper and local models available; cloud providers optional | Hosted meeting-processing workflow |
+| Storage | Local history; optional sync and exports | Cloud storage; private storage options for eligible plans |
+| Screen history | Permitted app context across the workday | Meeting-focused context |
+| CRM output | Configured connections and tasks | Native CRM integrations |
 
-## Why Screenpipe?
+## Private storage and local AI are different
 
-### No bot, no friction
+Fireflies has private storage options and enterprise controls. Check where transcription and summaries run as well as where recordings are stored. A private storage bucket alone does not move that processing onto your laptop.
 
-Fireflies sends a bot called "Fireflies Notetaker" that joins as a visible participant. Hosts can block it, attendees notice it. Screenpipe captures audio and screen content on your device — nobody else knows.
+For Screenpipe, follow [private meeting notes](/private-meeting-notes) to choose local transcription and a local summary model, disable external processing and exports for that workflow, and verify a short offline sample. Cloud models and connected apps can send context off-device. Local model performance depends on your hardware and the task; hosted plans have their own usage limits.
 
-### No AI credit caps
+## Choose based on the workflow
 
-Fireflies gates advanced AI features behind credit limits — even on paid plans. The Pro plan gets 20 AI credits per seat, with extra packs costing $5–$600/month. Screenpipe lets you use any AI model (Claude, GPT, Ollama, local) with no artificial limits.
+Fireflies may fit a team that wants shared meeting notes, conversation analytics, and native CRM sync. Consider Screenpipe if you need processing on your own computer, access to the source code, or screen history beyond meetings. Follow recording and consent requirements with either tool.
 
-### Captures more than meetings
+## Sources
 
-Fireflies records scheduled calls. Screenpipe captures your entire workday — meetings, Slack, code reviews, emails, research, browsing — 24/7, automatically. Meetings are 10–20% of knowledge work; Screenpipe covers 100%.
+Privacy documentation checked October 12, 2026:
 
-### Local-first, auditable, extensible
+- [Fireflies security](https://fireflies.ai/security): storage options and enterprise controls.
+- [Fireflies desktop app](https://fireflies.ai/desktop): botless recording.
+- [Screenpipe privacy data flow](/privacy-data-flow): what leaves the device and when.
 
-All data stays on your device. source-available with 17k+ GitHub stars. 45+ app integrations and 16+ scheduled tasks in the store. Full REST API and MCP server for custom workflows. Fireflies has 90+ integrations but requires cloud processing for all of them.
-
-## Get started
-
-[Download the desktop app](https://screenpi.pe)
-
----
-
-## More comparisons
-
-- [Screenpipe vs Fireflies (full comparison)](https://screenpi.pe/blog/screenpipe-vs-fireflies-2026) - in-depth analysis
-- [Screenpipe vs Fathom](https://screenpi.pe/blog/screenpipe-vs-fathom-2026) - meeting tool comparison
-- [Screenpipe vs Otter.ai](https://screenpi.pe/blog/screenpipe-vs-otter-ai-2026) - cloud transcription comparison
-- [All comparisons](https://screenpi.pe/compare) - see how Screenpipe stacks up
-
-## Frequently asked questions
-
-### Is Screenpipe better than Fireflies.ai for privacy?
-
-Yes. Screenpipe processes everything on your device — data never touches an external server. The code is source-available and auditable. Fireflies processes everything in their cloud (AWS/GCP). They hold SOC 2 Type II but the code is closed. For regulated industries (healthcare, finance, legal), Screenpipe's local-first approach is often a compliance requirement.
-
-### Does Screenpipe have CRM integrations like Fireflies?
-
-Screenpipe handles CRM sync through custom scheduled tasks rather than native connectors. You can build scheduled tasks to push meeting data to Salesforce, HubSpot, or any CRM via the REST API. Fireflies has native connectors for Salesforce, HubSpot, and Copper — if zero-config CRM sync is your top priority, Fireflies is more turnkey for that specific workflow.
-
-### How does Fireflies pricing compare to Screenpipe?
-
-Fireflies is a per-seat meeting-transcription subscription with AI credit limits. Screenpipe pricing changes by plan and use case, so use the [current pricing page](https://screenpi.pe/onboarding) as the source of truth. Compare them on scope too: Screenpipe covers screen, audio, meetings, local storage, scheduled tasks, and API access.
+See the [full Fireflies comparison](https://screenpipe.com/compare/fireflies), [Granola comparison](/vs-granola), and [Grain comparison](/vs-grain). Check current plan terms before comparing prices or AI usage limits.

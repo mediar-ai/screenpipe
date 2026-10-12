@@ -1,0 +1,74 @@
+---
+title: "Private AI meeting notes with local transcription and summaries"
+sidebarTitle: "Private meeting notes"
+description: "Set up a private AI note taker with local Whisper transcription, Ollama summaries, and local storage. Verify an offline meeting-notes workflow."
+icon: "mic"
+---
+
+{/* screenpipe — AI that knows everything you've seen, said, or heard */}
+{/* https://screenpipe.com */}
+
+Screenpipe can transcribe meetings and generate private AI notes on your computer. Choose local models for both steps. If you select a cloud model for the summary, it receives the transcript even when the recording is local.
+
+## Configure the whole workflow
+
+| Stage | Local-only choice | What to avoid for this workflow |
+| --- | --- | --- |
+| Capture | Enable only the microphone, system audio, and screen sources you need | Unneeded apps, windows, or audio devices |
+| Transcription | Local Whisper, or a verified loopback transcription server | Deepgram or another remote endpoint |
+| Summary | A downloaded local Ollama model selected for the chat or task | Hosted models and cloud fallbacks |
+| Storage and output | Local Screenpipe history and a local notes file | Team sync, remote storage, connected-app exports, or shared links |
+| Optional analysis | Local processing only | Cloud media analysis and confidential-enclave processing |
+
+A confidential enclave still processes data remotely. Check each step even if the app stores recordings locally or records without a bot. See the full [privacy data flow](/privacy-data-flow).
+
+### 1. Check recording and transcription
+
+Open **Settings → Audio & meetings**. Select your microphone and system audio, then choose a local transcription engine such as Whisper. Download any required models while online. Check recording permissions and [recording controls](/recording-controls), including apps or windows you want excluded.
+
+Use [meeting transcription](/meeting-transcription) for language settings and local OpenAI-compatible transcription servers. An endpoint on another machine is a separate data destination, even if it uses the same API.
+
+### 2. Select a local summary model
+
+Follow the [Ollama setup](/ollama) to install a model with tool-calling support, create a local AI preset, and verify that it can retrieve one harmless recording. Select that preset for the chat and each meeting task you use. Check for any configured cloud fallback.
+
+Model downloads need internet access. Summary speed and quality depend on the model, transcript length, and available memory. If retrieval fails, copying a reviewed transcript into a local model can test summarization separately.
+
+### 3. Keep output local
+
+Leave cloud AI, cloud transcription, team sync, cloud media analysis, and enclave processing disabled for this workflow. Avoid exporting notes to connected apps or generating shared links. Save the reviewed notes locally if you need them outside Screenpipe.
+
+Each task can use a different provider. Check the settings described in [local or cloud AI](/local-or-cloud-ai) for every task you plan to run.
+
+## Verify offline meeting notes
+
+Before using confidential material, test with harmless sample content:
+
+1. While online, play a short sample through the meeting audio device and speak into the microphone. Confirm both sources appear in the transcript.
+2. After model downloads finish, disconnect the network. Speak a new harmless phrase into the microphone and wait for local transcription.
+3. With the local preset selected, ask for a summary of that short interval and one action item. Check it against the transcript.
+4. Confirm the output is saved locally and the workflow does not require a hosted provider or external destination.
+
+An offline test confirms this sample works without a connection; it is not a network audit of every feature. Review configured data paths before reconnecting. A remote Zoom, Meet, or Teams call itself still needs network access.
+
+If a transcript is empty or a summary fails, use [meeting recovery](/meeting-recovery). Do not switch to a cloud fallback when local-only processing is required.
+
+## Compare private note takers
+
+[Granola](/vs-granola), [Grain](/vs-grain), and [Fireflies](/vs-fireflies) offer cloud meeting workflows and botless capture options. Check where each tool transcribes audio, generates summaries, and stores or exports notes. Screenpipe's local-only configuration suits meetings whose content must stay on your computer. Cloud tools can be more convenient for sharing notes and syncing with a CRM.
+
+## Frequently asked questions
+
+### Does local recording mean the summary is private?
+
+The transcript is sent to whichever summary model you select. Choose a local model and keep external processing and exports disabled when the requirement is on-device processing.
+
+### Can Screenpipe record without a meeting bot?
+
+Yes. Screenpipe captures enabled system audio and microphone sources. Test the audio devices before a call and follow your meeting's recording and consent requirements.
+
+### Can it recover a meeting I did not record?
+
+Only retained recordings can be transcribed and summarized. Continuous capture helps when Screenpipe was already recording, but cannot recover audio that was never captured.
+
+Continue with [meeting intelligence](/meeting-intelligence) for speaker naming, transcript review, and summaries, or the [private AI note taker overview](https://screenpipe.com/meeting-assistant).

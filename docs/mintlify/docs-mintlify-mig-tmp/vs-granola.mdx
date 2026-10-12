@@ -1,66 +1,42 @@
 ---
-title: "Screenpipe vs Granola - full screen memory vs meeting notes"
+title: "Screenpipe vs Granola: private local meeting notes"
 sidebarTitle: "Vs. Granola"
-description: "Compare Screenpipe and Granola: local 24/7 screen plus audio capture vs a cloud AI meeting notepad — features, pricing, and Google Workspace requirements."
+description: "Compare Screenpipe local transcription and summaries with Granola cloud meeting notes, botless capture, and shared-screen snapshots."
 icon: "scale"
 ---
 
-Screenpipe captures your entire screen and audio 24/7, locally. Granola is an AI meeting notepad that enhances your rough notes with audio transcripts — meetings only, cloud-dependent, requires Google Workspace.
+{/* screenpipe — AI that knows everything you've seen, said, or heard */}
+{/* https://screenpipe.com */}
+
+Screenpipe supports local meeting transcription and summaries when configured with local Whisper and a local AI model. Granola captures meeting audio without a bot and uses cloud transcription and AI providers. Both can help with meeting notes; choose based on the data path and context you need.
 
 ## Comparison
 
-| Feature | Screenpipe | Granola |
-|---------|-----------|---------|
-| **Scope** | 24/7 screen + audio | Meetings only |
-| **Screen capture** | All monitors, accessibility-first text + OCR fallback | None |
-| **Data storage** | 100% local | cloud-based |
-| **Source access** | source-available, auditable | No |
-| **Platforms** | macOS, Windows, Linux | macOS, Windows |
-| **Works offline** | Yes | No |
-| **Requires Google Workspace** | No | Yes |
-| **Price** | See [current pricing](https://screenpi.pe/onboarding) | Subscription |
+| Criterion | Screenpipe | Granola |
+| --- | --- | --- |
+| Capture | Enabled screen and audio sources across apps | Meeting audio and notes; shared-screen snapshots on supported Mac setups |
+| Botless capture | Yes | Yes |
+| Transcription and summaries | Local engines and models available; hosted providers optional | Cloud transcription and AI providers |
+| Storage | Local history; sync and external exports are separate options | Cloud-stored notes and transcripts |
+| Screen context | Permitted app history before, during, and after calls | Supported shared meeting content |
+| Developer access | Local REST API and MCP | API and MCP for meeting context, with plan-dependent access |
 
-## Why Screenpipe?
+## When local processing matters
 
-### Captures everything, not just meetings
+If your requirement is to keep audio, transcripts, and summaries on the computer, follow [private meeting notes](/private-meeting-notes). Select a local model for each chat or task and keep cloud transcription, cloud fallbacks, sync, remote analysis, and external exports off for that workflow.
 
-Meetings are ~20% of knowledge work. Granola covers that slice. Screenpipe captures the other 80% — Slack, code reviews, research, emails, browsing — plus meetings.
+Granola records without a bot, then uses cloud providers for transcription and summaries. Its security page explains those providers and their data handling. Review those terms against your team's requirements.
 
-### Local-first, no cloud dependency
+## When Granola may fit better
 
-All data stays on your device. No third-party servers, no cloud processing. Your security team can audit the local capture and storage code.
+Granola focuses on meeting notes, templates, and shared meeting context. Screenpipe adds continuous screen and audio history while recording is enabled, but local AI needs setup and enough machine resources. Compare a representative transcript and summary before deciding.
 
-### No vendor lock-in
+## Sources
 
-Screenpipe works with any email provider, any calendar, any meeting tool. No Google Workspace requirement. Choose your own AI model — Claude, GPT, Ollama, or local models.
+Privacy and shared-screen documentation checked October 12, 2026:
 
-### Extensible platform
+- [Granola security](https://www.granola.ai/security): transcription, AI providers, and data handling.
+- [Granola shared-screen snapshots](https://docs.granola.ai/help-center/taking-notes/capture-shared-screens): supported capture scope.
+- [Screenpipe privacy data flow](/privacy-data-flow): local and external processing paths.
 
-45+ app integrations and 16+ scheduled tasks in the store. Full REST API and MCP server for building custom workflows on top of your captured data.
-
-## Get started
-
-[Download the desktop app](https://screenpi.pe)
-
----
-
-## More comparisons
-
-- [Screenpipe vs Granola (full comparison)](https://screenpipe.com/compare/granola) - in-depth analysis
-- [Screenpipe vs Otter.ai](https://screenpi.pe/blog/screenpipe-vs-otter-ai-2026) - cloud transcription comparison
-- [Screenpipe vs Fathom](https://screenpi.pe/blog/screenpipe-vs-fathom-2026) - meeting tool comparison
-- [All comparisons](https://screenpi.pe/compare) - see how Screenpipe stacks up
-
-## Frequently asked questions
-
-### Is Screenpipe a good alternative to Granola?
-
-Yes. Screenpipe captures everything Granola does (meeting audio and transcription) plus your entire screen activity 24/7. It runs locally, is source-available and auditable, and doesn't require Google Workspace. While Granola enhances your manual notes with AI, Screenpipe captures everything automatically — no note-taking required.
-
-### Does Screenpipe capture screen content during meetings?
-
-Yes. Unlike Granola (audio-only), Screenpipe captures everything shown on screen — shared slides, spreadsheets, URLs in chat, documents — alongside the full audio transcript. When someone says "look at row 14," Screenpipe has both the words and the actual screen content.
-
-### How does Screenpipe pricing compare to Granola?
-
-Screenpipe plan details change over time, so use the [current pricing page](https://screenpi.pe/onboarding) as the source of truth. The durable difference is scope: Granola is meeting notes, while Screenpipe captures your screen, audio, apps, scheduled tasks, MCP tools, and connections across the workday.
+See the [full Granola comparison](https://screenpipe.com/compare/granola), [Fireflies comparison](/vs-fireflies), and [Grain comparison](/vs-grain). Check each vendor's current plans for pricing and integration availability.
