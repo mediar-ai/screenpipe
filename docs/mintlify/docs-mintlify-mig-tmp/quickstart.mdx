@@ -44,6 +44,8 @@ Already recording but unsure what to do with it? [Get your first useful result](
   <Step title="Install Screenpipe (1 min)">
     [Download the desktop app](https://screenpi.pe/onboarding) — works on macOS, Windows, and Linux.
 
+    Review the [desktop app, trial, and source-build options](/getting-started#free-and-paid-installation-options) before checkout. AI provider subscriptions are separate.
+
     Open it, grant screen recording and microphone permissions when prompted, and Screenpipe starts capturing automatically.
 
     <Tip>On macOS, you'll need to allow screen recording and accessibility access in System Settings → Privacy & Security.</Tip>
@@ -94,7 +96,7 @@ Already recording but unsure what to do with it? [Get your first useful result](
     - *"summarize what I just read in the browser"*
     - *"what apps have I been using?"*
 
-    That's it. Your AI now has memory of your screen.
+    Verify the answer against the timeline: it should identify a real recent app or page and give a matching timestamp. Ask it to show the Screenpipe search it used. If it only gives a generic answer, check [MCP retrieval](/mcp-server#verify-a-real-retrieval) before installing more automations.
   </Step>
 
   <Step title="Install your first scheduled task (30 sec)">
@@ -144,7 +146,7 @@ Scheduled tasks are scheduled AI agents that run on your screen data. Think of t
 Yes. Everything is captured and stored locally by default. No data leaves your machine unless you explicitly choose a cloud provider, connected app, team sync, or remote AI workflow. See [privacy data flow](/privacy-data-flow).
 
 **"Can I use my own AI subscription?"**
-Yes. You can use your ChatGPT Plus, Claude Pro, or any API key. You can also use local models via Ollama for complete privacy. [learn more →](/chatgpt)
+Screenpipe supports ChatGPT sign-in, supported provider API keys, and [local Ollama models](/ollama). Claude Pro/Max is not an Anthropic API key and does not unlock Claude inside Screenpipe. You can instead use your Claude account in Claude's own client with [Screenpipe MCP](/mcp-server). See [plans and AI subscriptions](/local-or-cloud-ai#screenpipe-plans-and-ai-subscriptions).
 
 **"What does Screenpipe capture?"**
 Screen text (primarily via accessibility APIs, with OCR fallback), audio transcriptions, app names, window titles, browser URLs, and user input events. You control what's captured in **Settings → Recording**.

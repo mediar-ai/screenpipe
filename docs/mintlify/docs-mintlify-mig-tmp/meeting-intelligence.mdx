@@ -58,13 +58,13 @@ For future calls, follow the [setup checklist](#setup-checklist) below. Screenpi
 
 ## Setup checklist
 
-1. Open **settings -> recording** and choose the microphone and system audio sources you want.
+1. Open **Settings → Audio & meetings**, enable audio recording, and choose the microphone and system audio sources you want.
 2. Connect **Google Calendar** in **settings -> connections** if you want attendee-aware speaker naming.
 3. Open the meeting app normally: Zoom, Google Meet, Microsoft Teams, Slack huddles, or another call surface.
 4. Let Screenpipe record and transcribe in the background.
 5. Open the meeting from the timeline or search with `content_type=audio`.
 
-Quick verification:
+Quick verification (protected routes may need the [local API bearer token](/getting-started#api-authentication)):
 
 ```bash
 curl http://localhost:3030/health
@@ -74,6 +74,17 @@ curl "http://localhost:3030/search?content_type=audio&limit=1"
 <Tip>
 Calendar context is especially strong for 1:1 meetings. When the meeting has exactly two attendees, Screenpipe can infer the other speaker more reliably.
 </Tip>
+
+## Enable real-time transcription with Live meeting notes
+
+1. Open **Settings → Audio & meetings** and enable audio recording. The meeting controls are hidden when audio is disabled.
+2. Turn on **Live meeting notes**.
+3. Choose **Current transcription engine**, **Screenpipe cloud live**, or **Direct Deepgram live**. The current engine must not be disabled; cloud live requires sign-in, and a direct provider needs its own credentials.
+4. Start a short call and open the active meeting note. Speak a test sentence and check for new captions. Verify system audio too if you need the other participants.
+
+Live meeting notes handles captions for the active meeting separately from background transcription. It does not restore missing audio from an earlier call or fix a failed AI summary. Cloud/direct live providers send audio to the selected service. See [privacy data flow](/privacy-data-flow).
+
+If a setting is missing, check your app version and available updates. Do not substitute an unrelated toggle. For missing captions or summaries, follow [meeting recovery](/meeting-recovery).
 
 ## Live transcript workflow
 
@@ -182,7 +193,8 @@ Use the meetings API when an automation needs meeting lists, search, current mee
 | Symptom | Try this |
 | --- | --- |
 | Empty transcript | Verify microphone permission, selected device, and `content_type=audio` search |
-| Late transcript | Wait for the transcription batch to finish or switch to realtime transcription |
+| Late transcript | Check background batch processing, or configure [Live meeting notes](#enable-real-time-transcription-with-live-meeting-notes) for an active call |
+| Summary fails or says `invalid bundled pi compaction patch` | Follow [meeting recovery](/meeting-recovery); preserve the transcript and record the exact error |
 | Speaker names wrong | Connect calendar, rename the speaker, then merge similar speakers |
 | Duplicated meeting | Use merge from the UI or `/meetings/merge` |
 | Summary missed context | Choose a custom scheduled task that also searches screen text and accessibility context during the meeting window |

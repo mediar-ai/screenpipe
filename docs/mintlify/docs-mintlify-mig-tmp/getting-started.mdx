@@ -11,20 +11,23 @@ icon: "rocket"
 
 <Tip>Want the fastest path? See the [5-minute quickstart →](/quickstart)</Tip>
 
-## Free vs. Paid options
+## Free and paid installation options
 
-Screenpipe offers three installation paths:
+Downloading the official desktop app is not the same as choosing a free source build. Check the [current checkout](https://screenpi.pe/onboarding) for trial eligibility, payment details, renewal, and cancellation terms before starting.
 
-1. **CLI (fully free)** — `npx -y screenpipe@latest record` for local recording, search, and API access from the terminal. Open-source MIT license.
-2. **Tauri desktop app (fully free)** — clone [github.com/screenpipe/screenpipe](https://github.com/screenpipe/screenpipe) and build locally for a visual timeline and UI. Open-source MIT license. No commercial support.
-3. **Commercial desktop app** — download from [screenpi.pe/onboarding](https://screenpi.pe/onboarding) for prebuilt binaries, auto-updates, support, team sync, and enterprise auth. Free 7-day trial.
+| Choose | What it provides | License and payment |
+| --- | --- | --- |
+| Official desktop app | Prebuilt installer, visual timeline, chat, scheduled tasks, connections, and updates | Governed by your app license or subscription and the [Terms of Service](https://screenpi.pe/terms) |
+| CLI | Terminal recording, local search, and REST API access | Check the license and distribution terms for the version you install |
+| Build from source | Build and maintain the recorder or desktop app yourself | Current source uses the [Screenpipe Commercial License](https://github.com/screenpipe/screenpipe/blob/main/LICENSE.md) |
 
-## Desktop app or CLI?
+The current source license permits personal non-commercial use, non-profit/educational/research use, and an evaluation period described in the license. Commercial use requires a paid commercial license. It is not an MIT license; source availability does not mean unrestricted free business use.
 
-| Choose | If you want |
-| --- | --- |
-| Desktop app | Visual timeline, scheduled tasks, connections, chat, settings, and guided permissions |
-| CLI | Free local recording, REST API access, and terminal-first workflows |
+### Why does the downloaded app ask for a credit card?
+
+The official app uses its checkout and account entitlement flow. Trial offers can require payment details; review the renewal and cancellation terms shown before confirming. If you already paid, use the purchase email and follow the [account checks](/faq#billing-license-and-account) before buying again. Building from source is a separate installation and licensing path, not a way to unlock the official app.
+
+Your Screenpipe purchase and your AI provider access are also separate. See [which AI access you need](/local-or-cloud-ai#screenpipe-plans-and-ai-subscriptions).
 
 ## Desktop app (recommended)
 
@@ -105,22 +108,21 @@ After starting the CLI, you have three ways to access your screen history:
 
 ## Verify it's running
 
-Once Screenpipe starts, it serves an API on `localhost:3030`. **API authentication is enabled by default** for security:
+Once Screenpipe starts, its local API normally listens on `localhost:3030`. Check capture health first:
 
 ```bash
-# get your API key
+curl --fail-with-body http://localhost:3030/health
+```
+
+`/health` does not require authentication. Protected routes can require a token. Retrieve it locally and use a bearer header:
+
+```bash
 SCREENPIPE_API_KEY=$(npx -y screenpipe@latest auth token)
-
-# check health
-curl http://localhost:3030/health \
-  -H "Authorization: Bearer $SCREENPIPE_API_KEY"
-
-# search your screen history
-curl "http://localhost:3030/search?q=example" \
+curl --fail-with-body "http://localhost:3030/search?limit=1" \
   -H "Authorization: Bearer $SCREENPIPE_API_KEY"
 ```
 
-<Note>If you get an `unauthorized` error, you forgot the API key header. See "API authentication" section below for more options.</Note>
+Check that the result contains recent activity. A healthy server alone does not prove that screen or audio capture is working. For an empty result, check permissions and [missing recordings](/missing-recordings).
 
 ## Check and update your version
 
@@ -141,31 +143,11 @@ The latest version is always available at npm. If you're on an older version, yo
 
 ### API authentication
 
-API authentication is **enabled by default** when Screenpipe starts. Get your API key:
+Check **Require API Authentication** in your app settings. CLI authentication is enabled by default in current versions; use the installed version's settings when diagnosing older installations.
 
-```bash
-npx -y screenpipe@latest auth token
-```
+Get the local token with `npx -y screenpipe@latest auth token` and pass it in an `Authorization: Bearer` header as above. Keep tokens out of shared URLs, screenshots, logs, and chat. An AI provider key is not the Screenpipe local API token.
 
-**Option 1: pass the key in the header (recommended)**
-```bash
-curl "http://localhost:3030/search?q=example" \
-  -H "Authorization: Bearer <your-api-key>"
-```
-
-**Option 2: set the environment variable**
-```bash
-export SCREENPIPE_API_KEY=$(npx -y screenpipe@latest auth token)
-curl "http://localhost:3030/search?q=example" \
-  -H "Authorization: Bearer $SCREENPIPE_API_KEY"
-```
-
-**Option 3: pass as a query parameter (less secure)**
-```bash
-curl "http://localhost:3030/search?q=example&token=<your-api-key>"
-```
-
-If you get `{"error":"unauthorized: API access requires authentication..."}`, double-check that you're passing the correct auth header or token.
+If you get `401` or `403`, verify the token belongs to the same running Screenpipe instance and data directory. Refresh client credentials after rotating the token. Keep authentication enabled when making Screenpipe reachable from another machine.
 
 ## Connect to AI
 

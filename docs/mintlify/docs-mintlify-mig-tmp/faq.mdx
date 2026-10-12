@@ -84,19 +84,21 @@ This FAQ is organized around the questions people ask support most often: what t
 ## Basics & compatibility
 
 <Expandable title="Is Screenpipe open source?">
-  Screenpipe is source-available and auditable on GitHub at [github.com/screenpipe/screenpipe](https://github.com/screenpipe/screenpipe). The core local capture stack can be inspected and self-hosted, while the prebuilt desktop app, cloud features, team features, and some integrations have commercial licensing on top.
-
-  You can self-host the CLI, audit the capture and storage code, and run Screenpipe fully offline. Enterprise customers can request source access for compliance review.
+  Screenpipe's current source is available to inspect on [GitHub](https://github.com/screenpipe/screenpipe) under the [Screenpipe Commercial License](https://github.com/screenpipe/screenpipe/blob/main/LICENSE.md), not MIT. Read that license for permitted free uses, the evaluation period, and commercial requirements. Official prebuilt apps have separate subscription or app-license terms.
 </Expandable>
 
 <Expandable title="Can I use Screenpipe for free?">
-  Yes, three ways:
+  The source license permits specified non-commercial uses and evaluation; it does not grant unrestricted free commercial use. The official desktop download follows its own checkout and account requirements. Compare [desktop, CLI, and source-build options](/getting-started#free-and-paid-installation-options) before installing.
+</Expandable>
 
-  1. **CLI**: `npx -y screenpipe@latest record` gives you local recording, search, and API access from the terminal.
-  2. **Local source build**: clone [github.com/screenpipe/screenpipe](https://github.com/screenpipe/screenpipe) and build the desktop app locally for a visual timeline and UI on top of the CLI.
-  3. **Paid desktop app**: download from [screenpi.pe/onboarding](https://screenpi.pe/onboarding) for the current packaged app, support, auto-updates, and paid features.
+<Expandable title="Does Screenpipe record my iPhone or Android screen?">
+  These installation guides cover the macOS, Windows, and Linux recorder. Installing Screenpipe on a computer does not record another device's screen. Do not assume a mobile browser, companion app, or remote-access connection provides continuous iPhone or Android capture. Check the [current download options](https://screenpi.pe/onboarding) for supported builds.
+</Expandable>
 
-  Current plan details can change, so use the [pricing/download page](https://screenpi.pe/onboarding) as the source of truth before purchasing.
+
+
+<Expandable title="How do I connect Grok Bot (grokbot)?">
+  Use the [Grok Bot connection guide](/connections#grok-bot). Installing a skill does not by itself prove that Grok Bot can read your recordings; verify a bounded local retrieval.
 </Expandable>
 
 <Expandable title="Does Screenpipe work offline?">
@@ -140,7 +142,7 @@ This FAQ is organized around the questions people ask support most often: what t
 <Expandable title="What languages does Screenpipe transcribe?">
   Screenpipe transcribes most languages supported by whisper (about 100), including English, Spanish, French, German, Mandarin, Japanese, Korean, Portuguese, Russian, Arabic, and Hindi.
 
-  Set your primary language in **settings → AI models → language** to skip auto-detect (faster and more accurate). For higher accuracy on accented or domain-specific speech, switch to `whisper-large-v3-turbo` or use deepgram / screenpipe-cloud transcription.
+  Open **Settings → Audio & meetings** and check **Languages** for the selected transcription engine. Available languages and automatic detection depend on that engine. A language choice affects transcription, not the desktop interface. See [transcription languages](/meeting-transcription#languages).
 </Expandable>
 
 <Expandable title="How do I update Screenpipe?">
@@ -194,15 +196,35 @@ This FAQ is organized around the questions people ask support most often: what t
   Without the flag, the default is always enabled. A bare flag like `--use-pii-removal` still means "enable."
 </Expandable>
 
+## Cambiar idioma a español
+
+La interfaz de escritorio de Screenpipe todavía no incluye una traducción al español. Cambiar el idioma de transcripción no cambia el idioma de los menús.
+
+Para transcribir audio en español:
+
+1. Abre **Settings → Audio & meetings**.
+2. Elige un motor de transcripción compatible con español.
+3. Revisa el control **Languages** y selecciona español, o usa la detección automática si el motor la admite.
+4. Graba una frase de prueba y comprueba el texto en la transcripción.
+
+Consulta [idiomas de transcripción](/meeting-transcription#languages) y [recuperación de reuniones](/meeting-recovery) si no aparece texto.
+
+### Can I change the desktop interface language?
+
+The current desktop source does not bundle a Spanish interface translation. Where the **Language** setting is enabled, it offers the bundled languages for that build: currently Japanese, with English as the default. Audio transcription languages are a separate setting, and supported languages depend on the selected engine.
+
 ## Billing, license, and account
 
 <Expandable title="Can I try Screenpipe before buying?">
-  Yes. Screenpipe has two common trial paths:
+  Check the [current checkout](https://screenpi.pe/onboarding) for the official app's trial eligibility, duration, payment requirements, and renewal terms. A source-build evaluation has separate [license terms](https://github.com/screenpipe/screenpipe/blob/main/LICENSE.md).
+</Expandable>
 
-  1. **CLI**: `npx -y screenpipe@latest record` gives you local recording, search, and API access from the terminal.
-  2. **Desktop app**: download from [screenpi.pe/onboarding](https://screenpi.pe/onboarding) for timeline, scheduled tasks, settings, chat, and connections.
+<Expandable title="Why does the free download ask for a credit card with no skip button?">
+  Downloading the installer does not activate a free desktop plan. Some trial offers require payment details. Check the terms shown at checkout before confirming. If you already purchased, check the signed-in email before starting another subscription. See [installation options](/getting-started#free-and-paid-installation-options).
+</Expandable>
 
-  Current plan details can change, so use the [pricing/download page](https://screenpi.pe/onboarding) as the source of truth before purchasing.
+<Expandable title="Does my Screenpipe subscription include Claude chat or Claude Pro?">
+  It does not include a separate Claude subscription. Screenpipe AI allowance, Anthropic API billing, and access to Claude's own app are different things. See [Screenpipe plans and AI subscriptions](/local-or-cloud-ai#screenpipe-plans-and-ai-subscriptions) for the supported paths.
 </Expandable>
 
 <Expandable title="Where do I find my Screenpipe receipt or invoice?">
