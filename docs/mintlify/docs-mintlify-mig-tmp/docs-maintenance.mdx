@@ -105,3 +105,26 @@ Every page needs a short `sidebarTitle` and a named Lucide `icon` in frontmatter
 Keep shared colors, fonts, and light/dark logos in `docs.json`, and reading typography and corner sizes in `style.css`. Follow the repository design guide: Space Grotesk headings, Crimson Text prose, IBM Plex Mono code, neutral ink and bone surfaces, and 8px surfaces with 6px controls. Check light and dark mode and a narrow viewport before pushing visual changes.
 
 The docs validator checks navigation casing, product names, required page icons, and logo assets. Run `bunx mint validate` for the full Mintlify build and `bunx mint broken-links` for link checks.
+
+## Review analytics as documentation evidence
+
+Use comparable date windows and exclude partial days when comparing trends. Keep human page views separate from agent requests; repeated `llms.txt` or page fetches are not unique users or product adoption.
+
+Review unanswered assistant conversations and negative feedback for concrete failed steps. An answered label measures coverage, not correctness or customer resolution. Conversation categories can overlap, and live table totals can differ from the chart's scope. Cluster incremental search strings into user intents before prioritizing work.
+
+For each fix, record the source-backed answer, affected guide, and a question to retest after deployment. Useful regression questions include:
+
+- Why does the desktop download ask for payment details?
+- Does my plan include Claude Pro, or can I use an Anthropic API key?
+- Where is Live meeting notes, and does it fix a failed summary?
+- What should I do about an invalid bundled Pi compaction patch?
+- Can I change the interface to Spanish or record an iPhone?
+- How do I verify MCP or Ollama retrieved a real recording?
+
+After publication, check the deployed page and assistant citations. Record answer accuracy separately from whether the original user's problem was resolved. Keep private analytics and conversation details out of public issues and PRs.
+
+## Review and publish generated changes
+
+A generated PR is not a published documentation update. For a failed automatic merge, inspect the actual PR, current base branch, conflicts, required checks, and GitHub merge receipt. Review generated release claims against merged source changes and the relevant release before landing them.
+
+Keep branch protections in place. Use the repository's authorized review and merge process for changes that cannot merge automatically. Do not broaden an app's bypass permissions just to clear the automation dashboard. After a merge, verify the Mintlify deployment result and the live page. Track generated, reviewed, merged, and published changes separately.

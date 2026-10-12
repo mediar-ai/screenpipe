@@ -1,0 +1,75 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { afterEach, beforeAll, expect, test } from 'bun:test';
+import { VertexMaasProvider } from './src/providers/vertex-maas';
+import { resetTokenCache } from './src/providers/vertex';
+const realFetch = globalThis.fetch;
+let pem: string;
+beforeAll(async () => {
+  const pair = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  pem = '-----BEGIN PRIVATE KEY-----\n' + btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey)))) + '\n-----END PRIVATE KEY-----';
+});
+afterEach(() => { globalThis.fetch = realFetch; resetTokenCache(); });
+const calls = [
+  { id: 'synthetic-a', type: 'function', function: { name: 'list_notes', arguments: '{"folder":"α"}' } },
+  { id: 'synthetic-b', type: 'function', function: { name: 'count_notes', arguments: '{"limit":2}' } },
+];
+async function request(messages: any[], stream: boolean) {
+  resetTokenCache(); const before = JSON.stringify(messages); const sent: any[] = [];
+  globalThis.fetch = (async (input: any, init: RequestInit = {}) => {
+    const url = String(input);
+    if (url === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'synthetic-token', expires_in: 3600 });
+    if (url !== 'https://aiplatform.googleapis.com/v1/projects/synthetic-project/locations/global/endpoints/openapi/chat/completions') throw new Error('Unexpected synthetic transport target');
+    expect(init.method).toBe('POST');
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer synthetic-token');
+    sent.push(JSON.parse(String(init.body)));
+    return stream ? new Response('data: {"choices":[{"delta":{"content":"synthetic answer"}}]}\n\ndata: [DONE]\n\n') : Response.json({ choices: [{ message: { content: 'synthetic answer' } }] });
+  }) as typeof fetch;
+  const provider = new VertexMaasProvider(JSON.stringify({ project_id: 'synthetic-project', client_email: 'synthetic@eval.invalid', private_key: pem }), 'synthetic-project');
+  const body: any = { model: 'glm-4.7', messages, tools: [{ type: 'function', function: { name: 'list_notes', parameters: { type: 'object' } } }], tool_choice: 'auto', temperature: 0, max_tokens: 64 };
+  const result = stream ? await new Response(await provider.createStreamingCompletion(body)).text() : await (await provider.createCompletion(body)).text();
+  expect(result).toContain('synthetic answer'); expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ stream, tools: body.tools, tool_choice: 'auto', temperature: 0, max_tokens: 64 });
+  expect(JSON.stringify(messages)).toBe(before);
+  return sent[0].messages;
+}
+function history(content: any) {
+  return [{ role: 'user', content: 'Inspect synthetic notes' }, { role: 'assistant', content, tool_calls: structuredClone(calls) }, { role: 'tool', tool_call_id: 'synthetic-a', content: 'note α' }, { role: 'tool', tool_call_id: 'synthetic-b', content: '2' }];
+}
+function contentParts(content: any): any[] {
+  if (content == null || (typeof content === 'string' && !content.trim())) return [];
+  return typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+}
+function semanticMessages(messages: any[]) {
+  return messages.map(message => ({ ...message, content: contentParts(message.content) }));
+}
+function assertPair(output: any[]) {
+  expect(output).toHaveLength(4);
+  expect(semanticMessages([output[0]])).toEqual(semanticMessages([{ role: 'user', content: 'Inspect synthetic notes' }]));
+  expect(output[1]).toMatchObject({ role: 'assistant', tool_calls: calls });
+  expect(semanticMessages([output[2]])).toEqual(semanticMessages([{ role: 'tool', tool_call_id: 'synthetic-a', content: 'note α' }]));
+  expect(semanticMessages([output[3]])).toEqual(semanticMessages([{ role: 'tool', tool_call_id: 'synthetic-b', content: '2' }]));
+}
+for (const stream of [false, true]) {
+  for (const [label, content] of [['empty', ''], ['whitespace', '  '], ['null', null], ['text', 'Checking notes.']] as const) {
+    test(`${stream ? 'stream' : 'json'} preserves tool calls with ${label} content`, async () => {
+      const output = await request(history(content), stream); assertPair(output);
+      // Equivalent valid text-part arrays and strings carry the same content.
+      expect(contentParts(output[1].content)).toEqual(contentParts(content));
+    });
+  }
+  test(`${stream ? 'stream' : 'json'} preserves array content and top-level calls`, async () => {
+    const output = await request(history([{ type: 'text', text: 'Checking notes.' }]), stream); assertPair(output);
+    expect(contentParts(output[1].content)).toEqual([{ type: 'text', text: 'Checking notes.' }]);
+  });
+}
+test('ordinary text and image messages remain intact', async () => {
+  const messages = [{ role: 'system', content: 'Synthetic instruction' }, { role: 'user', content: [{ type: 'text', text: 'Describe' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,c3ludGhldGlj' } }] }, { role: 'assistant', content: 'Synthetic description' }];
+  expect(semanticMessages(await request(messages, false))).toEqual(semanticMessages(messages));
+});
+test('unmatched, missing and empty tool result ids are filtered without losing valid pairs', async () => {
+  const messages = history([{ type: 'text', text: 'Checking notes.' }]);
+  messages.splice(0, 0, { role: 'tool', tool_call_id: 'synthetic-a', content: 'too early' } as any);
+  messages.push({ role: 'tool', content: 'missing' } as any, { role: 'tool', tool_call_id: '', content: 'empty' } as any, { role: 'tool', tool_call_id: 'unknown', content: 'unmatched' } as any);
+  assertPair(await request(messages, false));
+});

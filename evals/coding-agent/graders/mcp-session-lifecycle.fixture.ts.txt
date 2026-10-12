@@ -1,0 +1,19 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import {beforeEach,afterEach,it,expect} from 'vitest';
+import {buildHttpServer} from './http-server';
+let server:any,url:string;
+const headers={'content-type':'application/json',accept:'application/json, text/event-stream','mcp-protocol-version':'2024-11-05'};
+beforeEach(async()=>{server=buildHttpServer({mcpPort:0,screenpipePort:1,host:'127.0.0.1'});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));url=`http://127.0.0.1:${server.address().port}`;});
+afterEach(async()=>{server?.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));});
+async function rpc(method:string,session?:string){return fetch(url+'/mcp',{method:'POST',headers:{...headers,...(session?{'mcp-session-id':session}:{})},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params:method==='initialize'?{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'synthetic-session',version:'1.0.0'}}:{}}),signal:AbortSignal.timeout(3000)});}
+async function init(){const r=await rpc('initialize');expect(r.status).toBe(200);const id=r.headers.get('mcp-session-id');await r.text();expect(id).toBeTruthy();return id!;}
+async function list(id:string){const r=await rpc('tools/list',id);expect(r.status).toBe(200);const text=await r.text();const payload=r.headers.get('content-type')?.includes('text/event-stream')?JSON.parse(text.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trim()).join('\n')):JSON.parse(text);expect(payload.result.tools.some((tool:any)=>tool.name==='search_content')).toBe(true);}
+async function count(n:number){const r=await fetch(url+'/health',{signal:AbortSignal.timeout(3000)});expect(r.status).toBe(200);expect(await r.json()).toEqual(expect.objectContaining({status:'ok',sessions:n}));}
+async function close(id:string){const r=await fetch(url+'/mcp',{method:'DELETE',headers:{...headers,'mcp-session-id':id},signal:AbortSignal.timeout(3000)});await r.text();expect(r.status).toBe(200);}
+it('initial health, unknown routes and preflight remain available',async()=>{await count(0);const r=await fetch(url+'/missing',{signal:AbortSignal.timeout(3000)});expect(r.status).toBe(404);await r.text();const o=await fetch(url+'/mcp',{method:'OPTIONS',signal:AbortSignal.timeout(3000)});expect(o.status).toBe(204);});
+it('unknown session cannot list tools or enter health count',async()=>{const r=await rpc('tools/list','synthetic-missing');expect(r.status).toBeGreaterThanOrEqual(400);await r.text();await count(0);});
+it('initialized session remains usable across requests',async()=>{const id=await init();await list(id);await list(id);await count(1);});
+it('independent sessions remain individually usable',async()=>{const a=await init(),b=await init();expect(a).not.toBe(b);await list(a);await list(b);await count(2);});
+it('deleting one session removes only that session',async()=>{const a=await init(),b=await init();await close(a);await count(1);await list(b);const old=await rpc('tools/list',a);expect(old.status).toBeGreaterThanOrEqual(400);await old.text();await count(1);});
+it('all closed sessions leave the active count and later initialization recovers',async()=>{const a=await init();await close(a);await count(0);const b=await init();expect(b).not.toBe(a);await list(b);await count(1);await close(b);await count(0);});

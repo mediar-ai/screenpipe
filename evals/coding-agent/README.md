@@ -1,5 +1,17 @@
 # Coding-agent regression evals
 
+`ai-gateway-vertex-string-tool-calls` executes the complete Vertex MaaS provider
+through its JSON and streaming completion methods with synthetic authentication
+and HTTP replies. Twelve outcomes preserve tool calls and matching results across
+string, null and array content, ordinary text/images, orphan filtering, request
+options and caller input. The parent fails eight content-shape outcomes and
+preserves four; the reference and current provider pass all twelve. Run
+`bun test evals/coding-agent/calibrate-vertex-tool-content.test.js` for nine
+controls, including equivalent code, unused correct code, lost results/images,
+input mutation and missing-source classification. The hidden fixture appears
+only at grading and uses no dependency links. This does not execute a live model,
+HTTP gateway admission, billing, agent isolation or model trials.
+
 `ai-gateway-null-model-accounting` executes the complete accounting module's
 existing exports without provider or database calls. Thirteen outcomes cover
 absent model names and preserved unknown-string, measured/estimated token,
@@ -91,7 +103,7 @@ The hidden fixture appears only at grading and uses no dependency links.
 This does not establish native recording continuity, real authentication,
 account-switch race safety, browser integration, isolation or model performance.
 
-The current app corpus contains 142 git-mined regressions. See
+The current app corpus contains 147 git-mined regressions. See
 [DESIGN.md](./DESIGN.md) for the Anthropic guidance, source contract, and
 history-mining workflow. The companion website manifest uses this same harness.
 
@@ -1828,3 +1840,48 @@ Run `bun test evals/coding-agent/calibrate-mcp-search-evidence.test.js` to check
 ## Fixed-term manual grants
 
 `app-manual-grant-payment-prompts` executes the actual trial and contextual-card eligibility functions with synthetic accounts and a frozen clock. The parent fails four grant outcomes and preserves eighteen; the source-only reference and current source pass all twenty-two. Signup trials, ordinary payers, enterprise accounts, expired/invalid evidence and eligibility refusals remain covered. Run `bun test evals/coding-agent/calibrate-manual-grant.test.js` for correct, broken, equivalent, disconnected-caller, blanket-exemption and missing-source controls. Fixtures and dependencies appear only at grading. This does not establish rendered UI, native recording, live billing, identity-provider verification, enforced agent isolation or model performance.
+
+## HTTP MCP session lifecycle
+
+`app-mcp-session-lifecycle` exercises actual HTTP initialization, repeated tool
+listing, independent sessions, explicit deletion, later reinitialization and
+health accounting. Six outcomes preserve unknown-session refusal, route and
+preflight behavior. The parent fails four outcomes and preserves two; the fix
+and current server pass all six. The existing search-evidence case catches
+missing registration but accepts an omitted cleanup callback; this case checks
+that distinct deletion/accounting gap. Run
+`bun test evals/coding-agent/calibrate-mcp-session-lifecycle.test.js`.
+The hidden fixture and runtime link appear only at grading. Synthetic loopback
+responses establish logical invalidation and active-session accounting, not heap
+reclamation, disconnect cleanup, LAN authentication, concurrency, agent isolation
+or model performance.
+
+### Fresh-process offline vault locking
+
+`app-vault-lock-fresh-process-key` executes the unchanged CLI handler and full
+vault crate in a minimal Cargo workspace. Synthetic ports supply a temporary
+data directory and password; setup, lock, status and unlock use fresh processes.
+Four outcome groups check encrypted database/WAL/SHM/nested media roundtrip,
+wrong-password preservation, unconfigured refusal and repeated-setup refusal.
+The roundtrip also preserves locked bytes after wrong unlock and repeated lock.
+
+Run `bun test evals/coding-agent/calibrate-vault-cli.test.js` for historical
+parent/reference/current, equivalent, unused-helper, response-only, blanket
+refusal, skipped-media, ignored-password and missing-source controls. Offline
+Cargo compilation has a 180-second bound; setup errors cannot count as behavior
+failures. The hidden fixture appears only at grading and uses no dependency or
+build-cache links. The copied diagnostic lock may resolve the smaller workspace;
+repository package and lock files are unchanged.
+
+This does not execute the packaged engine, TTY password handling, online HTTP
+routes, migration/daemon integration, crash recovery or production recordings.
+Current daemon and hybrid-storage refusal policies are separate contracts, not
+historical online-lock-success expectations. No model trial or isolation claim.
+
+The `app-mcp-package-http-dispatch` case compiles historical package sources and
+launches their declared bins. Seven public outcomes cover HTTP dispatch, flag
+ordering, stdio preservation, the direct HTTP alias and invalid HTTP startup
+refusal. Grading uses synthetic loopback requests, an empty home and disabled
+telemetry; it does not install from npm or call upstream tools. Compilation and
+unresponsive startup stop collection as setup errors. Calibrate with
+`bun test evals/coding-agent/calibrate-mcp-package-dispatch.test.js`.

@@ -22,6 +22,16 @@ For copy-paste API workflows beyond search, see [API recipes](/api-recipes).
 3. **Local storage** — everything stored in a local SQLite database
 4. **Search API** — query via `localhost:3030/search` with filters
 
+## Semantic search and keyword search
+
+For a phrase you remember, use the local `/search` API with `q`, the relevant time range, and an app or content type. Try a short distinctive term before a whole sentence. This is a text-search request, not a promise of vector or semantic similarity matching.
+
+For a question such as "what did we decide about launch timing?", use Screenpipe chat or an [MCP-connected assistant](/mcp-server). The AI can choose searches and synthesize their results. Ask for source timestamps and check them; a semantic-sounding answer is not proof that matching recordings were found.
+
+If nothing matches, first check recent recordings without a text query. Then narrow by date, app, or audio. A miss can come from capture, permissions, spelling, filters, or the selected device, not only search ranking. See [missing recordings](/missing-recordings).
+
+Protected API examples below may need the [local API bearer token](/getting-started#api-authentication).
+
 ## Search examples
 
 ### Find by text

@@ -1,7 +1,7 @@
 ---
 title: "Plan Screenpipe storage and retention"
 sidebarTitle: "Storage and retention"
-description: "Storage use depends on what you capture and retain."
+description: "Plan Screenpipe disk storage and data retention by measuring real workdays, then manage local recordings, cloud copies, and generated reports."
 icon: "hard-drive"
 ---
 
@@ -10,6 +10,14 @@ Storage use depends on what you capture and retain. Measure your own representat
 ## Start here
 
 Record your data directory size and free disk space before and after a normal day. Note recording hours, enabled inputs, and any retention or archive settings. Use the installed app’s storage controls rather than manually deleting database files.
+
+## Use an external SSD or another data directory
+
+Open **Settings → Storage → Data Directory → Change** and select a writable folder on the connected drive. Apply the restart requested by the app, then record a harmless test and verify it in the timeline.
+
+Changing the directory starts fresh recordings at that location. It does not automatically move or merge existing history. Keep the old directory until you have a verified backup and a migration plan. The **Database storage** conversion controls are separate from moving recordings to another drive.
+
+Keep the drive mounted while recording. If the configured directory becomes unavailable, Screenpipe can fall back to the default directory and show a warning. After reconnecting the drive, check the active path and recent recordings before assuming everything went to the SSD. Avoid a live database on a network share or a drive that disconnects during capture.
 
 ## Copy this prompt
 
