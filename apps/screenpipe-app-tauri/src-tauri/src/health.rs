@@ -1344,7 +1344,7 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
     let mut interval = interval(Duration::from_secs(1));
     let client = reqwest::Client::new();
     let mut last_status = String::new();
-    let mut last_theme = dark_light::detect().unwrap_or(Mode::Dark);
+    let mut last_theme = crate::tray::tray_theme();
     let start_time = Instant::now();
     let mut ever_connected = false;
     let mut consecutive_failures: u32 = 0;
@@ -1399,7 +1399,7 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                 vision_progress = VisionProgressTracker::default();
             }
 
-            let theme = dark_light::detect().unwrap_or(Mode::Dark);
+            let theme = crate::tray::tray_theme();
             let health_result = check_health(&app, &client).await;
 
             if matches!(
