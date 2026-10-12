@@ -6253,6 +6253,41 @@
         ],
         "command": "bun --no-env-file test packages/ai-gateway/eval-outbound-chat.test.ts"
       }
+    },
+    {
+      "id": "app-meeting-background-recovery",
+      "name": "Keep recovered meeting speech beside partial live transcripts",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "2b83241eee061b953edcbac3e66c70199bf5d8ca"
+      },
+      "base_ref": "ed2496416c20fc0b1d68c1355481036ddf79975f",
+      "oracle_ref": "2b83241eee061b953edcbac3e66c70199bf5d8ca",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/lib/utils/meeting-context.ts"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "meeting",
+        "transcript",
+        "recovery"
+      ],
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/lib/utils/meeting-context.ts"
+      ],
+      "prompt": "A partial routed meeting transcript hides speech recovered by background transcription. Repair the existing fetchMeetingAudio function so it returns both routed and recovered speech in chronological order, up to the requested positive cap. Remove identical text/time/device/speaker duplicates across sources while preserving distinct speech and separate input/output devices. Preserve background-only recovery when the routed request fails, retain available routed words when search fails, and return an empty list when both sources are unavailable. Filter malformed background rows and preserve valid chunk identity, audio path, timestamp, speaker and device metadata. Keep the public interface compatible; no particular helper, state layout or merge algorithm is required. Tests run the actual complete utility module with synthetic local API responses. This task does not establish native capture, live transcription delivery, database reconciliation, current cross-source speaker-label normalization, recording authority, browser rendering, agent isolation or model performance. Do not contact live services.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/meeting-background.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/lib/utils/meeting-background.eval.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test apps/screenpipe-app-tauri/lib/utils/meeting-background.eval.test.ts"
+      }
     }
   ]
 }

@@ -1894,3 +1894,7 @@ refusal. Grading uses synthetic loopback requests, an empty home and disabled
 telemetry; it does not install from npm or call upstream tools. Compilation and
 unresponsive startup stop collection as setup errors. Calibrate with
 `bun test evals/coding-agent/calibrate-mcp-package-dispatch.test.js`.
+
+### Meeting background recovery
+
+`app-meeting-background-recovery` executes the actual meeting audio reader with synthetic local API responses. Eight outcomes cover partial live plus recovered speech, ordering/capping, duplicate and distinct-device behavior, source failures, malformed rows and metadata preservation. The known fix changes only the reader for this case; native transcription and database recovery are outside its evidence boundary. Run `bun test evals/coding-agent/calibrate-meeting-background.test.js` for calibration controls.

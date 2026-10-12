@@ -1,0 +1,25 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+// Synthetic local API ports; the actual complete module is imported below.
+import { beforeEach, expect, mock, test } from 'bun:test';
+let routed: unknown[] = []; let background: unknown[] = []; let routedFails=false; let backgroundFails=false;
+mock.module('@/lib/api', () => ({ localFetch: async (url: string) => {
+ if(url.startsWith('/meetings/')) { if(routedFails)throw Error('synthetic unavailable');return {ok:true,json:async()=>routed}; }
+ if(url.startsWith('/search?')) {if(backgroundFails)throw Error('synthetic unavailable');return {ok:true,json:async()=>({data:background})};}
+ throw Error('unexpected endpoint');
+}}));
+const { fetchMeetingAudio } = await import('./meeting-context.ts');
+const ts=(second:number)=>`2026-01-01T00:00:${String(second).padStart(2,'0')}.000Z`;
+const live=(text:string,second:number)=>({id:second,meetingId:42,provider:'synthetic',itemId:String(second),deviceName:'speaker',deviceType:'output',speakerName:'speaker',transcript:text,capturedAt:ts(second)});
+const back=(text:string,second:number)=>({content:{chunk_id:second,file_path:'/synthetic/audio.mp4',timestamp:ts(second),transcription:text,device:'speaker',device_type:'output',speaker:{id:1,name:'speaker'}}});
+const fetch=()=>fetchMeetingAudio(ts(0),ts(59),100,42);
+beforeEach(()=>{routed=[];background=[];routedFails=false;backgroundFails=false;});
+test('partial routed transcript retains later recovered words',async()=>{routed=[live('early live',1)];background=[back('later recovered',5)];expect((await fetch()).map(x=>x.transcription)).toEqual(['early live','later recovered']);});
+test('background-only retrieval works when routed service fails',async()=>{routedFails=true;background=[back('recovered only',5)];expect((await fetch()).map(x=>x.transcription)).toEqual(['recovered only']);});
+test('retains available live words when background fails',async()=>{routed=[live('available live',1)];backgroundFails=true;expect((await fetch()).map(x=>x.transcription)).toEqual(['available live']);});
+test('combines sources chronologically, removes exact duplicate and respects cap',async()=>{routed=[live('middle',5)];background=[back('last',9),back('middle',5),back('first',1)];expect((await fetchMeetingAudio(ts(0),ts(59),2,42)).map(x=>x.transcription)).toEqual(['first','middle']);});
+
+test('deduplicates identical routed and recovered utterances without losing distinct speech',async()=>{routed=[live('shared words',5)];background=[back('shared words',5),back('other words',7)];expect((await fetch()).map(x=>x.transcription)).toEqual(['shared words','other words']);});
+test('preserves distinct devices even when text and time match',async()=>{routed=[live('same words',5)];const mic=back('same words',5);mic.content.device_type='input';background=[mic];const rows=await fetch();expect(rows).toHaveLength(2);expect(rows.map(x=>x.isInput)).toEqual([false,true]);});
+test('filters malformed background records and retains valid record metadata',async()=>{background=[{content:{}},back('',2),back('valid words',3)];const rows=await fetch();expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({audioChunkId:3,audioFilePath:'/synthetic/audio.mp4',transcription:'valid words',timestamp:ts(3),speakerId:1,deviceType:'output',isInput:false});});
+test('unavailable sources return an empty result',async()=>{routedFails=true;backgroundFails=true;expect(await fetch()).toEqual([]);});
