@@ -559,6 +559,11 @@ pub enum EnterpriseSyncError {
     Network(String),
     #[error("enterprise upload configuration blocked: {0}")]
     Configuration(String),
+    #[error("enterprise upload storage {operation} failed: {cause}")]
+    Storage {
+        operation: &'static str,
+        cause: String,
+    },
     /// The control plane's upload ticket pointed at a host outside the
     /// MDM-pinned destination list (`SCREENPIPE_ENTERPRISE_UPLOAD_PINNED_HOSTS`).
     /// This is the destination-pin tamper signal — permanent, loud, never
@@ -3788,9 +3793,19 @@ pub(crate) mod tests {
                 .unwrap();
             assert_eq!(std::fs::read(&cursor_path).unwrap(), before);
             reply
-                .send(Err(EnterpriseSyncError::Configuration(
-                    "frame storage: read revision changed; retry the complete query".into(),
-                )))
+                .send(Err(EnterpriseSyncError::Storage {
+                    operation: if attempt % 2 == 0 {
+                        "admit export"
+                    } else {
+                        "prepare export"
+                    },
+                    cause: if attempt % 2 == 0 {
+                        "frame storage: read revision changed; retry the complete query"
+                    } else {
+                        "frame storage: payload read deadline exceeded"
+                    }
+                    .into(),
+                }))
                 .unwrap();
             tokio::time::timeout(Duration::from_secs(10), async {
                 while std::fs::read_to_string(&log_path)
@@ -3867,6 +3882,8 @@ pub(crate) mod tests {
             .find(|r| r.url.path() == "/support-upload")
             .unwrap();
         let logged = std::fs::read_to_string(log_path).unwrap();
+        assert!(logged.contains("enterprise upload storage prepare export failed"));
+        assert!(logged.contains("frame storage: payload read deadline exceeded"));
         assert!(logged.contains("frame storage: read revision changed"));
         assert!(logged.contains("pending work retained, retrying in 300s"));
         assert!(!logged.contains("backing off 3600s"));
