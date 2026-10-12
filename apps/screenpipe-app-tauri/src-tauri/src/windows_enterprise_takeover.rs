@@ -7,7 +7,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, PidExt, ProcessExt, System, SystemExt};
@@ -16,6 +16,71 @@ pub(crate) const LOG_NAME: &str = "enterprise-takeover.log";
 const MAX_LOG_BYTES: u64 = 32 * 1024;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 static LOG_WRITER: Mutex<()> = Mutex::new(());
+static ENTERPRISE_PRESENCE: OnceLock<OwnedHandle> = OnceLock::new();
+
+fn presence_name(control_port: u16, api_port: u16) -> String {
+    // Local objects are scoped to the interactive Windows session. Including
+    // the already-isolated ports keeps debug and E2E launches independent from
+    // installed production instances without trusting an installation path.
+    format!(r"Local\ScreenpipeEnterprise-{control_port}-{api_port}")
+}
+
+/// Publish authoritative Enterprise build identity before any app state opens.
+/// The kernel releases the marker when the process truly exits, including on a
+/// crash, so Consumer cannot mistake a stale file or unhealthy HTTP endpoint
+/// for a live Enterprise instance.
+#[cfg(feature = "enterprise-build")]
+pub(crate) fn publish_enterprise_presence(
+    control_port: u16,
+    api_port: u16,
+) -> Result<(), String> {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Threading::CreateMutexW;
+
+    if ENTERPRISE_PRESENCE.get().is_some() {
+        return Ok(());
+    }
+    let name = HSTRING::from(presence_name(control_port, api_port));
+    let handle = unsafe { CreateMutexW(None, false, &name) }.map_err(|error| {
+        let cause = format!("could not publish Enterprise presence: {error}");
+        record("presence_publish_failed", &cause, "enterprise_start_aborted");
+        cause
+    })?;
+    // SAFETY: CreateMutexW returned an owned kernel handle, transferred once.
+    let handle = unsafe { OwnedHandle::from_raw_handle(handle.0 as *mut _) };
+    let _ = ENTERPRISE_PRESENCE.set(handle);
+    Ok(())
+}
+
+/// Consumer must stop while the Enterprise build owns its session marker.
+#[cfg(not(feature = "enterprise-build"))]
+pub(crate) fn enterprise_is_present(control_port: u16, api_port: u16) -> Result<bool, String> {
+    use windows::core::HSTRING;
+    use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+    use windows::Win32::System::Threading::{OpenMutexW, SYNCHRONIZATION_ACCESS_RIGHTS};
+
+    let name = HSTRING::from(presence_name(control_port, api_port));
+    match unsafe { OpenMutexW(SYNCHRONIZATION_ACCESS_RIGHTS(0x0010_0000), false, &name) } {
+        Ok(handle) => {
+            // SAFETY: OpenMutexW returned an owned kernel handle, closed here.
+            drop(unsafe { OwnedHandle::from_raw_handle(handle.0 as *mut _) });
+            record(
+                "consumer_blocked",
+                &format!(
+                    "Enterprise presence verified for control_port={control_port} api_port={api_port}"
+                ),
+                "consumer_start_aborted",
+            );
+            Ok(true)
+        }
+        Err(error) if error.code() == ERROR_FILE_NOT_FOUND.to_hresult() => Ok(false),
+        Err(error) => {
+            let cause = format!("could not inspect Enterprise presence: {error}");
+            record("presence_check_failed", &cause, "consumer_start_aborted");
+            Err(cause)
+        }
+    }
+}
 
 pub(crate) fn is_takeover_log(name: &str) -> bool {
     name == LOG_NAME
@@ -415,6 +480,57 @@ mod tests {
     use super::*;
 
     #[test]
+    fn enterprise_presence_fixture() {
+        use windows::core::HSTRING;
+        use windows::Win32::System::Threading::CreateMutexW;
+
+        let Ok(name) = std::env::var("SCREENPIPE_ENTERPRISE_PRESENCE_FIXTURE") else {
+            return;
+        };
+        let name = HSTRING::from(name);
+        let handle = unsafe { CreateMutexW(None, false, &name) }.unwrap();
+        // SAFETY: CreateMutexW returned an owned kernel handle, held until EOF.
+        let _handle = unsafe { OwnedHandle::from_raw_handle(handle.0 as *mut _) };
+        println!("presence-ready");
+        let _ = std::io::read_to_string(std::io::stdin());
+    }
+
+    #[cfg(not(feature = "enterprise-build"))]
+    #[test]
+    fn consumer_blocks_until_live_enterprise_presence_exits() {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
+
+        let control_port = unused_port();
+        let api_port = unused_port();
+        let name = presence_name(control_port, api_port);
+        let mut enterprise = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "windows_enterprise_takeover::tests::enterprise_presence_fixture",
+                "--nocapture",
+            ])
+            .env("SCREENPIPE_ENTERPRISE_PRESENCE_FIXTURE", name)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut output = BufReader::new(enterprise.stdout.take().unwrap());
+        let mut ready = String::new();
+        while !ready.contains("presence-ready") {
+            let mut line = String::new();
+            assert_ne!(output.read_line(&mut line).unwrap(), 0);
+            ready.push_str(&line);
+        }
+
+        assert!(enterprise_is_present(control_port, api_port).unwrap());
+        drop(enterprise.stdin.take());
+        assert!(enterprise.wait().unwrap().success());
+        assert!(!enterprise_is_present(control_port, api_port).unwrap());
+    }
+
+    #[test]
     fn screenpipe_owner_fixture() {
         let Ok(port) = std::env::var("SCREENPIPE_TAKEOVER_FIXTURE_PORT") else {
             return;
@@ -617,6 +733,13 @@ mod tests {
             "support_collection_available",
         )
         .unwrap();
+        append_record_to(
+            root.path(),
+            "consumer_blocked",
+            "Enterprise presence verified for control_port=11435 api_port=3030",
+            "consumer_start_aborted",
+        )
+        .unwrap();
 
         let report =
             crate::diagnostic_logs::collect_redacted_from_dirs(&[root.path().to_path_buf()])
@@ -627,6 +750,8 @@ mod tests {
         assert!(report.contains("os error 5"));
         assert!(report.contains("enterprise_start_aborted"));
         assert!(report.contains("startup_after_restart"));
+        assert!(report.contains("consumer_blocked"));
+        assert!(report.contains("consumer_start_aborted"));
         assert!(!report.contains("private@example.com"));
     }
 }

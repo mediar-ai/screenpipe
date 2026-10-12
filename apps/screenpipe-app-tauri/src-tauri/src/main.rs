@@ -506,6 +506,43 @@ async fn main() {
     // See `dev_isolation`.
     dev_isolation::apply();
 
+    // Enterprise owns an edition marker before either build can initialize
+    // Tauri, the store, database, or recorder. Consumer exits based on this
+    // kernel-backed build identity even while Enterprise has not bound a port
+    // or its HTTP endpoints are unhealthy.
+    #[cfg(target_os = "windows")]
+    {
+        let focus_port = std::env::var("SCREENPIPE_FOCUS_PORT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(11435);
+        let api_port = std::env::var("SCREENPIPE_PORT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or_else(|| recording::LocalApiContext::default().port);
+
+        #[cfg(feature = "enterprise-build")]
+        if let Err(error) =
+            windows_enterprise_takeover::publish_enterprise_presence(focus_port, api_port)
+        {
+            eprintln!("screenpipe: enterprise presence initialization failed: {error}");
+            std::process::exit(1);
+        }
+
+        #[cfg(not(feature = "enterprise-build"))]
+        match windows_enterprise_takeover::enterprise_is_present(focus_port, api_port) {
+            Ok(true) => {
+                eprintln!("screenpipe: Enterprise is running; Consumer startup is blocked.");
+                std::process::exit(0);
+            }
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("screenpipe: Enterprise presence check failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     #[cfg(target_os = "linux")]
     linux_webkit_env::configure();
 
