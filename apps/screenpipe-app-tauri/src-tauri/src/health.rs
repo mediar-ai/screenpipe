@@ -1242,6 +1242,56 @@ fn is_unhealthy_icon(icon_key: &str) -> bool {
     icon_key == "unhealthy" || icon_key == "error"
 }
 
+/// Last (status, theme) shown in the tray. Shared so a theme change is applied
+/// within a second even while a slow health check is still in flight.
+static TRAY_ICON_STATE: Lazy<std::sync::Mutex<(String, Option<Mode>)>> =
+    Lazy::new(|| std::sync::Mutex::new((String::new(), None)));
+
+/// Set the tray icon for `status` (or the last known status) and the current
+/// taskbar theme, if either changed.
+fn apply_tray_icon(app: &tauri::AppHandle, status: Option<&str>) {
+    let theme = crate::tray::tray_theme();
+    let current_status = {
+        let mut state = TRAY_ICON_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let status = status.map(str::to_string).unwrap_or_else(|| state.0.clone());
+        if status.is_empty() || (status == state.0 && Some(theme) == state.1) {
+            return;
+        }
+        *state = (status.clone(), Some(theme));
+        status
+    };
+    let icon_path = match (is_unhealthy_icon(&current_status), theme == Mode::Light) {
+        (true, true) => "assets/screenpipe-logo-tray-black-failed.png",
+        (true, false) => "assets/screenpipe-logo-tray-white-failed.png",
+        (false, true) => "assets/screenpipe-logo-tray-black.png",
+        (false, false) => "assets/screenpipe-logo-tray-white.png",
+    };
+    let image = match app
+        .path()
+        .resolve(icon_path, BaseDirectory::Resource)
+        .map_err(anyhow::Error::from)
+        .and_then(|p| tauri::image::Image::from_path(&p).map_err(anyhow::Error::from))
+    {
+        Ok(img) => img,
+        Err(e) => {
+            error!("failed to load tray icon {}: {}", icon_path, e);
+            return;
+        }
+    };
+    // TrayIcon must be accessed and dropped on the main thread
+    // (NSStatusBar operations crash if called from a tokio thread)
+    let app_clone = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        crate::window::with_autorelease_pool(|| {
+            if let Some(main_tray) = app_clone.tray_by_id("screenpipe_main") {
+                if let Err(e) = crate::safe_icon::safe_set_icon_as_template(&main_tray, image) {
+                    error!("failed to set tray icon: {}", e);
+                }
+            }
+        });
+    });
+}
+
 /// Parse device info from a health check response for tray display.
 fn parse_devices_from_health(health_result: &Result<HealthCheckResponse>) -> Vec<DeviceInfo> {
     let health = match health_result {
@@ -1343,8 +1393,6 @@ async fn next_health_poll(timer: &mut tokio::time::Interval) -> bool {
 pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
     let mut interval = interval(Duration::from_secs(1));
     let client = reqwest::Client::new();
-    let mut last_status = String::new();
-    let mut last_theme = crate::tray::tray_theme();
     let start_time = Instant::now();
     let mut ever_connected = false;
     let mut consecutive_failures: u32 = 0;
@@ -1387,6 +1435,17 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
     let mut server_respawns: std::collections::VecDeque<Instant> =
         std::collections::VecDeque::new();
 
+    // Follow taskbar theme changes every second, independent of the health
+    // checks below, which can take several seconds while the engine is down.
+    let theme_app = app.clone();
+    tokio::spawn(async move {
+        let mut tick = interval(Duration::from_secs(1));
+        loop {
+            tick.tick().await;
+            apply_tray_icon(&theme_app, None);
+        }
+    });
+
     tokio::spawn(async move {
         loop {
             if next_health_poll(&mut interval).await {
@@ -1399,7 +1458,6 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                 vision_progress = VisionProgressTracker::default();
             }
 
-            let theme = crate::tray::tray_theme();
             let health_result = check_health(&app, &client).await;
 
             if matches!(
@@ -1694,59 +1752,7 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                 devices,
             );
 
-            let current_status = status_to_icon_key(status);
-
-            // Update icon if either health status OR theme changes
-            if current_status != last_status || theme != last_theme {
-                last_status = current_status.to_string();
-                last_theme = theme;
-
-                // Resolve icon path on this thread (no AppKit calls)
-                let icon_path = if is_unhealthy_icon(current_status) {
-                    if theme == Mode::Light {
-                        "assets/screenpipe-logo-tray-black-failed.png"
-                    } else {
-                        "assets/screenpipe-logo-tray-white-failed.png"
-                    }
-                } else {
-                    if theme == Mode::Light {
-                        "assets/screenpipe-logo-tray-black.png"
-                    } else {
-                        "assets/screenpipe-logo-tray-white.png"
-                    }
-                };
-
-                let icon_path = match app.path().resolve(icon_path, BaseDirectory::Resource) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        error!("failed to resolve icon path: {}", e);
-                        continue;
-                    }
-                };
-
-                let image = match tauri::image::Image::from_path(&icon_path) {
-                    Ok(img) => img,
-                    Err(e) => {
-                        error!("failed to load tray icon from {:?}: {}", icon_path, e);
-                        continue;
-                    }
-                };
-
-                // TrayIcon must be accessed and dropped on the main thread
-                // (NSStatusBar operations crash if called from a tokio thread)
-                let app_clone = app.clone();
-                let _ = app.run_on_main_thread(move || {
-                    crate::window::with_autorelease_pool(|| {
-                        if let Some(main_tray) = app_clone.tray_by_id("screenpipe_main") {
-                            if let Err(e) =
-                                crate::safe_icon::safe_set_icon_as_template(&main_tray, image)
-                            {
-                                error!("failed to set tray icon: {}", e);
-                            }
-                        }
-                    });
-                });
-            }
+            apply_tray_icon(&app, Some(status_to_icon_key(status)));
 
             // ── Detect any restart (manual, notification, settings-triggered) ──
             // When spawn_screenpipe completes, it updates last_spawn_epoch.
