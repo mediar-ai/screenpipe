@@ -1250,6 +1250,7 @@ private final class MeetingTranscriptScrollView: NSScrollView {
     private var hasContentLayout = false
     private var contentNeedsLayout = true
     private var lastViewportSize = NSSize.zero
+    private var scrollObserver: NSObjectProtocol?
 
     init() {
         super.init(frame: .zero)
@@ -1260,6 +1261,19 @@ private final class MeetingTranscriptScrollView: NSScrollView {
         scrollerStyle = .overlay
         scrollerKnobStyle = .light
         documentView = hosting
+        contentView.postsBoundsChangedNotifications = true
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: contentView, queue: .main
+        ) { [weak self] _ in
+            // Reaching the end must flush queued speech even if the stream has
+            // gone quiet. Layout itself also changes bounds, so avoid recursion.
+            guard let self, !self.layingOutContent else { return }
+            self.needsLayout = true
+        }
+    }
+
+    deinit {
+        if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1278,12 +1292,16 @@ private final class MeetingTranscriptScrollView: NSScrollView {
     private func layoutContent() {
         guard !layingOutContent, contentSize.width > 0, contentSize.height > 0 else { return }
         guard contentNeedsLayout || contentSize != lastViewportSize else { return }
+        let oldOffset = contentView.bounds.origin
+        let followsLatest = !hasContentLayout || hosting.frame.height - contentView.bounds.maxY <= 0.5
+        // Keep a stable reading snapshot while paused. Otherwise partial text
+        // reflow or eviction from the rolling feed moves the words under the
+        // reader even when the numeric scroll offset stays unchanged.
+        guard followsLatest || contentSize != lastViewportSize else { return }
         contentNeedsLayout = false
         lastViewportSize = contentSize
         layingOutContent = true
         defer { layingOutContent = false }
-        let oldOffset = contentView.bounds.origin
-        let followsLatest = !hasContentLayout || hosting.frame.height - contentView.bounds.maxY <= 4
         hosting.rootView = AnyView(content.frame(width: contentSize.width).fixedSize(horizontal: false, vertical: true))
         let height = hosting.fittingSize.height
         hosting.setFrameSize(NSSize(width: contentSize.width, height: height))
@@ -2575,6 +2593,12 @@ class ShortcutReminderController: NSObject, NSWindowDelegate {
         if isDraggingPill { return }
         if transcriptPanel == nil {
             createTranscriptPanel()
+        }
+        if transcriptPanel?.isVisible != true {
+            // A reopened card starts at the latest speech. Streaming refreshes
+            // keep the existing native scroll view and its reading position.
+            transcriptHostingView?.removeFromSuperview()
+            transcriptHostingView = nil
         }
         updateTranscriptContent()
         positionTranscriptPanel()

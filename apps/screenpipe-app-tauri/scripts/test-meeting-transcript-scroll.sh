@@ -29,6 +29,7 @@ else
 fi
 
 xcrun swiftc \
+    -DOVERLAY_PREVIEW \
     -swift-version 5 \
     -sdk "$sdk_path" \
     -target "$swift_target" \
