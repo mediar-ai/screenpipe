@@ -32,9 +32,9 @@ use windows::Win32::Graphics::Direct2D::{
 };
 use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetMonitorInfoW,
-    MonitorFromPoint, MonitorFromWindow, ReleaseDC, SelectObject, AC_SRC_ALPHA, AC_SRC_OVER,
-    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ,
-    MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    MonitorFromPoint, MonitorFromWindow, ReleaseDC, ScreenToClient, SelectObject, AC_SRC_ALPHA,
+    AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS, HBITMAP, HDC,
+    HGDIOBJ, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -89,6 +89,10 @@ const HOVER_POLL_MS: u32 = 90;
 /// Pointer travel before a press on the pill becomes a drag rather than a click.
 const DRAG_THRESHOLD: f32 = 4.0;
 const TRANSCRIPT_CAPACITY: usize = 4;
+
+fn show_resets_transcript(visible: bool) -> bool {
+    !visible
+}
 
 /// Show the same two-choice brand context menu as the macOS overlay. Returning
 /// the selected app action keeps presentation inside the Win32 window while
@@ -234,8 +238,17 @@ impl Overlay {
     pub fn preview_mouse_wheel(&self, delta: i16) {
         if let Some(h) = self.raw_hwnd() {
             let packed = (delta as u16 as usize) << 16;
+            let mut rect = RECT::default();
             unsafe {
-                let _ = PostMessageW(h, WM_MOUSEWHEEL, WPARAM(packed), LPARAM(0));
+                let _ = GetWindowRect(h, &mut rect);
+            }
+            let x = rect.left + (rect.right - rect.left) / 2;
+            // Aim well inside the transcript text body, not at its header or
+            // the dock. Use a real screen coordinate, as WM_MOUSEWHEEL does.
+            let y = rect.top + (rect.bottom - rect.top) * 2 / 3;
+            let position = ((y as u16 as isize) << 16) | x as u16 as isize;
+            unsafe {
+                let _ = PostMessageW(h, WM_MOUSEWHEEL, WPARAM(packed), LPARAM(position));
             }
         }
     }
@@ -1115,14 +1128,11 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                 s.notification = ctx.state.notification.clone();
                 let was_transcript_visible = ctx.state.shows_transcript();
                 let transcript_visible = s.shows_transcript();
-                ctx.transcript_scroll.sync(
-                    &ctx.state.transcript,
-                    &s.transcript,
-                    TRANSCRIPT_CAPACITY,
-                    transcript_visible
-                        && s.meeting_id == ctx.state.meeting_id
-                        && was_transcript_visible == transcript_visible,
-                );
+                let preserve = transcript_visible
+                    && was_transcript_visible
+                    && s.meeting_id == ctx.state.meeting_id;
+                ctx.transcript_scroll.sync(&s.transcript, preserve);
+                s.transcript = ctx.transcript_scroll.display().to_vec();
                 s.transcript_scroll_from_latest = ctx.transcript_scroll.from_latest();
                 if s != ctx.state {
                     ctx.state = s;
@@ -1141,8 +1151,11 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                 }
             }
             Cmd::Show => {
-                ctx.transcript_scroll.reset();
-                ctx.state.transcript_scroll_from_latest = 0;
+                if show_resets_transcript(ctx.visible.load(Ordering::SeqCst)) {
+                    ctx.transcript_scroll.reset();
+                    ctx.state.transcript = ctx.transcript_scroll.display().to_vec();
+                    ctx.state.transcript_scroll_from_latest = 0;
+                }
                 unsafe {
                     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 }
@@ -1161,6 +1174,7 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                 ctx.state.pressed_control = None;
                 ctx.state.notification = None;
                 ctx.transcript_scroll.reset();
+                ctx.state.transcript = ctx.transcript_scroll.display().to_vec();
                 ctx.state.transcript_scroll_from_latest = 0;
                 rearm_dismiss = true;
             }
@@ -1344,16 +1358,19 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
 
             WM_MOUSEWHEEL => {
                 if let Some(ctx) = ctx_of(hwnd) {
-                    if ctx.state.shows_transcript() {
+                    let mut point = POINT {
+                        x: lparam.0 as i16 as i32,
+                        y: (lparam.0 >> 16) as i16 as i32,
+                    };
+                    let _ = ScreenToClient(hwnd, &mut point);
+                    let over_body = ctx.layout.transcript.is_some_and(|r| {
+                        r.contains(point.x as f32, point.y as f32)
+                            && point.y as f32 >= r.y + 27.0 * ctx.layout.scale
+                    });
+                    if ctx.state.shows_transcript() && over_body {
                         let delta = ((wparam.0 >> 16) & 0xffff) as u16 as i16;
-                        let notches = (delta.unsigned_abs() as usize / 120).max(1);
-                        for _ in 0..notches {
-                            ctx.transcript_scroll.wheel(
-                                delta,
-                                ctx.state.transcript.len(),
-                                TRANSCRIPT_CAPACITY,
-                            );
-                        }
+                        ctx.transcript_scroll.wheel(delta, TRANSCRIPT_CAPACITY);
+                        ctx.state.transcript = ctx.transcript_scroll.display().to_vec();
                         ctx.state.transcript_scroll_from_latest =
                             ctx.transcript_scroll.from_latest();
                         repaint(hwnd);
@@ -1531,6 +1548,12 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_hidden_to_visible_show_resets_the_transcript() {
+        assert!(show_resets_transcript(false));
+        assert!(!show_resets_transcript(true));
+    }
 
     /// Replays the drag that would not stick: the app's own copy of the state
     /// is stale the moment the pointer is released, and it re-pushes that copy

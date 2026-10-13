@@ -325,6 +325,8 @@ fn live_shots(dir: &str) -> windows::core::Result<()> {
 fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
     std::fs::create_dir_all(dir).expect("create shot dir");
     let overlay = Overlay::spawn(|action| println!("action: {action}"));
+    let renderer = Renderer::new()?;
+    let eq = Equalizer::default();
     overlay.show();
     let mut state = OverlayState {
         force_expanded: true,
@@ -333,7 +335,7 @@ fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
         transcript_pinned: true,
         ..base()
     };
-    state.transcript = (0..8)
+    state.transcript = (0..50)
         .map(|i| TranscriptItem {
             id: format!("fixture-{i}"),
             speaker: if i % 2 == 0 { "you" } else { "guest" }.into(),
@@ -342,37 +344,63 @@ fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
         })
         .collect();
 
-    let shoot = |name: &str, overlay: &Overlay| -> windows::core::Result<()> {
+    let shoot = |name: &str, evidence: &OverlayState| -> windows::core::Result<()> {
         std::thread::sleep(Duration::from_millis(250));
-        let (x, y, w, h) = overlay.window_rect().expect("overlay window");
-        let shot = capture_desktop()?;
-        let (cw, ch, bytes) = shot.crop(x - 14, y - 14, (w + 28) as u32, (h + 28) as u32);
         let path = format!("{dir}/{name}.png");
-        write_bgra_png(cw, ch, &bytes, &path)?;
-        println!("{path} {cw}x{ch}");
+        let (w, h) = write_png(
+            &renderer,
+            evidence,
+            &eq,
+            &Backdrop::Solid([0.11, 0.12, 0.14]),
+            None,
+            14,
+            &path,
+        )?;
+        println!("{path} {w}x{h}");
         Ok(())
     };
 
     overlay.update(state.clone());
-    shoot("01-following-latest", &overlay)?;
+    shoot("01-following-latest", &state)?;
     overlay.preview_mouse_wheel(360);
-    shoot("02-wheel-up-reading", &overlay)?;
+    let mut frozen = state.clone();
+    frozen.transcript_scroll_from_latest = 3;
+    shoot("02-wheel-up-reading", &frozen)?;
+    // A repeated Show while already visible must not discard the reading
+    // snapshot. This is the command pattern used by redundant app lifecycle
+    // notifications.
+    overlay.show();
+    shoot("03-repeated-show-still-reading", &frozen)?;
+
+    // Model the bounded live feed rolling 0..49 to 1..50, then replace a
+    // same-length partial. Neither update may alter the frozen display.
+    state.transcript.remove(0);
     state.transcript.push(TranscriptItem {
-        id: "fixture-8".into(),
-        speaker: "guest".into(),
-        text: "streaming append must not move the viewport".into(),
+        id: "fixture-50".into(),
+        speaker: "you".into(),
+        text: "synthetic transcript line 50".into(),
         device_type: "output".into(),
     });
     overlay.update(state.clone());
-    state.transcript[3].text = "same stable item with a replaced partial".into();
+    state.transcript[45].text = "synthetic partial changed 46".into();
     overlay.update(state.clone());
-    shoot("03-append-and-partial-still-reading", &overlay)?;
-    overlay.preview_mouse_wheel(-1200);
-    shoot("04-wheel-down-following", &overlay)?;
+    shoot("04-roll-and-partial-still-reading", &frozen)?;
+
+    // Hide while still paused. Reopening is a genuine visibility transition
+    // and must jump to the newest rolling snapshot.
     overlay.hide();
     std::thread::sleep(Duration::from_millis(100));
     overlay.show();
-    shoot("05-hide-reopen-latest", &overlay)?;
+    shoot("05-hide-reopen-flushes-latest", &state)?;
+
+    // Returning to bottom must also flush immediately when the stream is now
+    // quiet (there is deliberately no update between wheel and capture).
+    overlay.preview_mouse_wheel(240);
+    let mut paused_again = state.clone();
+    paused_again.transcript_scroll_from_latest = 2;
+    shoot("06-paused-again", &paused_again)?;
+    overlay.preview_mouse_wheel(-1200);
+    shoot("07-wheel-bottom-flushes-quiet-latest", &state)?;
     overlay.hide();
     Ok(())
 }
