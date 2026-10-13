@@ -1,0 +1,52 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { beforeAll, afterEach, expect, test } from 'bun:test';
+import { VertexMaasProvider } from './src/providers/vertex-maas';
+import { resetTokenCache } from './src/providers/vertex';
+const originalFetch = globalThis.fetch;
+let pem: string;
+beforeAll(async () => {
+  const key = await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
+  pem='-----BEGIN PRIVATE KEY-----\n'+btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('pkcs8',key.privateKey))))+'\n-----END PRIVATE KEY-----';
+});
+afterEach(() => { globalThis.fetch=originalFetch; resetTokenCache(); });
+async function completion(response: () => Response, stream=false) {
+  resetTokenCache(); let requests=0;
+  const body:any={model:'glm-4.7',messages:[{role:'user',content:'Synthetic request'}],temperature:0,max_tokens:64};
+  const before=JSON.stringify(body);
+  globalThis.fetch=(async (input:any,init:RequestInit={}) => {
+    const url=String(input);
+    if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'synthetic-token',expires_in:3600});
+    expect(url).toBe('https://aiplatform.googleapis.com/v1/projects/synthetic-project/locations/global/endpoints/openapi/chat/completions');
+    expect(init.method).toBe('POST');expect(new Headers(init.headers).get('authorization')).toBe('Bearer synthetic-token');
+    expect(JSON.parse(String(init.body))).toMatchObject({messages:body.messages,temperature:0,max_tokens:64,stream});requests++;
+    return response();
+  }) as typeof fetch;
+  const provider=new VertexMaasProvider(JSON.stringify({project_id:'synthetic-project',client_email:'synthetic@eval.invalid',private_key:pem}),'synthetic-project');
+  try {return stream ? await new Response(await provider.createStreamingCompletion(body)).text() : await provider.createCompletion(body);}
+  finally {expect(requests).toBe(1);expect(JSON.stringify(body)).toBe(before);}
+}
+for(const [label,body] of [['empty',''],['whitespace',' \n\t '],['truncated','{"choices":'],['html','<html>synthetic outage</html>']]){
+  test(`${label} successful upstream body is classified as bad gateway`,async()=>{
+    let failure:any;
+    try{await completion(()=>new Response(body,{status:200}));}catch(error){failure=error;}
+    expect(failure).toBeDefined();expect(failure.status).toBe(502);
+  });
+}
+test('valid completion content and metadata are preserved',async()=>{
+  const expected={id:'synthetic-id',choices:[{message:{role:'assistant',content:'Synthetic answer'}}],usage:{prompt_tokens:4,completion_tokens:2}};
+  const response=await completion(()=>Response.json(expected)) as Response;
+  expect(response.status).toBe(200);expect(await response.json()).toEqual(expected);
+});
+test('reasoning-only response still supplies visible content',async()=>{
+  const response=await completion(()=>Response.json({choices:[{message:{content:'',reasoning_content:'Synthetic reasoning'}}]})) as Response;
+  expect((await response.json()).choices[0].message.content).toBe('Synthetic reasoning');
+});
+test('ordinary upstream client rejection keeps its status',async()=>{
+  let failure:any;try{await completion(()=>new Response('synthetic refusal',{status:400}));}catch(error){failure=error;}
+  expect(failure?.status).toBe(400);
+});
+test('streaming completion remains readable',async()=>{
+  const value=await completion(()=>new Response('data: {"choices":[{"delta":{"content":"Synthetic stream"}}]}\n\ndata: [DONE]\n\n'),true);
+  expect(value).toContain('Synthetic stream');expect(value).toContain('[DONE]');
+});
