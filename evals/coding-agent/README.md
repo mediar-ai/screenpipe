@@ -1898,3 +1898,7 @@ unresponsive startup stop collection as setup errors. Calibrate with
 ### Meeting background recovery
 
 `app-meeting-background-recovery` executes the actual meeting audio reader with synthetic local API responses. Eight outcomes cover partial live plus recovered speech, ordering/capping, duplicate and distinct-device behavior, source failures, malformed rows and metadata preservation. The known fix changes only the reader for this case; native transcription and database recovery are outside its evidence boundary. Run `bun test evals/coding-agent/calibrate-meeting-background.test.js` for calibration controls.
+
+### Vertex upstream JSON failures
+
+The Vertex upstream JSON case executes public JSON and streaming completion methods with synthetic OAuth and completion transport. Empty or malformed successful bodies must produce status 502 while valid content, reasoning fallback, client refusal and streaming remain intact. It does not prove gateway retry behavior, live provider reliability or agent isolation.

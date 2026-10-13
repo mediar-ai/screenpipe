@@ -6288,6 +6288,41 @@
         ],
         "command": "bun --no-env-file test apps/screenpipe-app-tauri/lib/utils/meeting-background.eval.test.ts"
       }
+    },
+    {
+      "id": "ai-gateway-vertex-upstream-json",
+      "name": "Classify malformed Vertex success bodies as upstream failures",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "b4563754cf43d182d4f57147a315817cf435efd6"
+      },
+      "base_ref": "d7952bd90b412705b1d5f6133ec75d8e61858214",
+      "oracle_ref": "b4563754cf43d182d4f57147a315817cf435efd6",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "provider-compatibility",
+        "error-classification"
+      ],
+      "prompt": "The public Vertex MaaS JSON completion method leaks unclassified parse failures when the provider returns HTTP 200 with an empty, whitespace-only, truncated JSON or HTML response body. Report these as upstream errors carrying status 502 so callers can identify a bad gateway response. Preserve valid completion content and metadata, reasoning-only responses supplying visible content, ordinary upstream HTTP 400 refusal status and readable streaming completions. For the existing glm-4.7 endpoint, preserve POST and bearer-token authentication, user messages, zero temperature, max_tokens and the streaming flag, without mutating caller input. Each ordinary success or malformed-success response uses one completion request. Do not make valid requests fail or turn client refusals into 502 errors. Exercise the public completion methods with synthetic credentials and transport only; do not contact live providers. No particular parser, helper name, error class or error wording is required.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/vertex-upstream-json.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-vertex-upstream-json.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-upstream-json.test.ts"
+      }
     }
   ]
 }
