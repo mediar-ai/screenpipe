@@ -601,7 +601,7 @@ pub fn is_tray_hidden() -> bool {
     )
 }
 
-/// Serializes any test that mutates `SYNC_STREAMS`. Cargo runs tests in
+/// Serializes tests that read or mutate `SYNC_STREAMS`. Cargo runs tests in
 /// parallel within a binary by default, and the static here is shared with the
 /// `enterprise_sync::run_one_sync` test mod — two tests racing on a global
 /// will flake. Acquire this guard for the full duration of the test, including

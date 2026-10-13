@@ -4356,6 +4356,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn empty_batch_no_post_no_cursor_change() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, "http://does-not-matter".into());
         let mut cursor = Cursor {
@@ -4406,6 +4407,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn successful_post_advances_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         // Spin up a tiny server that 200s any POST.
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
@@ -4501,6 +4503,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn timestamp_gte_cursor_must_progress_past_a_full_boundary_tie() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ingest"))
@@ -4677,6 +4680,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn hosted_ingest_sends_large_payload_across_multiple_requests() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ingest"))
@@ -4741,6 +4745,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn hosted_ingest_chunk_failure_keeps_cursor_pinned() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ingest"))
@@ -4783,6 +4788,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn memories_advance_their_own_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         // Memory-only batch — no frame/audio activity. The tick should still
         // POST and advance `last_memory_ts` to the latest memory's created_at.
         // This is the load-bearing path for enterprise: an idle user who just
@@ -5032,6 +5038,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn direct_upload_success_advances_cursor_after_complete() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ticket"))
@@ -5247,6 +5254,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn direct_upload_complete_failure_does_not_advance_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ticket"))
@@ -5309,6 +5317,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn auth_rejection_is_distinguished() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .respond_with(wiremock::ResponseTemplate::new(401))
@@ -5345,6 +5354,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn server_error_is_classified() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .respond_with(wiremock::ResponseTemplate::new(503))
@@ -5381,6 +5391,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn idempotency_header_is_sent() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::header(
