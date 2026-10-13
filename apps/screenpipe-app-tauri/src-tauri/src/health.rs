@@ -1437,7 +1437,7 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
     // checks below, which can take several seconds while the engine is down.
     let theme_app = app.clone();
     tokio::spawn(async move {
-        let mut tick = interval(Duration::from_secs(1));
+        let mut tick = tokio::time::interval(Duration::from_secs(1));
         loop {
             tick.tick().await;
             apply_tray_icon(&theme_app, None);
