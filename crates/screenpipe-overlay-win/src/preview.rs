@@ -43,11 +43,13 @@ fn base() -> OverlayState {
 fn meeting_lines() -> Vec<TranscriptItem> {
     vec![
         TranscriptItem {
+            id: "preview-1".into(),
             speaker: "louis".into(),
             text: "the native pill is drawing through direct2d now".into(),
             device_type: "input".into(),
         },
         TranscriptItem {
+            id: "preview-2".into(),
             speaker: "matt".into(),
             text: "does it still pass clicks through to the desktop?".into(),
             device_type: "output".into(),
@@ -55,6 +57,7 @@ fn meeting_lines() -> Vec<TranscriptItem> {
         // Unnamed: the card has to attribute this one from the device alone,
         // which is the common case in the first seconds of a meeting.
         TranscriptItem {
+            id: "preview-3".into(),
             speaker: String::new(),
             text: "yes — layered windows hit-test per pixel".into(),
             device_type: "input".into(),
@@ -319,6 +322,97 @@ fn live_shots(dir: &str) -> windows::core::Result<()> {
     Ok(())
 }
 
+fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
+    std::fs::create_dir_all(dir).expect("create shot dir");
+    let overlay = Overlay::spawn(|action| println!("action: {action}"));
+    let renderer = Renderer::new()?;
+    let eq = Equalizer::default();
+    overlay.show();
+    let mut state = OverlayState {
+        force_expanded: true,
+        meeting_active: true,
+        meeting_id: Some(1013),
+        transcript_pinned: true,
+        ..base()
+    };
+    state.transcript = (0..50)
+        .map(|i| TranscriptItem {
+            id: format!("fixture-{i}"),
+            speaker: if i % 2 == 0 { "you" } else { "guest" }.into(),
+            text: format!("synthetic transcript line {i}"),
+            device_type: "output".into(),
+        })
+        .collect();
+
+    let shoot = |name: &str,
+                 expected_offset: usize,
+                 expected: &[TranscriptItem]|
+     -> windows::core::Result<()> {
+        let evidence = overlay.preview_snapshot();
+        assert_eq!(
+            evidence.transcript_scroll_from_latest, expected_offset,
+            "{name} offset"
+        );
+        assert_eq!(evidence.transcript, expected, "{name} transcript bytes");
+        let path = format!("{dir}/{name}.png");
+        let (w, h) = write_png(
+            &renderer,
+            &evidence,
+            &eq,
+            &Backdrop::Solid([0.11, 0.12, 0.14]),
+            None,
+            14,
+            &path,
+        )?;
+        println!("{path} {w}x{h}");
+        Ok(())
+    };
+
+    overlay.update(state.clone());
+    let initial = state.transcript.clone();
+    shoot("01-following-latest", 0, &initial)?;
+    overlay.preview_mouse_wheel(360);
+    shoot("02-wheel-up-reading", 3, &initial)?;
+    // A repeated Show while already visible must not discard the reading
+    // snapshot. This is the command pattern used by redundant app lifecycle
+    // notifications.
+    overlay.show();
+    shoot("03-repeated-show-still-reading", 3, &initial)?;
+
+    // Model the bounded live feed rolling 0..49 to 1..50, then replace a
+    // same-length partial. Neither update may alter the frozen display.
+    state.transcript.remove(0);
+    state.transcript.push(TranscriptItem {
+        id: "fixture-50".into(),
+        speaker: "you".into(),
+        text: "synthetic transcript line 50".into(),
+        device_type: "output".into(),
+    });
+    overlay.update(state.clone());
+    state.transcript[45].text = "synthetic partial changed 46".into();
+    overlay.update(state.clone());
+    assert_ne!(
+        state.transcript, initial,
+        "rolling feed must differ from frozen fixture"
+    );
+    shoot("04-roll-and-partial-still-reading", 3, &initial)?;
+
+    // Hide while still paused. Reopening is a genuine visibility transition
+    // and must jump to the newest rolling snapshot.
+    overlay.hide();
+    overlay.show();
+    shoot("05-hide-reopen-flushes-latest", 0, &state.transcript)?;
+
+    // Returning to bottom must also flush immediately when the stream is now
+    // quiet (there is deliberately no update between wheel and capture).
+    overlay.preview_mouse_wheel(240);
+    shoot("06-paused-again", 2, &state.transcript)?;
+    overlay.preview_mouse_wheel(-1200);
+    shoot("07-wheel-bottom-flushes-quiet-latest", 0, &state.transcript)?;
+    overlay.hide();
+    Ok(())
+}
+
 /// Anchor names accepted on the command line, matching the kebab-case the
 /// settings store and `overlay-anchor.ts` already use.
 fn parse_anchor(s: &str) -> Option<Anchor> {
@@ -440,6 +534,11 @@ pub fn run() -> windows::core::Result<()> {
                 .map(String::as_str)
                 .unwrap_or("target/overlay-live"),
         ),
+        Some("transcript-scroll-shots") => transcript_scroll_shots(
+            args.get(2)
+                .map(String::as_str)
+                .unwrap_or("target/overlay-transcript-scroll"),
+        ),
         Some("live") => {
             let anchor = args
                 .get(2)
@@ -452,7 +551,7 @@ pub fn run() -> windows::core::Result<()> {
         }
         _ => {
             eprintln!(
-                "usage: overlay-preview shots [dir]\n       overlay-preview live-shots [dir]\n       overlay-preview live [anchor] [--no-cycle] [--toast]\n\nanchors: top-center right-center bottom-center left-center"
+                "usage: overlay-preview shots [dir]\n       overlay-preview live-shots [dir]\n       overlay-preview transcript-scroll-shots [dir]\n       overlay-preview live [anchor] [--no-cycle] [--toast]\n\nanchors: top-center right-center bottom-center left-center"
             );
             Ok(())
         }

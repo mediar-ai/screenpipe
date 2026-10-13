@@ -151,6 +151,10 @@ impl OverlaySize {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TranscriptItem {
+    /// Stable feed identity. The window uses this to keep the same utterance
+    /// under the reader when partial text changes or old history rolls away.
+    #[serde(default)]
+    pub id: String,
     pub speaker: String,
     pub text: String,
     /// `"input"` (our mic) or `"output"` (the room). Decides the attribution
@@ -190,6 +194,9 @@ pub struct OverlayState {
 
     pub notification: Option<Notification>,
     pub transcript: Vec<TranscriptItem>,
+    /// Lines between the rendered viewport and the newest transcript item.
+    /// Owned by the native window; caller state replacement must not reset it.
+    pub transcript_scroll_from_latest: usize,
     pub transcript_pinned: bool,
     /// The live meeting, if any. The note button routes by id, so without one
     /// there is nothing to open.
@@ -339,6 +346,7 @@ mod tests {
         };
         assert!(!s.shows_transcript(), "no lines yet");
         s.transcript.push(TranscriptItem {
+            id: "1".into(),
             speaker: "louis".into(),
             text: "hello".into(),
             device_type: "input".into(),
