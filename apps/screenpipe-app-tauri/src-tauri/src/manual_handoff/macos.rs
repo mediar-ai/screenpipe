@@ -298,10 +298,7 @@ fn verify_selected_bundle(runtime: &Runtime) -> Result<()> {
 }
 
 async fn focus_existing(old: &Identity) -> Result<()> {
-    let port = std::env::var("SCREENPIPE_FOCUS_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(11435);
+    let port = focus_port();
     verify_listener(old.pid, port).await?;
     let args: Vec<String> = std::env::args().collect();
     let deep_link_url = crate::deep_link::url_from_args(&args);
@@ -320,6 +317,13 @@ async fn focus_existing(old: &Identity) -> Result<()> {
         .error_for_status()
         .context("existing app could not accept this launch")?;
     Ok(())
+}
+
+fn focus_port() -> u16 {
+    std::env::var("SCREENPIPE_FOCUS_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(11435)
 }
 
 fn record_selection(runtime: &Runtime, source: &Identity, target: &Identity) {
@@ -645,12 +649,12 @@ async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
         }
         record_selection(runtime, &old, &runtime.identity);
         match select(&old, &runtime.identity) {
-            Selection::Focus => {
+            Selection::Focus if owns_listener(pid, focus_port()).await? => {
                 focus_existing(&old).await?;
                 std::process::exit(0);
             }
             Selection::Reject => bail!("the opened copy is older than the running build"),
-            Selection::Replace => verify_selected_bundle(runtime)?,
+            Selection::Focus | Selection::Replace => verify_selected_bundle(runtime)?,
         }
         let settings = crate::store::read_startup_store(&runtime.root.join("store.bin"))
             .map_err(anyhow::Error::msg)?;
@@ -669,6 +673,13 @@ async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
                     (!settings.recording.api_key.is_empty()).then_some(settings.recording.api_key)
                 }),
         };
+        // An old app can survive after its engine/listener exits (or another
+        // copy takes the port). Its signature above already establishes which
+        // process we may retire. Do not send credentials to a different owner
+        // or require a dead API to prove that this process can be replaced.
+        if retire_legacy_without_listener(&runtime.root, &old, api.port).await? {
+            continue;
+        }
         if api.api_key.is_none() {
             api.api_key =
                 screenpipe_engine::auth_key::find_api_auth_key_for_data_dir(&data_dir).await;
@@ -681,13 +692,7 @@ async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
         // Recheck both immediately before targeting the exact process. Never kill by name/port.
         verify_listener(pid, api.port).await?;
         verify_legacy_stopped(&api).await?;
-        if !signing::is_same_process(&old) {
-            bail!("legacy process changed before termination");
-        }
-        if unsafe { libc::kill(old.pid, libc::SIGTERM) } != 0 {
-            return Err(std::io::Error::last_os_error()).context("legacy termination failed");
-        }
-        wait_for_exit(&old).await?;
+        terminate_legacy(&old).await?;
         crate::update_diagnostics::append(
             &runtime.root,
             "manual_handoff_legacy_exited",
@@ -698,9 +703,50 @@ async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
 }
 
 async fn verify_listener(pid: i32, port: u16) -> Result<()> {
+    if !owns_listener(pid, port).await? {
+        bail!("process {pid} is not listening on port {port}");
+    }
+    Ok(())
+}
+
+async fn retire_legacy_without_listener(root: &Path, old: &Identity, port: u16) -> Result<bool> {
+    if owns_listener(old.pid, port).await? {
+        return Ok(false);
+    }
+    crate::update_diagnostics::append(
+        root,
+        "manual_handoff_legacy_listener_missing",
+        &format!(
+            "pid={}; port={port}; cause=verified_process_does_not_own_api_listener; action=terminate_verified_process; capture=unknown",
+            old.pid,
+        ),
+    );
+    terminate_legacy(old).await?;
+    crate::update_diagnostics::append(
+        root,
+        "manual_handoff_legacy_exited",
+        "outcome=selected_copy_starting; cause=missing_api_listener; capture=unknown",
+    );
+    Ok(true)
+}
+
+// Call only after authenticating the process and verifying the selected bundle.
+async fn terminate_legacy(old: &Identity) -> Result<()> {
+    if !signing::is_same_process(old) {
+        bail!("legacy process changed before termination; pid={}", old.pid);
+    }
+    if unsafe { libc::kill(old.pid, libc::SIGTERM) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("legacy termination failed; pid={}", old.pid));
+    }
+    wait_for_exit(old).await
+}
+
+async fn owns_listener(pid: i32, port: u16) -> Result<bool> {
     let output = tokio::time::timeout(
         Duration::from_secs(3),
         tokio::process::Command::new("/usr/sbin/lsof")
+            .kill_on_drop(true)
             .args([
                 "-nP",
                 "-a",
@@ -712,12 +758,24 @@ async fn verify_listener(pid: i32, port: u16) -> Result<()> {
             ])
             .output(),
     )
-    .await??;
-    if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != pid.to_string()
-    {
-        bail!("legacy API listener does not belong to the verified app");
+    .await
+    .with_context(|| format!("listener inspection timed out; pid={pid}; port={port}"))?
+    .with_context(|| format!("could not inspect listener; pid={pid}; port={port}"))?;
+    // lsof uses exit 1 with empty output for no matching descriptors. Other
+    // failures must retain their cause rather than masquerading as a stale app.
+    if output.status.code() == Some(1) && output.stdout.is_empty() && output.stderr.is_empty() {
+        return Ok(false);
     }
-    Ok(())
+    if !output.status.success() {
+        bail!(
+            "listener inspection failed; pid={pid}; port={port}; status={}; cause={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    let expected = pid.to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(!stdout.trim().is_empty() && stdout.lines().all(|line| line.trim() == expected))
 }
 
 async fn verify_legacy_stopped(api: &crate::recording::LocalApiContext) -> Result<()> {
@@ -770,6 +828,88 @@ async fn verify_legacy_stopped(api: &crate::recording::LocalApiContext) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_process_identity(pid: i32) -> Identity {
+        let (uid, started) = signing::process_stamp(pid).unwrap();
+        Identity {
+            pid,
+            uid,
+            started,
+            hash: signing::process_hash(pid).unwrap(),
+            executable: signing::process_path(pid).unwrap(),
+            identifier: "test".into(),
+            version: "1.0.0".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_listener_retires_only_the_selected_process() {
+        let root = tempfile::tempdir().unwrap();
+        // This process owns the port; the stale process must not send it an
+        // API key or terminate it merely because it has the configured port.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let owner = test_process_identity(std::process::id() as i32);
+        assert!(!retire_legacy_without_listener(root.path(), &owner, port)
+            .await
+            .unwrap());
+
+        let mut child = tokio::process::Command::new("/bin/sleep")
+            .arg("60")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let old = test_process_identity(child.id().unwrap() as i32);
+        let exited = tokio::spawn(async move { child.wait().await.unwrap() });
+        assert!(retire_legacy_without_listener(root.path(), &old, port)
+            .await
+            .unwrap());
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(exited.await.unwrap().signal(), Some(libc::SIGTERM));
+        assert!(owns_listener(owner.pid, port).await.unwrap());
+        assert!(signing::is_same_process(&owner));
+
+        // Recovery evidence uses the real collector after app-log rotation.
+        for day in 1..=7 {
+            std::fs::write(
+                root.path()
+                    .join(format!("screenpipe-app.2026-10-{day:02}.log")),
+                "restart\n",
+            )
+            .unwrap();
+        }
+        let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[root.path().into()])
+            .await
+            .unwrap();
+        assert!(report.contains("verified_process_does_not_own_api_listener"));
+        assert!(report.contains(&format!("pid={}", old.pid)));
+        assert!(report.contains(&format!("port={port}")));
+        assert!(report.contains("outcome=selected_copy_starting"));
+        assert!(report.contains("capture=unknown"));
+
+        drop(listener);
+        assert!(!owns_listener(owner.pid, port).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn stale_identity_never_terminates_the_reused_pid_and_failure_reaches_support() {
+        let root = tempfile::tempdir().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let mut old = test_process_identity(std::process::id() as i32);
+        old.started -= 1;
+        let error = retire_legacy_without_listener(root.path(), &old, port)
+            .await
+            .unwrap_err();
+        report_failure(root.path(), "launch", &format!("{error:#}"));
+        let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[root.path().into()])
+            .await
+            .unwrap();
+        assert!(report.contains("legacy process changed before termination"));
+        assert!(report.contains("outcome=selected_copy_not_started"));
+        assert!(!report.contains("manual_handoff_legacy_exited"));
+    }
 
     #[tokio::test]
     async fn completed_drain_and_originating_failure_reach_handoff() {
