@@ -10,6 +10,7 @@ import {
   extractImageDataUrlsFromMarkdown,
   extractPipePromptBody,
   mergeMeetingAudioChunks,
+  renderMeetingTranscript,
   type MeetingAudioChunk,
   type MeetingContext,
 } from "./meeting-context";
@@ -213,6 +214,20 @@ describe("mergeMeetingAudioChunks", () => {
   });
 });
 
+describe("renderMeetingTranscript speaker labels", () => {
+  it("keeps per-stream provider labels apart for mic and meeting audio", () => {
+    const remote = chunk({ speakerName: "speaker 1", source: "live", transcription: "remote turn", timestamp: "2026-06-04T15:00:00Z" });
+    const local = chunk({ audioChunkId: 2, speakerName: "speaker 1", source: "live", deviceType: "input", isInput: true, transcription: "local turn", timestamp: "2026-06-04T15:00:03Z" });
+    const named = chunk({ audioChunkId: 3, speakerName: "Alice", source: "live", deviceType: "input", isInput: true, transcription: "named turn", timestamp: "2026-06-04T15:00:30Z" });
+
+    const lines = renderMeetingTranscript([remote, local, named]).split("\n");
+
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain("[Meeting audio · speaker 1] remote turn");
+    expect(lines[1]).toContain("[Microphone · speaker 1] local turn");
+    expect(lines[2]).toContain("[Alice] named turn");
+  });
+});
 
 describe("cross-device speech preservation", () => {
   it.each([

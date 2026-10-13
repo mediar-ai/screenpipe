@@ -29,6 +29,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import type { LiveCaptureState } from "@/lib/utils/live-capture-state";
 import {
   fetchMeetingAudio,
+  sourceQualifiedSpeakerName,
   type MeetingAudioChunk,
 } from "@/lib/utils/meeting-context";
 import type { MeetingRecord } from "@/lib/utils/meeting-format";
@@ -401,11 +402,7 @@ function compareBlocks(a: SpeakerBlock, b: SpeakerBlock): number {
 }
 
 function displaySpeakerName(block: SpeakerBlock): string {
-  if (!/^speaker(?:[ _]\d+)?$/i.test(block.speakerName.trim())) return block.speakerName;
-  // A provider's speaker numbers restart on each stream. Avoid presenting
-  // unrelated input/output labels as the same identified person.
-  const source = block.captureDirection === "input" ? "Microphone" : block.captureDirection === "output" ? "Meeting audio" : "Unidentified";
-  return `${source} · ${block.speakerName}`;
+  return sourceQualifiedSpeakerName(block.speakerName, block.captureDirection);
 }
 
 function groupBySpeaker(chunks: MeetingAudioChunk[]): SpeakerBlock[] {
@@ -1212,7 +1209,7 @@ export function TranscriptPanel({
               aria-atomic="true"
             >
               {latestFinalLiveBlock
-                ? `${latestFinalLiveBlock.speakerName}: ${latestFinalLiveBlock.text}`
+                ? `${displaySpeakerName(latestFinalLiveBlock)}: ${latestFinalLiveBlock.text}`
                 : ""}
             </span>
           </div>
