@@ -23,7 +23,6 @@ use crate::enterprise::sync as ee_sync;
 mod imp {
     use super::ee_sync;
     use crate::recording::local_api_context_from_app;
-    use base64::Engine;
     use ee_sync::{
         ActivityRow, AudioRow, EnterpriseSyncConfig, EnterpriseSyncError, FeedbackRow, FrameRow,
         LocalApiClient, MemoryRow, ParsedRow, SnapshotRow, UiEventRow,
@@ -653,41 +652,18 @@ mod imp {
                     Err(_) => continue,
                 };
 
-                // Step 3: decode → resize 320×180 → JPEG @ Q60 → base64.
-                // Done in spawn_blocking — image decoding is CPU-bound and we
-                // don't want to monopolize the tokio runtime. Bounded box: if
-                // anything goes wrong, fall through to the next candidate.
-                let bytes_vec = bytes.to_vec();
-                let encoded =
-                    tokio::task::spawn_blocking(move || -> Option<(Vec<u8>, u32, u32)> {
-                        let img = image::load_from_memory(&bytes_vec).ok()?;
-                        let resized = img.resize(320, 180, image::imageops::FilterType::Triangle);
-                        let (w, h) = (resized.width(), resized.height());
-                        let mut buf = Vec::with_capacity(40 * 1024);
-                        let mut cursor = std::io::Cursor::new(&mut buf);
-                        let encoder =
-                            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 60);
-                        resized.into_rgb8().write_with_encoder(encoder).ok()?;
-                        Some((buf, w, h))
-                    })
-                    .await
-                    .ok()
-                    .flatten();
-
-                let (jpeg, w, h) = match encoded {
-                    Some(v) => v,
-                    None => continue,
-                };
-                let image_b64 = base64::engine::general_purpose::STANDARD.encode(&jpeg);
-
-                return Ok(Some(SnapshotRow {
-                    frame_id,
-                    timestamp: ts.to_rfc3339(),
-                    mime: "image/jpeg".to_string(),
-                    image_b64,
-                    width: w,
-                    height: h,
-                }));
+                // Validate off the async runtime, retaining the exact JPEG.
+                // This stream goes directly to write-only customer storage,
+                // so an API payload limit must not dictate image quality.
+                let snapshot = tokio::task::spawn_blocking(move || {
+                    ee_sync::snapshot_from_jpeg(frame_id, ts.to_rfc3339(), &bytes)
+                })
+                .await
+                .ok()
+                .flatten();
+                if let Some(snapshot) = snapshot {
+                    return Ok(Some(snapshot));
+                }
             }
 
             // No recent frame was decodable (all still too fresh or expired).

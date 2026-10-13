@@ -376,12 +376,9 @@ pub trait LocalApiClient: Send + Sync {
         Ok(Vec::new())
     }
 
-    /// Fetch a downsized JPEG thumbnail of the most recent frame. Called
-    /// once per sync tick (so ~1 thumbnail every 5 min during active
-    /// sessions). Returns None when there's no recent frame or the
-    /// implementation chose to skip (e.g. the latest frame is identical
-    /// to the previously snapshotted one). Default returns None — shims
-    /// that don't support image fetching just don't sync screenshots.
+    /// Fetch the original JPEG of the most recent frame for a write-only
+    /// customer archive. Hosted/readable uploads use the frame-image channel.
+    /// Returns None when no recent exact frame is available.
     async fn fetch_latest_snapshot(&self) -> Result<Option<SnapshotRow>, EnterpriseSyncError> {
         Ok(None)
     }
@@ -1007,9 +1004,15 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    // One snapshot per tick. Best-effort — failure to encode/fetch
-    // shouldn't block the rest of the batch.
-    let snapshots: Vec<SnapshotRow> = if streams.snapshots && include_snapshot {
+    // Hosted/readable destinations already upload original frame images. Do
+    // not also send the legacy thumbnail stream, even when a cached policy
+    // enables it. Write-only archives cannot use that image channel; retain
+    // one original-quality snapshot in their direct-to-storage JSONL instead.
+    let snapshots: Vec<SnapshotRow> = if streams.snapshots
+        && streams.frame_images == crate::enterprise_policy::FrameImagesMode::All
+        && include_snapshot
+        && matches!(cfg.upload_mode, EnterpriseUploadMode::DirectWriteOnly(_))
+    {
         match local.fetch_latest_snapshot().await {
             Ok(Some(s)) => vec![s],
             Ok(None) => Vec::new(),
@@ -1578,6 +1581,21 @@ pub fn prepare_frame_jpeg(bytes: &[u8]) -> Result<Vec<u8>, &'static str> {
     image::load_from_memory_with_format(bytes, image::ImageFormat::Jpeg)
         .map_err(|_| "decode_failed")?;
     Ok(bytes.to_vec())
+}
+
+/// Package an exact local JPEG for a customer-owned write-only archive.
+/// Decode only to validate it and record dimensions; never resize/re-encode.
+pub fn snapshot_from_jpeg(frame_id: i64, timestamp: String, jpeg: &[u8]) -> Option<SnapshotRow> {
+    use base64::Engine as _;
+    let image = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg).ok()?;
+    Some(SnapshotRow {
+        frame_id,
+        timestamp,
+        mime: "image/jpeg".into(),
+        image_b64: base64::engine::general_purpose::STANDARD.encode(jpeg),
+        width: image.width(),
+        height: image.height(),
+    })
 }
 
 /// Keep small images inline; send larger originals directly to workspace
@@ -4338,6 +4356,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn empty_batch_no_post_no_cursor_change() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, "http://does-not-matter".into());
         let mut cursor = Cursor {
@@ -4388,6 +4407,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn successful_post_advances_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         // Spin up a tiny server that 200s any POST.
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
@@ -4483,6 +4503,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn timestamp_gte_cursor_must_progress_past_a_full_boundary_tie() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ingest"))
@@ -4659,6 +4680,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn hosted_ingest_sends_large_payload_across_multiple_requests() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ingest"))
@@ -4723,6 +4745,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn hosted_ingest_chunk_failure_keeps_cursor_pinned() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ingest"))
@@ -4765,6 +4788,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn memories_advance_their_own_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         // Memory-only batch — no frame/audio activity. The tick should still
         // POST and advance `last_memory_ts` to the latest memory's created_at.
         // This is the load-bearing path for enterprise: an idle user who just
@@ -5014,6 +5038,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn direct_upload_success_advances_cursor_after_complete() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ticket"))
@@ -5229,6 +5254,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn direct_upload_complete_failure_does_not_advance_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/ticket"))
@@ -5291,6 +5317,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn auth_rejection_is_distinguished() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .respond_with(wiremock::ResponseTemplate::new(401))
@@ -5327,6 +5354,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn server_error_is_classified() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .respond_with(wiremock::ResponseTemplate::new(503))
@@ -5363,6 +5391,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn idempotency_header_is_sent() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::header(
@@ -5463,7 +5492,11 @@ pub(crate) mod tests {
 
         async fn fetch_latest_snapshot(&self) -> Result<Option<SnapshotRow>, EnterpriseSyncError> {
             *self.snapshot_calls.lock().unwrap() += 1;
-            Ok(Some(snapshot(1, "2026-05-07T10:00:00Z")))
+            Ok(snapshot_from_jpeg(
+                1,
+                "2026-05-07T10:00:00Z".into(),
+                &archive_jpeg(),
+            ))
         }
 
         async fn fetch_memories_since(
@@ -5491,6 +5524,114 @@ pub(crate) mod tests {
                     .to_string()
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn sync_never_uploads_legacy_thumbnails() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        for destination in ["hosted", "readable", "write_only"] {
+            for mode in ["off", "cited", "all"] {
+                // The legacy flag must neither duplicate hosted/readable image
+                // uploads nor override off/cited screenshot policies.
+                crate::enterprise_policy::set_sync_streams(
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    "off".to_string(),
+                    mode.to_string(),
+                );
+                let server = wiremock::MockServer::start().await;
+                wiremock::Mock::given(wiremock::matchers::method("POST"))
+                    .and(wiremock::matchers::path("/ingest"))
+                    .respond_with(wiremock::ResponseTemplate::new(200))
+                    .expect(if destination == "hosted" { 1 } else { 0 })
+                    .mount(&server)
+                    .await;
+                wiremock::Mock::given(wiremock::matchers::path("/ticket"))
+                .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({"ok": true, "method": "PUT",
+                        "upload_url": format!("{}/blob", server.uri()),
+                        "headers": {"Content-Type": enterprise_upload::DIRECT_UPLOAD_CONTENT_TYPE}}),
+                ))
+                .mount(&server).await;
+                for path in ["/blob", "/complete"] {
+                    wiremock::Mock::given(wiremock::matchers::path(path))
+                        .respond_with(wiremock::ResponseTemplate::new(200))
+                        .mount(&server)
+                        .await;
+                }
+                let dir = TempDir::new().unwrap();
+                let mut cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+                let direct = DirectUploadConfig {
+                    ticket_url: format!("{}/ticket", server.uri()),
+                    complete_url: format!("{}/complete", server.uri()),
+                    pinned_hosts: Vec::new(),
+                };
+                cfg.upload_mode = match destination {
+                    "readable" => EnterpriseUploadMode::DirectReadable(direct),
+                    "write_only" => EnterpriseUploadMode::DirectWriteOnly(direct),
+                    _ => EnterpriseUploadMode::HostedIngest,
+                };
+                let local = CallCountingLocal::new();
+                let mut cursor = Cursor::default();
+                let report = run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new())
+                    .await
+                    .unwrap();
+                let requests = server.received_requests().await.unwrap();
+                let upload = requests
+                    .iter()
+                    .find(|request| matches!(request.url.path(), "/ingest" | "/blob"))
+                    .unwrap();
+                let kinds = jsonl_kinds(&upload.body);
+                let archive_snapshot = destination == "write_only" && mode == "all";
+                assert_eq!(
+                    kinds.iter().any(|kind| kind == "snapshot"),
+                    archive_snapshot,
+                    "unexpected snapshot upload for {destination}/{mode}: {kinds:?}"
+                );
+                assert_eq!(
+                    *local.snapshot_calls.lock().unwrap(),
+                    u32::from(archive_snapshot)
+                );
+                if archive_snapshot {
+                    let row = std::str::from_utf8(&upload.body)
+                        .unwrap()
+                        .lines()
+                        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+                        .find(|row| row["kind"] == "snapshot")
+                        .unwrap();
+                    let jpeg = base64::engine::general_purpose::STANDARD
+                        .decode(row["image_b64"].as_str().unwrap())
+                        .unwrap();
+                    assert_eq!(jpeg, archive_jpeg());
+                    assert_eq!(
+                        (row["width"].as_u64(), row["height"].as_u64()),
+                        (Some(1920), Some(1080))
+                    );
+                    assert!(upload.body.len() > HOSTED_INGEST_REQUEST_BYTES);
+                }
+                assert!(kinds.iter().any(|kind| kind == "frame"));
+                assert!(kinds.iter().any(|kind| kind == "audio"));
+                assert_eq!(report.snapshots, usize::from(archive_snapshot));
+                assert_eq!(report.frames, 1);
+            }
+        }
+    }
+
+    fn archive_jpeg() -> Vec<u8> {
+        let mut jpeg = synth_jpeg(1920, 1080);
+        // Valid JPEG with trailing bytes, larger than the hosted API envelope.
+        jpeg.resize(4 * 1024 * 1024, 0);
+        jpeg
+    }
+
+    #[test]
+    fn archive_snapshot_rejects_invalid_jpeg() {
+        assert!(snapshot_from_jpeg(1, "2026-05-07T10:00:00Z".into(), b"bad jpeg").is_none());
     }
 
     #[tokio::test]
