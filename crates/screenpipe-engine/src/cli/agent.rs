@@ -2018,6 +2018,55 @@ mod tests {
         assert!(body.contains("${SCREENPIPE_LOCAL_API_URL:-http://10.0.0.5:3030}/search"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_linked_starter_connect_restart_disconnect_and_opt_out() {
+        use std::os::unix::fs::symlink;
+        let home = tempfile::tempdir().unwrap();
+        let home = home.path().canonicalize().unwrap();
+        let custom = tempfile::tempdir().unwrap();
+        std::fs::write(custom.path().join("SKILL.md"), "user recall instructions").unwrap();
+        std::fs::create_dir_all(home.join(".claude/skills")).unwrap();
+        std::fs::write(home.join(".claude.json"), "{}").unwrap();
+        let link = home.join(".claude/skills/screenpipe-recall");
+        symlink(custom.path(), &link).unwrap();
+        let bun = Path::new("/test/bun");
+        let opted_out = BTreeSet::new();
+        install_skills_in("claude-code", "http://localhost:3030", &home).unwrap();
+        // Each fresh reconciler represents a new app process.
+        for _ in 0..2 {
+            let report = reconcile_detected_desktop_in(
+                &home,
+                bun,
+                None,
+                "http://localhost:3030",
+                &opted_out,
+            );
+            assert!(report.failures.is_empty(), "{:?}", report.failures);
+            assert!(desktop_skills_current(
+                &layout_in("claude-code", &home).unwrap()
+            ));
+        }
+        let layout = layout_in("claude-code", &home).unwrap();
+        remove_skills_from(layout.skills_dir.as_ref().unwrap()).unwrap();
+        remove_mcp_json(&layout.mcp_path).unwrap();
+        let report = reconcile_detected_desktop_in(
+            &home,
+            bun,
+            None,
+            "http://localhost:3030",
+            &BTreeSet::from(["claude-code".into()]),
+        );
+        assert_eq!(report.opted_out, 1);
+        assert!(report.failures.is_empty());
+        assert!(!home.join(".claude/skills/screenpipe-api").exists());
+        assert_eq!(std::fs::read_link(link).unwrap(), custom.path());
+        assert_eq!(
+            std::fs::read_to_string(custom.path().join("SKILL.md")).unwrap(),
+            "user recall instructions"
+        );
+    }
+
     #[test]
     fn test_api_skill_does_not_embed_agent_self_improvement_policy() {
         assert!(!API_SKILL_MD.contains("After completing a complex Screenpipe query"));
