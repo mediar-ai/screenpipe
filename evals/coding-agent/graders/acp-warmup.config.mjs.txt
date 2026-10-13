@@ -1,0 +1,9 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+export default defineConfig({
+  resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)) } },
+  css: { postcss: { plugins: [] } },
+  test: { environment: 'jsdom', include: ['eval-acp-warmup.test.ts'], pool: 'forks', poolOptions: { forks: { singleFork: true } } },
+});

@@ -1,5 +1,18 @@
 # Coding-agent regression evals
 
+`app-acp-declined-warmup` mounts the actual automatic ACP warmup hook with
+synthetic native command replies. Fifteen outcomes cover cancelled, failed and
+pending starts across new chats/remounts, successful handshakes, independent
+presets/agents, feature/provider/start guards, request inputs and late cleanup.
+The parent fails four intended outcomes and preserves eleven; the historical
+fix and current hook pass all fifteen. Run
+`bun test evals/coding-agent/calibrate-acp-warmup.test.js` for twelve controls,
+including an equivalent Map implementation, unused correct code, no-op package
+scripts, blanket suppression, lost guards and missing-source setup errors.
+Fixtures and dependency links appear only at grading. This does not execute
+native sign-in UI, manual retry/send paths, cross-webview persistence, enforced
+agent isolation or model trials.
+
 `ai-gateway-outbound-chat-compatibility` executes the actual provider through its
 completion and streaming methods with synthetic SDK and telemetry ports. Nine
 outcomes cover response-only field removal, orphan and valid tool history,

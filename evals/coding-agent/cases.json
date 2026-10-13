@@ -6323,6 +6323,48 @@
         ],
         "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-upstream-json.test.ts"
       }
+    },
+    {
+      "id": "app-acp-declined-warmup",
+      "name": "Keep declined automatic agent warmups quiet across chat remounts",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "6a443fb1ff9e0a11848f7dbddd923ec6748be87a"
+      },
+      "base_ref": "67f8fdf8222305796a9cafe31cdb74c289a8121d",
+      "oracle_ref": "6a443fb1ff9e0a11848f7dbddd923ec6748be87a",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "authentication",
+        "chat",
+        "react"
+      ],
+      "prompt": "The chat view can repeatedly reopen an agent sign-in after the user declined an automatic warmup. Fix the existing useAcpWarmup hook so a pending or unsuccessful automatic start for the same preset and ACP agent stays quiet across new conversations and chat remounts within the same webview lifetime. Non-running replies, error replies and rejected starts all count as unsuccessful. A successful running handshake must still permit automatic warming for a later conversation. Failure for one preset/agent must not suppress another preset or agent. Preserve disabled-feature, hosted-provider, missing preset/agent, already-running and in-flight start guards. A process-liveness update must not release a handshake guard before its call completes. Release the guard on settlement or unmount; ignore late UI/config/thinking updates after unmount, and only update them after successful running handshakes. Preserve session, project directory, token and provider config passed to the start command, and successful state/config/thinking synchronization. The hidden checks mount the actual hook with synthetic native command responses; native sign-in UI, cross-webview persistence and manual send/retry paths are outside this case. Keep changes scoped to automatic warmup and add or update tests as needed.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 120,
+        "fixtures": [
+          {
+            "local_path": "graders/acp-declined-warmup.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-acp-warmup.test.ts"
+          },
+          {
+            "local_path": "graders/acp-warmup.config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-acp-warmup.config.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-acp-warmup.config.mjs"
+      },
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/chat/standalone/hooks/use-acp-warmup.ts"
+      ],
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ]
     }
   ]
 }
