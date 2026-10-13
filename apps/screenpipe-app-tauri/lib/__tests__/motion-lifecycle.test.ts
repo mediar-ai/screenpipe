@@ -80,8 +80,7 @@ describe.each([["ESM", motionEsm], ["CJS", motionCjs]] as const)("%s motion life
       animate: { opacity },
       transition: { duration: 0 },
       whileHover: { opacity: 0.5 },
-      children: "Animated content",
-    });
+    }, "Animated content");
     const { rerender, unmount, getByText } = render(view(1));
     expect(getByText("Animated content")).toBeInTheDocument();
     withInheritedEntry(() => {
