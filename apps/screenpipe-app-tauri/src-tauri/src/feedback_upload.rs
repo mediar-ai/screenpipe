@@ -841,6 +841,73 @@ mod tests {
         assert!(!report.contains("hunter2"));
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn starter_skill_failure_reaches_support_after_rotation_and_redaction() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let skills = root.path().canonicalize().unwrap().join("skills");
+        std::fs::create_dir(&skills).unwrap();
+        let (name, body) = screenpipe_core::starter_skills::STARTER_SKILLS[0];
+        symlink(root.path().join("missing"), skills.join(name)).unwrap();
+        let cause = screenpipe_core::starter_skills::install_one(&skills, name, body)
+            .unwrap_err()
+            .to_string();
+        let logs = tempfile::tempdir().unwrap();
+        std::fs::write(logs.path().join("screenpipe-app.2026-10-12.log"),
+            format!("WARN AI tool background setup could not connect one tool failure=Claude Code: {cause} password=hunter2\n")).unwrap();
+        std::fs::write(logs.path().join("screenpipe-app.2026-10-13.log"),
+            "INFO capture session schedule initialized schedule_enabled=false schedule_rules=0 schedule_paused=false\n").unwrap();
+        let files = crate::log_files::collect_log_files(&[logs.path().to_path_buf()]).await;
+        let raw = collect_log_text_from_files(files).await;
+        let redacted = crate::feedback_redact::redact_diagnostics_locally(raw)
+            .await
+            .unwrap();
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/logs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {
+                "signedUrl": format!("{}/upload/log", server.uri()), "path": "logs/report.log"
+            }})))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/upload/log"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/logs/confirm"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"id": 42}})))
+            .mount(&server)
+            .await;
+        upload_report(
+            &Client::new(),
+            &server.uri(),
+            &request(),
+            redacted,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let requests = server.received_requests().await.unwrap();
+        let upload = requests.iter().find(|r| r.method == "PUT").unwrap();
+        let report = String::from_utf8_lossy(&upload.body);
+        for expected in [
+            "Claude Code",
+            "screenpipe-recall/SKILL.md",
+            "os error 2",
+            "repair the link and retry",
+            "existing files were preserved",
+            "schedule_enabled=false",
+            "schedule_paused=false",
+        ] {
+            assert!(report.contains(expected), "missing {expected}: {report}");
+        }
+        assert!(!report.contains("hunter2"));
+    }
+
     #[tokio::test]
     async fn monitor_discovery_failure_reaches_support_after_collection_and_redaction() {
         let server = MockServer::start().await;
