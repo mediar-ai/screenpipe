@@ -51,9 +51,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IDC_ARROW, MF_SEPARATOR, MF_STRING, MSG, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE,
     SW_SHOWNOACTIVATE, TPM_RETURNCMD, TPM_RIGHTALIGN, TPM_TOPALIGN, ULW_ALPHA,
     WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOWPOS, WM_APP, WM_DESTROY, WM_DISPLAYCHANGE,
-    WM_DPICHANGED, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SETTINGCHANGE, WM_TIMER, WM_WINDOWPOSCHANGING, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    WM_DPICHANGED, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WM_WINDOWPOSCHANGING, WNDCLASSEXW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 use crate::actions::{
@@ -66,6 +66,7 @@ use crate::layout::{self, Layout, SHADOW_PAD};
 use crate::notification::{self, Notification, Refusal};
 use crate::render::{premultiplied_bgra, Renderer};
 use crate::state::{Anchor, Control, OverlayState};
+use crate::transcript::TranscriptScroll;
 
 /// In `Win32::UI::Controls` in windows-rs, a feature this crate does not
 /// otherwise need — cheaper to name the constant than to pull it in.
@@ -87,6 +88,7 @@ const ANIM_MS: u32 = 83; // ~12 Hz, same cadence as the macOS meter.
 const HOVER_POLL_MS: u32 = 90;
 /// Pointer travel before a press on the pill becomes a drag rather than a click.
 const DRAG_THRESHOLD: f32 = 4.0;
+const TRANSCRIPT_CAPACITY: usize = 4;
 
 /// Show the same two-choice brand context menu as the macOS overlay. Returning
 /// the selected app action keeps presentation inside the Win32 window while
@@ -227,6 +229,17 @@ impl Overlay {
         Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
     }
 
+    /// Drive the native wheel path from the synthetic preview fixture.
+    #[doc(hidden)]
+    pub fn preview_mouse_wheel(&self, delta: i16) {
+        if let Some(h) = self.raw_hwnd() {
+            let packed = (delta as u16 as usize) << 16;
+            unsafe {
+                let _ = PostMessageW(h, WM_MOUSEWHEEL, WPARAM(packed), LPARAM(0));
+            }
+        }
+    }
+
     fn raw_hwnd(&self) -> Option<HWND> {
         let h = *self.hwnd.lock().ok()?;
         (h != 0).then_some(HWND(h as *mut _))
@@ -280,6 +293,7 @@ struct Ctx {
     pushed_anchor: Option<Anchor>,
     /// Same, for the transcript card's pin.
     pushed_pinned: Option<bool>,
+    transcript_scroll: TranscriptScroll,
     dragging: bool,
     drag_offset: (i32, i32),
     animating: bool,
@@ -358,6 +372,7 @@ fn run_message_loop(
             toast_hovered: false,
             pushed_anchor: None,
             pushed_pinned: None,
+            transcript_scroll: TranscriptScroll::default(),
             dragging: false,
             drag_offset: (0, 0),
             animating: false,
@@ -1098,6 +1113,17 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                 // The caller does not own the notification either — it arrives
                 // through show_notification and leaves on its own schedule.
                 s.notification = ctx.state.notification.clone();
+                let was_transcript_visible = ctx.state.shows_transcript();
+                let transcript_visible = s.shows_transcript();
+                ctx.transcript_scroll.sync(
+                    &ctx.state.transcript,
+                    &s.transcript,
+                    TRANSCRIPT_CAPACITY,
+                    transcript_visible
+                        && s.meeting_id == ctx.state.meeting_id
+                        && was_transcript_visible == transcript_visible,
+                );
+                s.transcript_scroll_from_latest = ctx.transcript_scroll.from_latest();
                 if s != ctx.state {
                     ctx.state = s;
                     dirty = true;
@@ -1115,6 +1141,8 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                 }
             }
             Cmd::Show => {
+                ctx.transcript_scroll.reset();
+                ctx.state.transcript_scroll_from_latest = 0;
                 unsafe {
                     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 }
@@ -1132,6 +1160,8 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                 ctx.state.hovered_control = None;
                 ctx.state.pressed_control = None;
                 ctx.state.notification = None;
+                ctx.transcript_scroll.reset();
+                ctx.state.transcript_scroll_from_latest = 0;
                 rearm_dismiss = true;
             }
             Cmd::SetCaptureProtected(protected) => {
@@ -1287,8 +1317,13 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                 let on_toast = ctx.layout.is_notification_at(x, y);
                 let hovering = if on_toast { ctx.state.hovering } else { inside };
                 if ctx.state.hovering != hovering || ctx.state.hovered_control != hovered {
+                    let was_transcript_visible = ctx.state.shows_transcript();
                     ctx.state.hovering = hovering;
                     ctx.state.hovered_control = hovered;
+                    if !was_transcript_visible && ctx.state.shows_transcript() {
+                        ctx.transcript_scroll.reset();
+                        ctx.state.transcript_scroll_from_latest = 0;
+                    }
                     apply_state(hwnd);
                 }
                 // …and it holds the toast open too: a notification that expires
@@ -1304,6 +1339,26 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                     dwHoverTime: 0,
                 };
                 let _ = TrackMouseEvent(&mut track);
+                LRESULT(0)
+            }
+
+            WM_MOUSEWHEEL => {
+                if let Some(ctx) = ctx_of(hwnd) {
+                    if ctx.state.shows_transcript() {
+                        let delta = ((wparam.0 >> 16) & 0xffff) as u16 as i16;
+                        let notches = (delta.unsigned_abs() as usize / 120).max(1);
+                        for _ in 0..notches {
+                            ctx.transcript_scroll.wheel(
+                                delta,
+                                ctx.state.transcript.len(),
+                                TRANSCRIPT_CAPACITY,
+                            );
+                        }
+                        ctx.state.transcript_scroll_from_latest =
+                            ctx.transcript_scroll.from_latest();
+                        repaint(hwnd);
+                    }
+                }
                 LRESULT(0)
             }
 

@@ -43,11 +43,13 @@ fn base() -> OverlayState {
 fn meeting_lines() -> Vec<TranscriptItem> {
     vec![
         TranscriptItem {
+            id: "preview-1".into(),
             speaker: "louis".into(),
             text: "the native pill is drawing through direct2d now".into(),
             device_type: "input".into(),
         },
         TranscriptItem {
+            id: "preview-2".into(),
             speaker: "matt".into(),
             text: "does it still pass clicks through to the desktop?".into(),
             device_type: "output".into(),
@@ -55,6 +57,7 @@ fn meeting_lines() -> Vec<TranscriptItem> {
         // Unnamed: the card has to attribute this one from the device alone,
         // which is the common case in the first seconds of a meeting.
         TranscriptItem {
+            id: "preview-3".into(),
             speaker: String::new(),
             text: "yes — layered windows hit-test per pixel".into(),
             device_type: "input".into(),
@@ -319,6 +322,61 @@ fn live_shots(dir: &str) -> windows::core::Result<()> {
     Ok(())
 }
 
+fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
+    std::fs::create_dir_all(dir).expect("create shot dir");
+    let overlay = Overlay::spawn(|action| println!("action: {action}"));
+    overlay.show();
+    let mut state = OverlayState {
+        force_expanded: true,
+        meeting_active: true,
+        meeting_id: Some(1013),
+        transcript_pinned: true,
+        ..base()
+    };
+    state.transcript = (0..8)
+        .map(|i| TranscriptItem {
+            id: format!("fixture-{i}"),
+            speaker: if i % 2 == 0 { "you" } else { "guest" }.into(),
+            text: format!("synthetic transcript line {i}"),
+            device_type: "output".into(),
+        })
+        .collect();
+
+    let shoot = |name: &str, overlay: &Overlay| -> windows::core::Result<()> {
+        std::thread::sleep(Duration::from_millis(250));
+        let (x, y, w, h) = overlay.window_rect().expect("overlay window");
+        let shot = capture_desktop()?;
+        let (cw, ch, bytes) = shot.crop(x - 14, y - 14, (w + 28) as u32, (h + 28) as u32);
+        let path = format!("{dir}/{name}.png");
+        write_bgra_png(cw, ch, &bytes, &path)?;
+        println!("{path} {cw}x{ch}");
+        Ok(())
+    };
+
+    overlay.update(state.clone());
+    shoot("01-following-latest", &overlay)?;
+    overlay.preview_mouse_wheel(360);
+    shoot("02-wheel-up-reading", &overlay)?;
+    state.transcript.push(TranscriptItem {
+        id: "fixture-8".into(),
+        speaker: "guest".into(),
+        text: "streaming append must not move the viewport".into(),
+        device_type: "output".into(),
+    });
+    overlay.update(state.clone());
+    state.transcript[3].text = "same stable item with a replaced partial".into();
+    overlay.update(state.clone());
+    shoot("03-append-and-partial-still-reading", &overlay)?;
+    overlay.preview_mouse_wheel(-1200);
+    shoot("04-wheel-down-following", &overlay)?;
+    overlay.hide();
+    std::thread::sleep(Duration::from_millis(100));
+    overlay.show();
+    shoot("05-hide-reopen-latest", &overlay)?;
+    overlay.hide();
+    Ok(())
+}
+
 /// Anchor names accepted on the command line, matching the kebab-case the
 /// settings store and `overlay-anchor.ts` already use.
 fn parse_anchor(s: &str) -> Option<Anchor> {
@@ -440,6 +498,11 @@ pub fn run() -> windows::core::Result<()> {
                 .map(String::as_str)
                 .unwrap_or("target/overlay-live"),
         ),
+        Some("transcript-scroll-shots") => transcript_scroll_shots(
+            args.get(2)
+                .map(String::as_str)
+                .unwrap_or("target/overlay-transcript-scroll"),
+        ),
         Some("live") => {
             let anchor = args
                 .get(2)
@@ -452,7 +515,7 @@ pub fn run() -> windows::core::Result<()> {
         }
         _ => {
             eprintln!(
-                "usage: overlay-preview shots [dir]\n       overlay-preview live-shots [dir]\n       overlay-preview live [anchor] [--no-cycle] [--toast]\n\nanchors: top-center right-center bottom-center left-center"
+                "usage: overlay-preview shots [dir]\n       overlay-preview live-shots [dir]\n       overlay-preview transcript-scroll-shots [dir]\n       overlay-preview live [anchor] [--no-cycle] [--toast]\n\nanchors: top-center right-center bottom-center left-center"
             );
             Ok(())
         }

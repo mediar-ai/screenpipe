@@ -586,6 +586,7 @@ mod tests {
             anchor: Anchor::BottomCenter,
             meeting_active: true,
             transcript: vec![TranscriptItem {
+                id: "1".into(),
                 speaker: "louis".into(),
                 text: "shipping the native overlay".into(),
                 device_type: "input".into(),
@@ -640,6 +641,7 @@ mod tests {
         s.meeting_active = true;
         s.transcript_pinned = true;
         s.transcript = vec![TranscriptItem {
+            id: "1".into(),
             speaker: "louis".into(),
             text: "hello".into(),
             device_type: "input".into(),
@@ -715,6 +717,7 @@ mod tests {
             meeting_active: true,
             transcript_pinned: true,
             transcript: vec![TranscriptItem {
+                id: "1".into(),
                 speaker: "louis".into(),
                 text: "shipping the native overlay".into(),
                 device_type: "input".into(),
@@ -763,6 +766,7 @@ mod tests {
         s.meeting_active = true;
         s.transcript_pinned = true;
         s.transcript = vec![TranscriptItem {
+            id: "1".into(),
             speaker: "louis".into(),
             text: "hello".into(),
             device_type: "input".into(),
@@ -792,6 +796,7 @@ mod tests {
         let mut s = hovered();
         s.meeting_active = true;
         s.transcript = vec![TranscriptItem {
+            id: "1".into(),
             speaker: "louis".into(),
             text: "hello".into(),
             device_type: "input".into(),
@@ -820,6 +825,7 @@ mod tests {
         let mut s = hovered();
         s.meeting_active = true;
         s.transcript = vec![TranscriptItem {
+            id: "1".into(),
             speaker: "louis".into(),
             text: "hello".into(),
             device_type: "input".into(),
