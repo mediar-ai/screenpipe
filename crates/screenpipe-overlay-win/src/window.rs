@@ -94,6 +94,18 @@ fn show_resets_transcript(visible: bool) -> bool {
     !visible
 }
 
+fn flush_transcript_on_reexpand(
+    was_visible: bool,
+    state: &mut OverlayState,
+    scroll: &mut TranscriptScroll,
+) {
+    if !was_visible && state.shows_transcript() {
+        scroll.reset();
+        state.transcript = scroll.display().to_vec();
+        state.transcript_scroll_from_latest = 0;
+    }
+}
+
 /// Show the same two-choice brand context menu as the macOS overlay. Returning
 /// the selected app action keeps presentation inside the Win32 window while
 /// preserving the cross-platform callback contract.
@@ -149,6 +161,7 @@ enum Cmd {
     Show,
     Hide,
     SetCaptureProtected(bool),
+    PreviewSnapshot(Sender<OverlayState>),
     Quit,
 }
 
@@ -251,6 +264,14 @@ impl Overlay {
                 let _ = PostMessageW(h, WM_MOUSEWHEEL, WPARAM(packed), LPARAM(position));
             }
         }
+    }
+
+    /// Return window-owned state after every previously queued preview action.
+    #[doc(hidden)]
+    pub fn preview_snapshot(&self) -> OverlayState {
+        let (tx, rx) = channel();
+        self.send(Cmd::PreviewSnapshot(tx));
+        rx.recv().expect("overlay preview snapshot")
     }
 
     fn raw_hwnd(&self) -> Option<HWND> {
@@ -1192,6 +1213,9 @@ fn drain_commands(hwnd: HWND) -> (bool, bool) {
                     }
                 }
             }
+            Cmd::PreviewSnapshot(reply) => {
+                let _ = reply.send(ctx.state.clone());
+            }
             Cmd::Quit => quit = true,
         }
     }
@@ -1334,10 +1358,11 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                     let was_transcript_visible = ctx.state.shows_transcript();
                     ctx.state.hovering = hovering;
                     ctx.state.hovered_control = hovered;
-                    if !was_transcript_visible && ctx.state.shows_transcript() {
-                        ctx.transcript_scroll.reset();
-                        ctx.state.transcript_scroll_from_latest = 0;
-                    }
+                    flush_transcript_on_reexpand(
+                        was_transcript_visible,
+                        &mut ctx.state,
+                        &mut ctx.transcript_scroll,
+                    );
                     apply_state(hwnd);
                 }
                 // …and it holds the toast open too: a notification that expires
@@ -1553,6 +1578,48 @@ mod tests {
     fn only_a_hidden_to_visible_show_resets_the_transcript() {
         assert!(show_resets_transcript(false));
         assert!(!show_resets_transcript(true));
+    }
+
+    #[test]
+    fn hover_reexpand_flushes_latest_streamed_while_collapsed() {
+        use crate::state::TranscriptItem;
+
+        let line = |id: usize| TranscriptItem {
+            id: id.to_string(),
+            speaker: "synthetic".into(),
+            text: format!("line {id}"),
+            device_type: "output".into(),
+        };
+        let initial: Vec<_> = (0..6).map(line).collect();
+        let mut scroll = TranscriptScroll::default();
+        scroll.sync(&initial, false);
+        scroll.wheel(120, TRANSCRIPT_CAPACITY);
+
+        let mut latest = initial[1..].to_vec();
+        latest.push(line(6));
+        scroll.sync(&latest, true);
+        let mut state = OverlayState {
+            meeting_active: true,
+            transcript: initial.clone(),
+            transcript_scroll_from_latest: 1,
+            ..Default::default()
+        };
+        assert!(
+            !state.shows_transcript(),
+            "collapsed before pointer returns"
+        );
+
+        state.hovering = true;
+        flush_transcript_on_reexpand(false, &mut state, &mut scroll);
+        assert_eq!(state.transcript_scroll_from_latest, 0);
+        assert_eq!(
+            state.transcript, latest,
+            "hover publishes latest exact bytes"
+        );
+        assert_ne!(
+            state.transcript, initial,
+            "stale frozen snapshot was replaced"
+        );
     }
 
     /// Replays the drag that would not stick: the app's own copy of the state

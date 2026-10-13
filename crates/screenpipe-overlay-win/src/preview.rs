@@ -344,12 +344,20 @@ fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
         })
         .collect();
 
-    let shoot = |name: &str, evidence: &OverlayState| -> windows::core::Result<()> {
-        std::thread::sleep(Duration::from_millis(250));
+    let shoot = |name: &str,
+                 expected_offset: usize,
+                 expected: &[TranscriptItem]|
+     -> windows::core::Result<()> {
+        let evidence = overlay.preview_snapshot();
+        assert_eq!(
+            evidence.transcript_scroll_from_latest, expected_offset,
+            "{name} offset"
+        );
+        assert_eq!(evidence.transcript, expected, "{name} transcript bytes");
         let path = format!("{dir}/{name}.png");
         let (w, h) = write_png(
             &renderer,
-            evidence,
+            &evidence,
             &eq,
             &Backdrop::Solid([0.11, 0.12, 0.14]),
             None,
@@ -361,16 +369,15 @@ fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
     };
 
     overlay.update(state.clone());
-    shoot("01-following-latest", &state)?;
+    let initial = state.transcript.clone();
+    shoot("01-following-latest", 0, &initial)?;
     overlay.preview_mouse_wheel(360);
-    let mut frozen = state.clone();
-    frozen.transcript_scroll_from_latest = 3;
-    shoot("02-wheel-up-reading", &frozen)?;
+    shoot("02-wheel-up-reading", 3, &initial)?;
     // A repeated Show while already visible must not discard the reading
     // snapshot. This is the command pattern used by redundant app lifecycle
     // notifications.
     overlay.show();
-    shoot("03-repeated-show-still-reading", &frozen)?;
+    shoot("03-repeated-show-still-reading", 3, &initial)?;
 
     // Model the bounded live feed rolling 0..49 to 1..50, then replace a
     // same-length partial. Neither update may alter the frozen display.
@@ -384,23 +391,24 @@ fn transcript_scroll_shots(dir: &str) -> windows::core::Result<()> {
     overlay.update(state.clone());
     state.transcript[45].text = "synthetic partial changed 46".into();
     overlay.update(state.clone());
-    shoot("04-roll-and-partial-still-reading", &frozen)?;
+    assert_ne!(
+        state.transcript, initial,
+        "rolling feed must differ from frozen fixture"
+    );
+    shoot("04-roll-and-partial-still-reading", 3, &initial)?;
 
     // Hide while still paused. Reopening is a genuine visibility transition
     // and must jump to the newest rolling snapshot.
     overlay.hide();
-    std::thread::sleep(Duration::from_millis(100));
     overlay.show();
-    shoot("05-hide-reopen-flushes-latest", &state)?;
+    shoot("05-hide-reopen-flushes-latest", 0, &state.transcript)?;
 
     // Returning to bottom must also flush immediately when the stream is now
     // quiet (there is deliberately no update between wheel and capture).
     overlay.preview_mouse_wheel(240);
-    let mut paused_again = state.clone();
-    paused_again.transcript_scroll_from_latest = 2;
-    shoot("06-paused-again", &paused_again)?;
+    shoot("06-paused-again", 2, &state.transcript)?;
     overlay.preview_mouse_wheel(-1200);
-    shoot("07-wheel-bottom-flushes-quiet-latest", &state)?;
+    shoot("07-wheel-bottom-flushes-quiet-latest", 0, &state.transcript)?;
     overlay.hide();
     Ok(())
 }
