@@ -1186,6 +1186,26 @@ pub fn enforce_tray_visibility(app: &AppHandle) {
     });
 }
 
+/// Theme the tray icon must contrast against.
+///
+/// On Windows the taskbar/tray follows `SystemUsesLightTheme`, not the
+/// `AppsUseLightTheme` value `dark_light` reads. The two differ on the Windows
+/// 10 default (light apps, dark taskbar) and on any Windows 11 "Custom" mode,
+/// which put a black icon on a dark taskbar.
+pub fn tray_theme() -> dark_light::Mode {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+        let system_light = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize")
+            .and_then(|k| k.get_value::<u32, _>("SystemUsesLightTheme"));
+        if let Ok(v) = system_light {
+            return if v == 0 { dark_light::Mode::Dark } else { dark_light::Mode::Light };
+        }
+    }
+    dark_light::detect().unwrap_or(dark_light::Mode::Dark)
+}
+
 pub fn setup_tray(app: &AppHandle, update_item: Option<&tauri::menu::MenuItem<Wry>>) -> Result<()> {
     // Store update_item globally so recreate_tray can use it (None for enterprise).
     // Do this even when suppressed: `enforce_tray_visibility` needs the item to

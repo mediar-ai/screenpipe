@@ -1351,7 +1351,7 @@ impl UpdatesManager {
             }
 
             {
-                let theme = dark_light::detect().unwrap_or(Mode::Dark);
+                let theme = crate::tray::tray_theme();
                 let icon_path = if theme == Mode::Light {
                     "assets/screenpipe-logo-tray-updates-black.png"
                 } else {
