@@ -6365,6 +6365,39 @@
           "destination_path": "apps/screenpipe-app-tauri/node_modules"
         }
       ]
+    },
+    {
+      "id": "app-meeting-speaker-source",
+      "name": "Keep per-stream speaker labels distinct in meeting transcript text",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "13d960d27f7c4b95b1e35c23c76a45ea241d912b"
+      },
+      "base_ref": "b9cff1112aff37a2e461c620db4e03209c164b54",
+      "oracle_ref": "13d960d27f7c4b95b1e35c23c76a45ea241d912b",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/lib/utils/meeting-context.ts"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "meetings",
+        "transcript",
+        "speaker-identity"
+      ],
+      "prompt": "Meeting transcript text merges microphone and meeting-audio turns when independent streams reuse generic speaker labels. Repair the actual transcript renderer and the transcript section of full meeting Markdown. Generic labels speaker, speaker followed by a space and digits, or speaker followed by an underscore and digits are case-insensitive: qualify them as Microphone for input, Meeting audio for output, and Unidentified for an unknown direction. Preserve the original label alongside that source using the existing bracketed speaker format, for example [Microphone · speaker 1]. Adjacent generic turns from different sources must remain separate and retain all words. Preserve explicit names, including names that only resemble generic labels; an explicit matching name may still coalesce across sources. Keep same-source consecutive turns grouped below a ten-second gap, but separate turns at exactly ten seconds. Preserve chronological sorting, whitespace normalization, empty/null inputs, omission of blank speech and omission of the unknown speaker label. Never mutate input chunks or their stored identities. Full meeting Markdown must retain notes. The grader invokes the complete existing module with synthetic chunks and refuses local API work. Any implementation achieving these outputs is acceptable. This task covers rendered transcript text only, not live announcements, the transcript panel, native clipboard delivery, audio diarization, storage identity, execution isolation or model capability.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/meeting-speaker-source.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/lib/utils/meeting-speaker-source.eval.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test apps/screenpipe-app-tauri/lib/utils/meeting-speaker-source.eval.test.ts"
+      }
     }
   ]
 }

@@ -1,5 +1,18 @@
 # Coding-agent regression evals
 
+`app-meeting-speaker-source` executes the actual transcript renderer and full
+meeting Markdown builder with synthetic chunks. Twelve outcomes distinguish
+per-stream generic labels while preserving explicit names, grouping, the gap
+boundary, sorting, whitespace, empty speech, notes and stored identities.
+The parent fails five outcomes and preserves seven; the historical fix and
+current source pass twelve. Run
+`bun test evals/coding-agent/calibrate-meeting-speaker-source.test.js` for twelve
+controls, including equivalent code, unused correct code, no-op package scripts,
+wrong source labels, lost grouping and missing-source classification.
+The fixture appears only at grading and needs no dependency links. This does
+not test the live announcement, panel UI, native clipboard, diarization,
+execution isolation or model performance.
+
 `app-acp-declined-warmup` mounts the actual automatic ACP warmup hook with
 synthetic native command replies. Fifteen outcomes cover cancelled, failed and
 pending starts across new chats/remounts, successful handshakes, independent
