@@ -2754,7 +2754,7 @@ fn known_room_refuses_a_different_calendar_room() {
         chrono::Duration::minutes(30),
         &[],
     );
-    event.meeting_url = Some("https://meet.google.com/wrong-room-id".to_string());
+    event.meeting_url = Some("https://meet.google.com/zzz-zzzz-zzz".to_string());
     assert!(
         find_calendar_event_for_meeting(
             &[event],
@@ -4647,4 +4647,323 @@ async fn failed_room_change_close_restores_the_old_ending_state_for_retry() {
             ..
         } if url == ROOM_A && seen == first_seen_at && since == changed_at
     ));
+}
+
+// --- SCR-593: Meet /home must not split the call, and suppression must not end it ---
+
+#[test]
+fn meet_navigation_pages_are_not_room_identities() {
+    use crate::meeting_watcher::shared::calendar::meeting_url_identity;
+    for url in [
+        "https://meet.google.com/home?authuser=0",
+        "https://meet.google.com/landing",
+        "https://meet.google.com/new",
+        "https://meet.google.com/",
+    ] {
+        assert_eq!(meeting_url_identity(url), None, "{url}");
+    }
+    assert_eq!(
+        meeting_url_identity(ROOM_A).as_deref(),
+        Some(ROOM_A_IDENTITY)
+    );
+}
+
+#[test]
+fn meet_home_page_does_not_split_or_end_the_live_call() {
+    let process = chrome_process();
+    let t0 = Instant::now();
+    let rooms = HashSet::new();
+    let policy = RoomChangePolicy {
+        confirm_window: ROOM_CHANGE_CONFIRM_WINDOW,
+        prompt_window: ROOM_CHANGE_PROMPT_WINDOW,
+        calendar_confirm_window: ROOM_CHANGE_CALENDAR_CONFIRM_WINDOW,
+        calendar_room_identities: &rooms,
+        calendar_boundary_crossed: false,
+    };
+    let mut tracker = RoomChangeTracker::default();
+    let mut state = active_meet(113, &process, ROOM_A, t0);
+    let urls = [ROOM_A, "https://meet.google.com/home?authuser=0", ROOM_A];
+    for (tick, url) in urls.into_iter().enumerate() {
+        let now = t0 + Duration::from_secs(tick as u64 + 1);
+        let candidates = vec![meet_candidate(&process, url, now)];
+        let room_change = detect_room_change(&state, &candidates, &mut tracker, now, &policy);
+        assert!(
+            room_change.is_none(),
+            "{url} split the call: {room_change:?}"
+        );
+        let (next, action) = advance_audio_process_state(
+            state,
+            &candidates,
+            &candidates,
+            now,
+            CANDIDATE_CONFIRM_WINDOW,
+            ENDING_GRACE,
+        );
+        assert!(action.is_none(), "{url}: {action:?}");
+        assert!(
+            matches!(&next, AudioProcessMeetingState::Active { meeting_id: 113, meeting_url: Some(u), .. } if u == ROOM_A),
+            "{url}: {next:?}"
+        );
+        state = next;
+    }
+}
+
+#[test]
+fn suppressed_old_room_on_the_live_session_keeps_the_current_call_alive() {
+    let process = chrome_process();
+    let key = ProcessKey::from_process(&process).unwrap();
+    let t0 = Instant::now();
+    let now = t0 + Duration::from_secs(1);
+    let state = active_meet(114, &process, ROOM_B, t0);
+    let suppressed = vec![SuppressedSession {
+        session_key: key,
+        platform: Some("Google Meet".to_string()),
+        meeting_url: Some(ROOM_A.to_string()),
+    }];
+
+    // The live resolver emits one candidate per process; here it points back
+    // to the suppressed room A while the same session still holds the mic.
+    let mut candidates = vec![meet_candidate(&process, ROOM_A, now)];
+    suppress_candidates(&mut candidates, &suppressed, &state);
+    assert!(
+        candidates
+            .iter()
+            .all(|candidate| candidate.resolved_session().is_none()),
+        "a suppressed room must not be able to start or switch a meeting: {candidates:?}"
+    );
+    let rooms = HashSet::new();
+    let mut tracker = RoomChangeTracker::default();
+    assert!(detect_room_change(
+        &state,
+        &candidates,
+        &mut tracker,
+        now,
+        &room_policy(&rooms, false)
+    )
+    .is_none());
+    let (next, action) = advance_audio_process_state(
+        state,
+        &candidates,
+        &candidates,
+        now,
+        CANDIDATE_CONFIRM_WINDOW,
+        ENDING_GRACE,
+    );
+    assert!(action.is_none(), "{action:?}");
+    assert!(
+        matches!(&next, AudioProcessMeetingState::Active { meeting_id: 114, meeting_url: Some(u), .. } if u == ROOM_B),
+        "the live call must stay active: {next:?}"
+    );
+
+    // With no live meeting, suppression still blocks a restart.
+    let mut idle_candidates = vec![meet_candidate(&process, ROOM_A, now)];
+    suppress_candidates(
+        &mut idle_candidates,
+        &suppressed,
+        &AudioProcessMeetingState::Idle,
+    );
+    assert!(idle_candidates.is_empty());
+}
+
+async fn insert_chrome_frame(db: &DatabaseManager, url: &str, offset_ms: i64) {
+    let at = Utc::now() + chrono::Duration::milliseconds(offset_ms);
+    let writer = db.coordinated_writer().lock().await.unwrap();
+    sqlx::query(
+        "INSERT INTO frames (timestamp, app_name, window_name, browser_url) \
+         VALUES (?1, 'Google Chrome', 'Meet', ?2)",
+    )
+    .bind(at.format("%Y-%m-%dT%H:%M:%S%.3f+00:00").to_string())
+    .bind(url)
+    .execute(writer.pool())
+    .await
+    .unwrap();
+}
+
+struct PipelineHarness {
+    db: DatabaseManager,
+    _dir: tempfile::TempDir,
+    process: AudioInputProcess,
+    tracker: StickyProcessTracker,
+    room_tracker: RoomChangeTracker,
+    suppressed: Vec<SuppressedSession>,
+    state: AudioProcessMeetingState,
+    manual_meeting: tokio::sync::RwLock<Option<i64>>,
+    flap_count: u32,
+    in_meeting: AtomicBool,
+}
+
+impl PipelineHarness {
+    /// A Google Meet meeting already live in `room` on Chrome's audio session.
+    async fn live_in(room: &str, at: Instant) -> Self {
+        let (dir, db) = setup_db().await;
+        let process = chrome_process();
+        let mut harness = Self {
+            db,
+            _dir: dir,
+            process: process.clone(),
+            tracker: StickyProcessTracker::new(STICKY_PROCESS_WINDOW),
+            room_tracker: RoomChangeTracker::default(),
+            suppressed: Vec::new(),
+            state: AudioProcessMeetingState::Idle,
+            manual_meeting: tokio::sync::RwLock::new(None),
+            flap_count: 0,
+            in_meeting: AtomicBool::new(false),
+        };
+        harness
+            .apply(
+                AudioProcessStateAction::StartMeeting {
+                    platform: "Google Meet".to_string(),
+                    session_key: ProcessKey::from_process(&process).unwrap(),
+                    meeting_url: Some(room.to_string()),
+                    first_seen_at: at,
+                    is_browser: true,
+                    pid: process.pid,
+                    bundle_id: process.bundle_id.clone(),
+                },
+                at,
+            )
+            .await;
+        harness
+    }
+
+    async fn apply(&mut self, action: AudioProcessStateAction, now: Instant) {
+        apply_state_action(
+            action,
+            &self.db,
+            &self.manual_meeting,
+            &mut self.state,
+            &mut self.suppressed,
+            &mut self.flap_count,
+            &self.in_meeting,
+            &None,
+            None,
+            None,
+            &[],
+            now,
+            Utc::now(),
+        )
+        .await;
+    }
+
+    /// One detector-loop tick with Chrome still holding the mic.
+    async fn tick(&mut self, now: Instant) {
+        let profiles = crate::meeting_watcher::shared::profiles::load_detection_profiles();
+        let processes = vec![self.process.clone()];
+        let (candidates, live_candidates) = build_candidates(
+            &self.db,
+            &profiles,
+            &[],
+            &processes,
+            &mut self.tracker,
+            &mut self.suppressed,
+            &self.state,
+            now,
+        )
+        .await;
+        let rooms = HashSet::new();
+        let policy = RoomChangePolicy {
+            confirm_window: ROOM_CHANGE_CONFIRM_WINDOW,
+            prompt_window: ROOM_CHANGE_PROMPT_WINDOW,
+            calendar_confirm_window: ROOM_CHANGE_CALENDAR_CONFIRM_WINDOW,
+            calendar_room_identities: &rooms,
+            calendar_boundary_crossed: false,
+        };
+        let room_change = detect_room_change(
+            &self.state,
+            &candidates,
+            &mut self.room_tracker,
+            now,
+            &policy,
+        );
+        let current = std::mem::replace(&mut self.state, AudioProcessMeetingState::Idle);
+        let (next, action) = match room_change {
+            Some(action) => (AudioProcessMeetingState::Idle, Some(action)),
+            None => advance_audio_process_state(
+                current,
+                &live_candidates,
+                &candidates,
+                now,
+                CANDIDATE_CONFIRM_WINDOW,
+                ENDING_GRACE,
+            ),
+        };
+        self.state = next;
+        if let Some(action) = action {
+            self.apply(action, now).await;
+        }
+    }
+
+    fn live_meeting(&self) -> Option<(i64, Option<&str>)> {
+        match &self.state {
+            AudioProcessMeetingState::Active {
+                meeting_id,
+                meeting_url,
+                ..
+            } => Some((*meeting_id, meeting_url.as_deref())),
+            _ => None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn pipeline_meet_home_round_trip_keeps_the_original_meeting_recording() {
+    let t0 = Instant::now();
+    let mut h = PipelineHarness::live_in(ROOM_A, t0).await;
+    let (meeting_a, _) = h.live_meeting().expect("meeting A live");
+    let urls = [ROOM_A, "https://meet.google.com/home?authuser=0", ROOM_A];
+    for (tick, url) in urls.into_iter().enumerate() {
+        insert_chrome_frame(&h.db, url, tick as i64).await;
+        h.tick(t0 + Duration::from_secs(tick as u64 + 1)).await;
+        assert_eq!(
+            h.live_meeting(),
+            Some((meeting_a, Some(ROOM_A))),
+            "tick {tick} ({url}): {:?}",
+            h.state
+        );
+        assert!(h.in_meeting.load(Ordering::Relaxed), "tick {tick}");
+    }
+    let row = h.db.get_meeting_by_id(meeting_a).await.unwrap();
+    assert!(row.meeting_end.is_none(), "meeting A must not be closed");
+    assert!(
+        h.db.get_meeting_by_id(meeting_a + 1).await.is_err(),
+        "no second meeting row"
+    );
+}
+
+#[tokio::test]
+async fn pipeline_suppressed_old_room_on_the_live_session_keeps_the_new_meeting() {
+    let t0 = Instant::now();
+    let mut h = PipelineHarness::live_in(ROOM_A, t0).await;
+    let (meeting_a, _) = h.live_meeting().expect("meeting A live");
+
+    insert_chrome_frame(&h.db, ROOM_A, 0).await;
+    h.tick(t0 + Duration::from_secs(1)).await;
+    insert_chrome_frame(&h.db, ROOM_B, 1).await;
+    h.tick(t0 + Duration::from_secs(2)).await;
+    let (meeting_b, url) = h.live_meeting().expect("room change starts meeting B");
+    assert_ne!(meeting_b, meeting_a);
+    assert_eq!(url, Some(ROOM_B));
+    assert_eq!(
+        h.db.meeting_end_reason(meeting_a).await.unwrap().as_deref(),
+        Some(MEETING_END_REASON_ROOM_CHANGED)
+    );
+
+    // The sole candidate now points back to suppressed room A while the same
+    // Chrome session keeps the mic.
+    insert_chrome_frame(&h.db, ROOM_A, 2).await;
+    h.tick(t0 + Duration::from_secs(3)).await;
+    assert_eq!(
+        h.live_meeting(),
+        Some((meeting_b, Some(ROOM_B))),
+        "the live call must not end: {:?}",
+        h.state
+    );
+    assert!(h.in_meeting.load(Ordering::Relaxed));
+    assert!(h
+        .db
+        .get_meeting_by_id(meeting_b)
+        .await
+        .unwrap()
+        .meeting_end
+        .is_none());
 }

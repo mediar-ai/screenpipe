@@ -131,6 +131,48 @@ pub(crate) fn candidate_session_key(candidate: &ResolvedMeetingCandidate) -> Opt
     }
 }
 
+/// Applies session suppression for one detector tick. A suppressed room on the
+/// live meeting's own audio session still proves that session holds the mic, so
+/// it is kept as presence-only evidence: it can neither start nor switch a
+/// meeting, but it cannot end the current one either.
+pub(crate) fn suppress_candidates(
+    candidates: &mut Vec<ResolvedMeetingCandidate>,
+    suppressed_sessions: &[SuppressedSession],
+    state: &AudioProcessMeetingState,
+) {
+    let live_key = match state {
+        AudioProcessMeetingState::Active { session_key, .. }
+        | AudioProcessMeetingState::Ending { session_key, .. } => Some(session_key),
+        _ => None,
+    };
+    for candidate in candidates.iter_mut() {
+        let keep_presence = matches!(candidate, ResolvedMeetingCandidate::Browser { .. })
+            && live_key.is_some_and(|key| candidate_session_key(candidate) == Some(key))
+            && candidate_is_suppressed(candidate, suppressed_sessions);
+        if let (
+            true,
+            ResolvedMeetingCandidate::Browser {
+                platform,
+                browser_app,
+                session_key,
+                first_seen_at,
+                process,
+                ..
+            },
+        ) = (keep_presence, &*candidate)
+        {
+            debug!("audio-process meeting detector: suppressed {platform} room on the live session kept as presence only");
+            *candidate = ResolvedMeetingCandidate::UnresolvedBrowser {
+                browser_app: browser_app.clone(),
+                session_key: session_key.clone(),
+                first_seen_at: *first_seen_at,
+                process: process.clone(),
+            };
+        }
+    }
+    filter_suppressed_candidates(candidates, suppressed_sessions);
+}
+
 pub(crate) fn filter_suppressed_candidates(
     candidates: &mut Vec<ResolvedMeetingCandidate>,
     suppressed_sessions: &[SuppressedSession],
