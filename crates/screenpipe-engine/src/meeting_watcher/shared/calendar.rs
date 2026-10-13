@@ -162,6 +162,8 @@ fn normalized_url(raw: &str) -> Option<Url> {
 /// notice the browser moved from one conference room to another (see
 /// `audio_process::room_change`).
 pub fn meeting_url_identity(raw: &str) -> Option<String> {
+    use crate::meeting_watcher::audio_process::arc_window_title_meet_code;
+
     let parsed = normalized_url(raw)?;
     let host = parsed
         .host_str()?
@@ -176,7 +178,11 @@ pub fn meeting_url_identity(raw: &str) -> Option<String> {
         .collect();
 
     if host == "meet.google.com" {
-        return segments.first().map(|room| format!("google-meet:{room}"));
+        // Only a meeting code is a room; /home, /landing and /new are navigation pages.
+        return segments
+            .first()
+            .and_then(|room| arc_window_title_meet_code(room))
+            .map(|room| format!("google-meet:{room}"));
     }
 
     if host == "zoom.us" || host.ends_with(".zoom.us") {
