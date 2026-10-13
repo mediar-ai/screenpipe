@@ -1248,18 +1248,16 @@ static TRAY_ICON_STATE: Lazy<std::sync::Mutex<(String, Option<Mode>)>> =
     Lazy::new(|| std::sync::Mutex::new((String::new(), None)));
 
 /// Set the tray icon for `status` (or the last known status) and the current
-/// taskbar theme, if either changed.
+/// taskbar theme, if either changed. The lock is held until the icon is queued
+/// on the main thread so the two callers can't apply icons out of order.
 fn apply_tray_icon(app: &tauri::AppHandle, status: Option<&str>) {
+    let mut state = TRAY_ICON_STATE.lock().unwrap_or_else(|e| e.into_inner());
     let theme = crate::tray::tray_theme();
-    let current_status = {
-        let mut state = TRAY_ICON_STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let status = status.map(str::to_string).unwrap_or_else(|| state.0.clone());
-        if status.is_empty() || (status == state.0 && Some(theme) == state.1) {
-            return;
-        }
-        *state = (status.clone(), Some(theme));
-        status
-    };
+    let current_status = status.map(str::to_string).unwrap_or_else(|| state.0.clone());
+    if current_status.is_empty() || (current_status == state.0 && Some(theme) == state.1) {
+        return;
+    }
+    *state = (current_status.clone(), Some(theme));
     let icon_path = match (is_unhealthy_icon(&current_status), theme == Mode::Light) {
         (true, true) => "assets/screenpipe-logo-tray-black-failed.png",
         (true, false) => "assets/screenpipe-logo-tray-white-failed.png",
