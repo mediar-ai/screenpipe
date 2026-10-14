@@ -247,6 +247,14 @@ export function mockLocalApiResponse(
     pagination: { limit: 100, offset: 0, total: 0 },
   };
 
+  if (url.pathname === "/privacy/status") {
+    const state = typeof window === "undefined" ? "processing" : new URLSearchParams(window.location.search).get("privacyState") ?? "processing";
+    if (state === "unavailable") return Response.json({ error: "synthetic unavailable" }, { status: 503 });
+    return Response.json({ enabled: state !== "disabled", scope: "protected_capture_surfaces", surfaces: [
+      { kind: "frames", discovering: state === "discovering", pending: state === "ready" ? 0 : 12, pending_capped: false, deferred: state === "retry" ? 3 : 0 },
+      { kind: "image", discovering: false, pending: state === "ready" ? 0 : 5, pending_capped: false, deferred: 0 },
+    ] });
+  }
   if (url.pathname === "/health") {
     return Response.json(createMockHealth(scenario));
   }
@@ -270,6 +278,7 @@ export function mockLocalApiResponse(
   if (url.pathname === "/raw_sql") {
     // The only raw_sql the search window issues is the app roster.
     const body = typeof init?.body === "string" ? init.body : "";
+    if (body.includes("WITH per_window AS")) return Response.json([]);
     if (scenario !== "empty" && body.includes("GROUP BY app_name")) {
       return Response.json(mockAppRoster());
     }

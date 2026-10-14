@@ -1113,6 +1113,10 @@ impl SCServer {
         // Build the main router with all routes
         let router = Router::new()
             .route(
+                "/privacy/status",
+                get(crate::routes::privacy_release::status),
+            )
+            .route(
                 "/privacy/ready/:kind",
                 get(crate::routes::privacy_release::ready_page),
             )

@@ -130,6 +130,7 @@ pub struct WorkerStatus {
 #[derive(Clone)]
 pub struct Worker {
     release_db: Option<Arc<screenpipe_db::DatabaseManager>>,
+    release_scheduler: Arc<Mutex<release::ReleaseScheduler>>,
     frame_storage: Option<Arc<screenpipe_db::DatabaseManager>>,
     pool: SqlitePool,
     writer: SqliteWritePool,
@@ -155,6 +156,7 @@ impl Worker {
         Self {
             frame_storage: None,
             release_db: None,
+            release_scheduler: Arc::new(Mutex::new(Default::default())),
             pool,
             writer,
             redactor,
@@ -505,7 +507,9 @@ impl Worker {
         if let Some(db) = &self.release_db {
             if db.release_policy().await?.text {
                 return if table == TargetTable::FullText {
-                    self.process_release_batch(batch_size).await
+                    self.process_release_slice(batch_size)
+                        .await
+                        .map(|(attempted, _)| attempted)
                 } else {
                     Ok(0)
                 };

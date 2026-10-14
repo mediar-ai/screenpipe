@@ -105,6 +105,25 @@ INSERT OR IGNORE INTO _privacy_policy VALUES(1,'',0,0,0,0);
 CREATE TABLE IF NOT EXISTS _privacy_release(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,policy TEXT,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER,PRIMARY KEY(kind,id));
 CREATE TABLE IF NOT EXISTS _privacy_ready(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,policy TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS _privacy_pending ON _privacy_release(kind,retry_at) WHERE policy IS NULL;
+CREATE INDEX IF NOT EXISTS _privacy_ready_stream ON _privacy_ready(kind,sequence);
+CREATE INDEX IF NOT EXISTS _privacy_ready_record ON _privacy_ready(kind,id);
+CREATE TABLE IF NOT EXISTS _privacy_discovery(kind TEXT PRIMARY KEY,policy TEXT NOT NULL,after_id INTEGER NOT NULL DEFAULT 0,complete INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS _privacy_work(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,id TEXT NOT NULL,available_at INTEGER NOT NULL,UNIQUE(kind,id));
+CREATE INDEX IF NOT EXISTS _privacy_work_due ON _privacy_work(kind,available_at,sequence);
+CREATE TRIGGER IF NOT EXISTS privacy_enqueue_insert AFTER INSERT ON _privacy_release WHEN NEW.policy IS NULL BEGIN
+ INSERT INTO _privacy_work(kind,id,available_at) VALUES(NEW.kind,NEW.id,unixepoch()) ON CONFLICT(kind,id) DO UPDATE SET available_at=excluded.available_at;
+END;
+CREATE TRIGGER IF NOT EXISTS privacy_enqueue_update AFTER UPDATE OF policy,revision ON _privacy_release WHEN NEW.policy IS NULL BEGIN
+ INSERT INTO _privacy_work(kind,id,available_at) VALUES(NEW.kind,NEW.id,unixepoch()) ON CONFLICT(kind,id) DO UPDATE SET available_at=excluded.available_at;
+ DELETE FROM _privacy_ready WHERE kind=NEW.kind AND id=NEW.id;
+END;
+CREATE TRIGGER IF NOT EXISTS privacy_dequeue_update AFTER UPDATE OF policy ON _privacy_release WHEN NEW.policy IS NOT NULL BEGIN
+ DELETE FROM _privacy_work WHERE kind=NEW.kind AND id=NEW.id;
+END;
+CREATE TRIGGER IF NOT EXISTS privacy_dequeue_delete AFTER DELETE ON _privacy_release BEGIN
+ DELETE FROM _privacy_work WHERE kind=OLD.kind AND id=OLD.id;
+ DELETE FROM _privacy_ready WHERE kind=OLD.kind AND id=OLD.id;
+END;
 "#;
 
 fn err(message: &str) -> sqlx::Error {
@@ -120,6 +139,8 @@ impl DatabaseManager {
         }
         let mut tx = self.begin_immediate_with_retry().await?;
         sqlx::raw_sql(SCHEMA).execute(&mut **tx.conn()).await?;
+        sqlx::query("DELETE FROM _privacy_discovery WHERE EXISTS(SELECT 1 FROM _privacy_policy WHERE identity!=? OR text_required!=? OR image_required!=?)")
+            .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         sqlx::query("UPDATE _privacy_policy SET identity=?,text_required=?,image_required=?,epoch=epoch+1,revocation=revocation+1 WHERE identity!=? OR text_required!=? OR image_required!=?")
             .bind(&policy.identity).bind(policy.text).bind(policy.images).bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         for surface in SURFACES {
@@ -185,16 +206,21 @@ impl DatabaseManager {
                 } else {
                     "text_required"
                 };
-                let active = format!("((SELECT {requirement} FROM _privacy_policy WHERE id=1)=1 OR EXISTS(SELECT 1 FROM _privacy_release WHERE kind='{kind}' AND id=CAST({id} AS TEXT) AND policy IS NOT NULL))");
+                let active = format!("((SELECT {requirement} FROM _privacy_policy WHERE id=1)=1 OR EXISTS(SELECT 1 FROM _privacy_release WHERE kind='{kind}' AND id=CAST({id} AS TEXT)))");
                 let when = if event == "UPDATE" {
                     format!("WHEN {active} AND ({changed}){maintenance}")
                 } else {
                     format!("WHEN {active}")
                 };
                 let table = physical;
-                let sql = format!("CREATE TRIGGER IF NOT EXISTS privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
+                let mutation = if event == "DELETE" {
+                    format!("UPDATE _privacy_release SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL WHERE kind='{kind}' AND id=CAST({id} AS TEXT); DELETE FROM _privacy_work WHERE kind='{kind}' AND id=CAST({id} AS TEXT);")
+                } else {
+                    format!("INSERT INTO _privacy_release(kind,id,revision) VALUES('{kind}',CAST({id} AS TEXT),1) ON CONFLICT(kind,id) DO UPDATE SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL;")
+                };
+                let sql = format!("DROP TRIGGER IF EXISTS privacy_{kind}_{event}; CREATE TRIGGER privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
                   UPDATE _privacy_policy SET epoch=epoch+1,revocation=revocation+1 WHERE EXISTS(SELECT 1 FROM _privacy_release WHERE kind='{kind}' AND id=CAST({id} AS TEXT) AND policy IS NOT NULL);
-                  INSERT INTO _privacy_release(kind,id,revision) VALUES('{kind}',CAST({id} AS TEXT),1) ON CONFLICT(kind,id) DO UPDATE SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL;
+                  {mutation}
                   END;");
                 sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
                     .execute(&mut **tx.conn())
@@ -253,6 +279,22 @@ impl DatabaseManager {
         limit: u32,
         min_age_seconds: i64,
     ) -> Result<Vec<ReleaseJob>, sqlx::Error> {
+        self.release_pending_ordered(kind, limit, min_age_seconds, false)
+            .await
+    }
+
+    /// Select from the indexed work queue. Alternate recent and oldest work in
+    /// callers so continuous capture cannot starve historical records.
+    pub async fn release_pending_ordered(
+        &self,
+        kind: &str,
+        limit: u32,
+        min_age_seconds: i64,
+        oldest: bool,
+    ) -> Result<Vec<ReleaseJob>, sqlx::Error> {
+        if limit == 0 {
+            return Ok(vec![]);
+        }
         let surface = SURFACES
             .iter()
             .find(|s| s.kind == kind)
@@ -279,13 +321,30 @@ impl DatabaseManager {
         } else {
             String::new()
         };
-        let sql = format!("SELECT CAST(s.id AS TEXT) AS source_id,COALESCE(r.revision,0) AS revision,{columns} FROM {} s LEFT JOIN _privacy_release r ON r.kind=? AND r.id=CAST(s.id AS TEXT) WHERE (r.policy IS NULL OR r.policy!=?) AND (r.retry_at IS NULL OR r.retry_at<=strftime('%s','now')){age} ORDER BY s.id DESC LIMIT ?", surface.table);
-        let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+        self.discover_release_work(surface, &policy.identity)
+            .await?;
+        let order = if oldest { "ASC" } else { "DESC" };
+        if kind == "image" && min_age_seconds > 0 {
+            self.schedule_image_maturity(min_age_seconds).await?;
+        }
+        // Candidate traversal is bounded even for malformed/future timestamps.
+        // Young images move to a future deadline; subsequent polls advance past
+        // them. The source lookup never scans certified capture history.
+        let sql = format!("WITH candidates AS MATERIALIZED (SELECT kind,id,available_at,sequence FROM _privacy_work INDEXED BY _privacy_work_due WHERE kind=? AND available_at<=unixepoch() ORDER BY available_at {order},sequence {order} LIMIT 256) SELECT CAST(s.id AS TEXT) AS source_id,r.revision,{columns} FROM candidates w CROSS JOIN _privacy_release r ON r.kind=w.kind AND r.id=w.id CROSS JOIN {} s ON s.id=w.id WHERE r.policy IS NULL{age} ORDER BY w.available_at {order},w.sequence {order} LIMIT ?", surface.table);
+        let mut rows = sqlx::query(sqlx::AssertSqlSafe(sql.clone()))
             .bind(kind)
-            .bind(&policy.identity)
-            .bind(limit)
+            .bind(limit.min(256))
             .fetch_all(&self.pool)
             .await?;
+        // Recent young captures must not make the worker sleep while an old
+        // mature backlog is runnable. One bounded fallback preserves fairness.
+        if rows.is_empty() && kind == "image" && !oldest {
+            rows = sqlx::query(sqlx::AssertSqlSafe(sql.replace("DESC", "ASC")))
+                .bind(kind)
+                .bind(limit.min(256))
+                .fetch_all(&self.pool)
+                .await?;
+        }
         let mut jobs: Vec<ReleaseJob> = rows
             .iter()
             .map(|row| {
@@ -328,6 +387,95 @@ impl DatabaseManager {
             }
         }
         Ok(jobs)
+    }
+
+    async fn schedule_image_maturity(&self, min_age: i64) -> Result<(), sqlx::Error> {
+        // Move at most one bounded page out of the runnable queue per poll.
+        // This also handles skewed/future timestamps without busy-looping or
+        // making every empty poll scan all pending young screenshots.
+        let rows: Vec<(i64, i64)> = sqlx::query_as("WITH candidates AS MATERIALIZED (SELECT sequence,id FROM _privacy_work WHERE kind='image' AND available_at<=unixepoch() ORDER BY available_at,sequence LIMIT 256) SELECT w.sequence,COALESCE(unixepoch(s.timestamp)+?,unixepoch()+3600) FROM candidates w CROSS JOIN frames s ON s.id=w.id WHERE unixepoch(s.timestamp) IS NULL OR unixepoch(s.timestamp)+?>unixepoch()")
+            .bind(min_age).bind(min_age).fetch_all(&self.pool).await?;
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let mut tx = self.begin_immediate_with_retry().await?;
+        for (sequence, deadline) in rows {
+            sqlx::query(
+                "UPDATE _privacy_work SET available_at=MAX(available_at,?) WHERE sequence=?",
+            )
+            .bind(deadline)
+            .bind(sequence)
+            .execute(&mut **tx.conn())
+            .await?;
+        }
+        tx.commit().await
+    }
+
+    /// Discover legacy captures and policy rechecks in bounded primary-key
+    /// pages. The durable cursor survives restart; capture never waits for a
+    /// history-sized transaction. New captures enqueue through source triggers.
+    async fn discover_release_work(
+        &self,
+        surface: &Surface,
+        policy: &str,
+    ) -> Result<(), sqlx::Error> {
+        let state: Option<(String, i64, bool)> =
+            sqlx::query_as("SELECT policy,after_id,complete FROM _privacy_discovery WHERE kind=?")
+                .bind(surface.kind)
+                .fetch_optional(&self.pool)
+                .await?;
+        if state
+            .as_ref()
+            .is_some_and(|(p, _, complete)| p == policy && *complete)
+        {
+            return Ok(());
+        }
+        let mut tx = self.begin_immediate_with_retry().await?;
+        // Re-read inside the writer to serialize concurrent discovery callers.
+        let current: String = sqlx::query_scalar("SELECT identity FROM _privacy_policy WHERE id=1")
+            .fetch_one(&mut **tx.conn())
+            .await?;
+        if current != policy {
+            return Ok(());
+        }
+        sqlx::query("INSERT INTO _privacy_discovery(kind,policy) VALUES(?,?) ON CONFLICT(kind) DO UPDATE SET policy=excluded.policy,after_id=0,complete=0 WHERE policy!=excluded.policy")
+            .bind(surface.kind).bind(policy).execute(&mut **tx.conn()).await?;
+        let (after, complete): (i64, bool) =
+            sqlx::query_as("SELECT after_id,complete FROM _privacy_discovery WHERE kind=?")
+                .bind(surface.kind)
+                .fetch_one(&mut **tx.conn())
+                .await?;
+        if complete {
+            return Ok(());
+        }
+        let ids: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT id FROM {} WHERE id>? ORDER BY id LIMIT 128",
+            surface.table
+        )))
+        .bind(after)
+        .fetch_all(&mut **tx.conn())
+        .await?;
+        for id in &ids {
+            sqlx::query("INSERT INTO _privacy_release(kind,id) VALUES(?,CAST(? AS TEXT)) ON CONFLICT(kind,id) DO UPDATE SET policy=NULL,attempts=0,retry_at=NULL WHERE policy IS NOT NULL AND policy!=?")
+                .bind(surface.kind).bind(id).bind(policy).execute(&mut **tx.conn()).await?;
+            // Also enroll pending receipts written by earlier draft versions.
+            sqlx::query("INSERT OR IGNORE INTO _privacy_work(kind,id,available_at) SELECT kind,id,COALESCE(retry_at,unixepoch()) FROM _privacy_release WHERE kind=? AND id=CAST(? AS TEXT) AND policy IS NULL")
+                .bind(surface.kind).bind(id).execute(&mut **tx.conn()).await?;
+        }
+        sqlx::query("UPDATE _privacy_discovery SET after_id=?,complete=? WHERE kind=?")
+            .bind(ids.last().copied().unwrap_or(after))
+            .bind(ids.len() < 128)
+            .bind(surface.kind)
+            .execute(&mut **tx.conn())
+            .await?;
+        tx.commit().await
+    }
+
+    /// Cheap validity check before resuming a partially processed record.
+    /// Atomic publication repeats this check, so this is an optimization only.
+    pub async fn release_job_current(&self, job: &ReleaseJob) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_release r JOIN _privacy_policy p ON p.id=1 WHERE r.kind=? AND r.id=? AND r.revision=? AND r.policy IS NULL AND p.identity=? AND ((r.kind='image' AND p.image_required=1) OR (r.kind!='image' AND p.text_required=1)))")
+            .bind(&job.kind).bind(&job.id).bind(job.revision).bind(&job.policy).fetch_one(&self.pool).await
     }
 
     /// Commit sanitized values and their receipt together. A concurrent source
@@ -374,8 +522,8 @@ impl DatabaseManager {
                 .await;
         }
         let mut tx = self.begin_immediate_with_retry().await?;
-        let current: (String, i64) = sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind=? AND id=?),0) FROM _privacy_policy WHERE id=1").bind(&job.kind).bind(&job.id).fetch_one(&mut **tx.conn()).await?;
-        if current != (job.policy.clone(), job.revision) {
+        let current: (String, i64, bool) = sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind=? AND id=? AND policy IS NULL),-1),text_required FROM _privacy_policy WHERE id=1").bind(&job.kind).bind(&job.id).fetch_one(&mut **tx.conn()).await?;
+        if current != (job.policy.clone(), job.revision, true) {
             return Ok(false);
         }
         let set = surface
@@ -579,6 +727,11 @@ pub(crate) async fn certify(
     sqlx::query("UPDATE _privacy_policy SET epoch=epoch+1 WHERE id=1")
         .execute(&mut *conn)
         .await?;
+    sqlx::query("DELETE FROM _privacy_ready WHERE kind=? AND id=?")
+        .bind(&job.kind)
+        .bind(&job.id)
+        .execute(&mut *conn)
+        .await?;
     sqlx::query("INSERT INTO _privacy_ready(kind,id,revision,policy) SELECT kind,id,revision,policy FROM _privacy_release WHERE kind=? AND id=?")
         .bind(&job.kind).bind(&job.id).execute(&mut *conn).await?;
     Ok(())
@@ -587,8 +740,11 @@ pub(crate) async fn certify(
 impl DatabaseManager {
     pub async fn defer_release(&self, job: &ReleaseJob) -> Result<(), sqlx::Error> {
         let mut tx = self.begin_immediate_with_retry().await?;
-        sqlx::query("INSERT INTO _privacy_release(kind,id,revision,attempts,retry_at) VALUES(?,?,?,1,strftime('%s','now')+30) ON CONFLICT(kind,id) DO UPDATE SET attempts=attempts+1,retry_at=strftime('%s','now')+MIN(3600,30*(attempts+1)) WHERE revision=? AND policy IS NULL")
-            .bind(&job.kind).bind(&job.id).bind(job.revision).bind(job.revision).execute(&mut **tx.conn()).await?;
+        sqlx::query("UPDATE _privacy_release SET attempts=attempts+1,retry_at=unixepoch()+MIN(3600,30*(attempts+1)) WHERE kind=? AND id=? AND revision=? AND policy IS NULL AND (SELECT identity FROM _privacy_policy WHERE id=1)=?")
+            .bind(&job.kind).bind(&job.id).bind(job.revision).bind(&job.policy)
+            .execute(&mut **tx.conn()).await?;
+        sqlx::query("UPDATE _privacy_work SET available_at=(SELECT retry_at FROM _privacy_release r WHERE r.kind=_privacy_work.kind AND r.id=_privacy_work.id) WHERE kind=? AND id=? AND EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=_privacy_work.kind AND r.id=_privacy_work.id AND r.retry_at IS NOT NULL)")
+            .bind(&job.kind).bind(&job.id).execute(&mut **tx.conn()).await?;
         tx.commit().await
     }
 }
@@ -601,8 +757,8 @@ impl DatabaseManager {
             return Err(err("expected image receipt"));
         }
         let mut tx = self.begin_immediate_with_retry().await?;
-        let current:(String,i64)=sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind='image' AND id=?),0) FROM _privacy_policy WHERE id=1").bind(&job.id).fetch_one(&mut **tx.conn()).await?;
-        if current != (job.policy.clone(), job.revision) {
+        let current:(String,i64,bool)=sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind='image' AND id=? AND policy IS NULL),-1),image_required FROM _privacy_policy WHERE id=1").bind(&job.id).fetch_one(&mut **tx.conn()).await?;
+        if current != (job.policy.clone(), job.revision, true) {
             return Ok(false);
         }
         let updated =
@@ -699,6 +855,58 @@ impl DatabaseManager {
             sequence,
             rows,
             more,
+        })
+    }
+}
+
+/// Bounded, aggregate status for the protected capture surfaces. Counts are
+/// lower bounds when capped; discovery prevents claiming complete history
+/// before legacy rows or a policy upgrade have been visited.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReleaseQueueStatus {
+    pub enabled: bool,
+    pub scope: String,
+    pub surfaces: Vec<ReleaseSurfaceStatus>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReleaseSurfaceStatus {
+    pub kind: String,
+    pub discovering: bool,
+    pub pending: u32,
+    pub pending_capped: bool,
+    pub deferred: u32,
+}
+
+impl DatabaseManager {
+    pub async fn release_queue_status(&self) -> Result<ReleaseQueueStatus, sqlx::Error> {
+        let policy = self.release_policy().await?;
+        let mut surfaces = Vec::new();
+        if policy.text || policy.images {
+            for surface in SURFACES.iter().filter(|s| {
+                if s.kind == "image" {
+                    policy.images
+                } else {
+                    policy.text
+                }
+            }) {
+                let complete: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_discovery WHERE kind=? AND policy=? AND complete=1)")
+                    .bind(surface.kind).bind(&policy.identity).fetch_one(&self.pool).await?;
+                let (pending, deferred): (i64, i64) = sqlx::query_as("WITH pending AS MATERIALIZED (SELECT kind,id FROM _privacy_work WHERE kind=? ORDER BY available_at,sequence LIMIT 1001) SELECT COUNT(*),COALESCE(SUM(r.attempts>0 AND r.retry_at>unixepoch()),0) FROM pending w JOIN _privacy_release r ON r.kind=w.kind AND r.id=w.id")
+                    .bind(surface.kind).fetch_one(&self.pool).await?;
+                surfaces.push(ReleaseSurfaceStatus {
+                    kind: surface.kind.into(),
+                    discovering: !complete,
+                    pending: pending.min(1000) as u32,
+                    pending_capped: pending > 1000,
+                    deferred: deferred.min(1000) as u32,
+                });
+            }
+        }
+        Ok(ReleaseQueueStatus {
+            enabled: policy.text || policy.images,
+            scope: "protected_capture_surfaces".into(),
+            surfaces,
         })
     }
 }

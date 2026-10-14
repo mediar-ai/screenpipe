@@ -3,104 +3,217 @@
 
 use super::Worker;
 use crate::{RedactError, Redactor};
-use std::collections::BTreeMap;
+use screenpipe_db::privacy_release::ReleaseJob;
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::atomic::Ordering;
+use std::time::Instant;
 
-impl Worker {
-    pub async fn process_release_batch(&self, limit: u32) -> Result<u32, anyhow::Error> {
-        let Some(db) = &self.release_db else {
-            return Ok(0);
-        };
-        let mut completed = 0;
-        // Independent queues: a failing surface cannot stop unrelated ready data.
-        for kind in [
-            "frames", "audio", "input", "elements", "memory", "parsed", "segments",
-        ] {
-            let jobs = match db.release_pending(kind, (limit / 7).max(1)).await {
-                Ok(jobs) => jobs,
-                Err(error) => {
-                    crate::notify_database_error(
-                        self.database_error_hook.as_ref(),
-                        &anyhow::Error::from(error),
-                    );
-                    continue;
-                }
+const KINDS: [&str; 7] = [
+    "frames", "audio", "input", "elements", "memory", "parsed", "segments",
+];
+
+#[derive(Default)]
+pub(super) struct ReleaseScheduler {
+    next: usize,
+    oldest: [bool; 7],
+    progress: [Option<Progress>; 7],
+}
+
+struct Field {
+    column: String,
+    pointer: Option<String>,
+    text: String,
+}
+
+struct Progress {
+    job: ReleaseJob,
+    values: BTreeMap<String, Option<String>>,
+    json: BTreeMap<String, serde_json::Value>,
+    fields: VecDeque<Field>,
+}
+
+impl Progress {
+    fn new(job: ReleaseJob) -> Result<Self, RedactError> {
+        let mut fields = VecDeque::new();
+        let mut json = BTreeMap::new();
+        for (column, value) in &job.values {
+            let Some(text) = value.as_deref().filter(|s| !s.is_empty()) else {
+                continue;
             };
-            for job in jobs {
-                let mut values = BTreeMap::new();
-                let mut failure = None;
-                for (column, value) in &job.values {
-                    let result = match value {
-                        Some(text) if !text.is_empty() => {
-                            if column.ends_with("json")
-                                || matches!(
-                                    column.as_str(),
-                                    "properties" | "element_ancestors" | "tags"
-                                )
-                            {
-                                redact_json(text, self.redactor.as_ref()).await.map(Some)
-                            } else {
-                                self.redactor
-                                    .redact_required(text)
-                                    .await
-                                    .map(|out| Some(out.redacted))
-                            }
-                        }
-                        _ => Ok(value.clone()),
-                    };
-                    match result {
-                        Ok(value) => {
-                            values.insert(column.clone(), value);
-                        }
-                        Err(error) => {
-                            failure = Some(error);
-                            break;
-                        }
-                    }
-                }
-                if failure.is_some() {
-                    db.defer_release(&job).await?;
-                    self.status.lock().await.last_error =
-                        Some("Required PII processing is pending; retry scheduled".into());
-                    continue;
-                }
-                if db.publish_release(&job, &values).await? {
-                    completed += 1;
-                }
+            if column.ends_with("json")
+                || matches!(column.as_str(), "properties" | "element_ancestors" | "tags")
+            {
+                let value: serde_json::Value = serde_json::from_str(text).map_err(|_| {
+                    RedactError::Unexpected("invalid structured privacy source".into())
+                })?;
+                collect(&value, column, String::new(), &mut fields);
+                json.insert(column.clone(), value);
+            } else {
+                fields.push_back(Field {
+                    column: column.clone(),
+                    pointer: None,
+                    text: text.into(),
+                });
             }
         }
-        Ok(completed)
+        Ok(Self {
+            values: job.values.clone(),
+            job,
+            json,
+            fields,
+        })
+    }
+
+    async fn step(&mut self, redactor: &dyn Redactor) -> Result<(), RedactError> {
+        let Some(field) = self.fields.front() else {
+            return Ok(());
+        };
+        let out = redactor.redact_required(&field.text).await?;
+        if let Some(pointer) = &field.pointer {
+            let target = self
+                .json
+                .get_mut(&field.column)
+                .and_then(|value| value.pointer_mut(pointer))
+                .ok_or_else(|| {
+                    RedactError::Unexpected("invalid structured privacy result".into())
+                })?;
+            *target = serde_json::Value::String(out.redacted);
+        } else {
+            self.values.insert(field.column.clone(), Some(out.redacted));
+        }
+        self.fields.pop_front();
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<(), RedactError> {
+        for (column, value) in &self.json {
+            self.values.insert(
+                column.clone(),
+                Some(serde_json::to_string(value).map_err(|_| {
+                    RedactError::Unexpected("invalid structured privacy result".into())
+                })?),
+            );
+        }
+        Ok(())
     }
 }
 
-async fn redact_json(text: &str, redactor: &dyn Redactor) -> Result<String, RedactError> {
-    let mut value: serde_json::Value = serde_json::from_str(text)
-        .map_err(|_| RedactError::Unexpected("invalid structured privacy source".into()))?;
-    let mut strings = Vec::new();
-    collect(&value, String::new(), &mut strings);
-    for (pointer, text) in strings {
-        if text.is_empty() {
-            continue;
-        }
-        let out = redactor.redact_required(&text).await?;
-        if let Some(target) = value.pointer_mut(&pointer) {
-            *target = serde_json::Value::String(out.redacted);
-        }
+impl Worker {
+    /// Test/standalone seam: number of fully published records, not attempts.
+    pub async fn process_release_batch(&self, limit: u32) -> Result<u32, anyhow::Error> {
+        Ok(self.process_release_slice(limit).await?.1)
     }
-    serde_json::to_string(&value)
-        .map_err(|_| RedactError::Unexpected("invalid structured privacy result".into()))
+
+    /// Attempts (including failures and partial records) drive CPU accounting.
+    /// A slice yields between detector calls; one inference is indivisible.
+    /// Partial results stay in memory and are never visible until atomic publish.
+    pub(super) async fn process_release_slice(
+        &self,
+        limit: u32,
+    ) -> Result<(u32, u32), anyhow::Error> {
+        let Some(db) = &self.release_db else {
+            return Ok((0, 0));
+        };
+        let mut scheduler = self.release_scheduler.lock().await;
+        let started = Instant::now();
+        let (mut attempted, mut completed, mut empty) = (0, 0, 0);
+        while attempted < limit && empty < KINDS.len() && !self.paused.load(Ordering::SeqCst) {
+            if attempted > 0 && started.elapsed() >= self.cfg.target_batch_duration {
+                break;
+            }
+            let index = scheduler.next;
+            scheduler.next = (index + 1) % KINDS.len();
+            let kind = KINDS[index];
+            if let Some(progress) = scheduler.progress[index].as_ref() {
+                if !db.release_job_current(&progress.job).await? {
+                    scheduler.progress[index] = None;
+                }
+            }
+            if scheduler.progress[index].is_none() {
+                let jobs = match db
+                    .release_pending_ordered(kind, 1, 0, scheduler.oldest[index])
+                    .await
+                {
+                    Ok(jobs) => jobs,
+                    Err(error) => {
+                        crate::notify_database_error(
+                            self.database_error_hook.as_ref(),
+                            &anyhow::Error::from(error),
+                        );
+                        empty += 1;
+                        continue;
+                    }
+                };
+                let Some(job) = jobs.into_iter().next() else {
+                    empty += 1;
+                    continue;
+                };
+                scheduler.oldest[index] = !scheduler.oldest[index];
+                match Progress::new(job.clone()) {
+                    Ok(progress) => scheduler.progress[index] = Some(progress),
+                    Err(_) => {
+                        attempted += 1;
+                        db.defer_release(&job).await?;
+                        self.release_failed().await;
+                        continue;
+                    }
+                }
+            }
+            empty = 0;
+            attempted += 1;
+            let progress = scheduler.progress[index].as_mut().unwrap();
+            let mut failed = false;
+            while !progress.fields.is_empty() && !self.paused.load(Ordering::SeqCst) {
+                if progress.step(self.redactor.as_ref()).await.is_err() {
+                    failed = true;
+                    break;
+                }
+                if started.elapsed() >= self.cfg.target_batch_duration {
+                    break;
+                }
+            }
+            if failed {
+                db.defer_release(&progress.job).await?;
+                scheduler.progress[index] = None;
+                self.release_failed().await;
+            } else if progress.fields.is_empty() {
+                progress.finish()?;
+                if db.publish_release(&progress.job, &progress.values).await? {
+                    completed += 1;
+                    let mut status = self.status.lock().await;
+                    status.redacted_total += 1;
+                    status.last_redacted_at = Some(chrono::Utc::now());
+                    status.last_error = None;
+                }
+                scheduler.progress[index] = None;
+            }
+        }
+        Ok((attempted, completed))
+    }
+
+    async fn release_failed(&self) {
+        self.status.lock().await.last_error =
+            Some("Required PII processing is pending; retry scheduled".into());
+    }
 }
-fn collect(value: &serde_json::Value, path: String, out: &mut Vec<(String, String)>) {
+
+fn collect(value: &serde_json::Value, column: &str, path: String, out: &mut VecDeque<Field>) {
     match value {
-        serde_json::Value::String(text) => out.push((path, text.clone())),
+        serde_json::Value::String(text) if !text.is_empty() => out.push_back(Field {
+            column: column.into(),
+            pointer: Some(path),
+            text: text.clone(),
+        }),
         serde_json::Value::Array(items) => {
             for (i, item) in items.iter().enumerate() {
-                collect(item, format!("{path}/{i}"), out);
+                collect(item, column, format!("{path}/{i}"), out);
             }
         }
         serde_json::Value::Object(items) => {
             for (key, item) in items {
                 collect(
                     item,
+                    column,
                     format!("{path}/{}", key.replace('~', "~0").replace('/', "~1")),
                     out,
                 );

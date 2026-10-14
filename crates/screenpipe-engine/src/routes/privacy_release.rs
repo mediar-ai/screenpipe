@@ -41,14 +41,32 @@ pub(crate) async fn release_middleware(
     {
         return (StatusCode::SERVICE_UNAVAILABLE,Json(serde_json::json!({"error":"This surface has no privacy release adapter","code":"privacy_surface_unavailable","retryable":false}))).into_response();
     }
-    let before = match state.db.release_epoch().await {
+    let before = match state.db.release_revocation().await {
         Ok(epoch) => epoch,
         Err(_) => return pending(),
     };
     let response = next.run(request).await;
-    match state.db.release_epoch().await {
-        Ok(epoch) if epoch == before => response,
+    match state.db.release_revocation().await {
+        Ok(epoch) if epoch == before => {
+            let mut response = response;
+            response.headers_mut().insert(
+                "x-screenpipe-privacy-completeness",
+                "unknown".parse().unwrap(),
+            );
+            response.headers_mut().insert(
+                "x-screenpipe-privacy-status",
+                "/privacy/status".parse().unwrap(),
+            );
+            response
+        }
         _ => pending(),
+    }
+}
+
+pub(crate) async fn status(State(state): State<Arc<AppState>>) -> Response {
+    match state.db.release_queue_status().await {
+        Ok(status) => Json(status).into_response(),
+        Err(_) => pending(),
     }
 }
 
@@ -197,7 +215,28 @@ mod tests {
             "{}",
             response.text().await.unwrap()
         );
+        assert_eq!(
+            response.headers()["x-screenpipe-privacy-completeness"],
+            "unknown"
+        );
         let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["privacy"]["completeness"], "unknown");
+        let status: serde_json::Value = client
+            .get(format!("{base}/privacy/status"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(status["enabled"], true);
+        assert_eq!(status["scope"], "protected_capture_surfaces");
+        assert!(status["surfaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["pending"].as_u64().unwrap() > 0));
+
         assert_eq!(body["pagination"]["total"], 0);
         assert!(!body.to_string().contains("SYNTHETIC_SECRET"));
         for path in [

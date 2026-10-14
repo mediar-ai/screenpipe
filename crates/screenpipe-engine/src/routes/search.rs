@@ -420,6 +420,10 @@ fn captured_at(item: &ContentItem) -> String {
 
 #[derive(OaSchema, Serialize, Deserialize, Clone)]
 pub struct SearchResponse {
+    /// Filtering can omit pending captures. An empty result is not proof of
+    /// complete history. Range-exact completeness is deliberately not guessed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub privacy: Option<SearchPrivacy>,
     pub data: Vec<StarredSearchHit>,
     pub pagination: PaginationInfo,
     /// Metadata about cloud search availability (only present when cloud sync is available)
@@ -431,6 +435,19 @@ pub struct SearchResponse {
     /// yielded co-occurring tags; omitted otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub related: Option<std::collections::HashMap<String, Vec<String>>>,
+}
+
+#[derive(OaSchema, Serialize, Deserialize, Clone)]
+pub struct SearchPrivacy {
+    pub completeness: String,
+    pub status_url: String,
+}
+
+fn search_privacy(protected: bool) -> Option<SearchPrivacy> {
+    protected.then(|| SearchPrivacy {
+        completeness: "unknown".into(),
+        status_url: "/privacy/status".into(),
+    })
 }
 
 /// How many co-occurring tags to pull for the `related` block. Spread across
@@ -1037,11 +1054,13 @@ fn empty_search_response(
     query: &SearchQuery,
     format: OutputFormat,
     fields: &Option<Vec<String>>,
+    protected: bool,
 ) -> Response<Body> {
     render_search(
         format,
         fields,
         &SearchResponse {
+            privacy: search_privacy(protected),
             data: Vec::new(),
             pagination: PaginationInfo {
                 limit: query.pagination.limit,
@@ -1153,13 +1172,23 @@ pub(crate) async fn search(
                 .map_or(last_included, |e| e.min(last_included)),
         );
         if query.start_time > query.end_time {
-            return Ok(empty_search_response(&query, format, &fields));
+            return Ok(empty_search_response(
+                &query,
+                format,
+                &fields,
+                state.db.protected_reads_enabled(),
+            ));
         }
     }
     let wholly_before_history_cutoff =
         apply_search_query_history_access(&state.history_access, &mut query, Utc::now());
     if wholly_before_history_cutoff {
-        return Ok(empty_search_response(&query, format, &fields));
+        return Ok(empty_search_response(
+            &query,
+            format,
+            &fields,
+            state.db.protected_reads_enabled(),
+        ));
     }
 
     debug!(
@@ -1729,6 +1758,7 @@ pub(crate) async fn search(
     };
     let starred_metadata_available = starred.is_some();
     let response = SearchResponse {
+        privacy: search_privacy(state.db.protected_reads_enabled()),
         data: content_items
             .into_iter()
             .enumerate()
@@ -2835,6 +2865,7 @@ mod tests {
             })
         };
         let response = |data: Vec<ContentItem>| SearchResponse {
+            privacy: None,
             data: data
                 .into_iter()
                 .map(|item| StarredSearchHit {

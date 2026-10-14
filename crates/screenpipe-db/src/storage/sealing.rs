@@ -146,8 +146,8 @@ impl DatabaseManager {
         };
         let mut tx = self.begin_immediate_with_retry().await?;
         if let Some(job) = release {
-            let current:(String,i64)=sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind=? AND id=?),0) FROM _privacy_policy WHERE id=1").bind(&job.kind).bind(&job.id).fetch_one(&mut **tx.conn()).await?;
-            if current != (job.policy.clone(), job.revision) {
+            let current:(String,i64,bool)=sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind=? AND id=? AND policy IS NULL),-1),text_required FROM _privacy_policy WHERE id=1").bind(&job.kind).bind(&job.id).fetch_one(&mut **tx.conn()).await?;
+            if current != (job.policy.clone(), job.revision, true) {
                 return Ok(false);
             }
         }

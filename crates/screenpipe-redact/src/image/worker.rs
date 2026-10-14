@@ -94,6 +94,7 @@ pub struct ImageWorkerStatus {
 #[derive(Clone)]
 pub struct ImageWorker {
     release_db: Option<Arc<screenpipe_db::DatabaseManager>>,
+    release_oldest: Arc<AtomicBool>,
     pool: SqlitePool,
     writer: SqliteWritePool,
     redactor: Arc<dyn ImageRedactor>,
@@ -117,6 +118,7 @@ impl ImageWorker {
     ) -> Self {
         Self {
             release_db: None,
+            release_oldest: Arc::new(AtomicBool::new(false)),
             pool,
             writer,
             redactor,
@@ -230,51 +232,44 @@ impl ImageWorker {
                 None => Some(self.process_one().await),
             };
 
-            let nap = match result {
-                None => {
-                    info!("image redact worker: shutdown signal received mid-frame, exiting");
-                    return;
-                }
-                Some(Ok(Some(_))) => {
-                    let worked = work_started.elapsed();
-                    let cpu_sample = cpu_permit.as_ref().map(|permit| {
-                        permit.finish(
+            if result.is_none() {
+                info!("image redact worker: shutdown signal received mid-frame, exiting");
+                return;
+            }
+            // Charge failures and stale publication too, but never hold the
+            // shared CPU lane during an idle poll or retry delay.
+            let worked = work_started.elapsed();
+            let cooldown = cpu_permit
+                .as_ref()
+                .map(|permit| {
+                    permit
+                        .finish(
                             worked,
                             self.cfg.idle_between_frames,
                             self.cfg.max_cpu_cooldown,
                         )
-                    });
-                    let nap = cpu_sample
-                        .map(|sample| sample.cooldown)
-                        .unwrap_or(self.cfg.idle_between_frames);
-                    debug!(
-                        active_cpu_percent =
-                            cpu_sample.and_then(|sample| sample.active_cpu_percent),
-                        idle_cpu_percent = cpu_sample.and_then(|sample| sample.idle_cpu_percent),
-                        worked_ms = worked.as_millis(),
-                        cooldown_ms = nap.as_millis(),
-                        target_cpu_percent = cpu_sample.map(|sample| sample.target_cpu_percent),
-                        "image redact worker: adaptive CPU cooldown"
-                    );
-                    nap
-                }
-                Some(Ok(None)) => {
-                    drop(cpu_permit);
-                    self.cfg.poll_interval
-                }
-                Some(Err(e)) => {
-                    drop(cpu_permit);
+                        .cooldown
+                })
+                .unwrap_or(self.cfg.idle_between_frames);
+            if race(time::sleep(cooldown), shutdown.as_ref())
+                .await
+                .is_none()
+            {
+                return;
+            }
+            drop(cpu_permit);
+            let nap = match result.unwrap() {
+                Ok(Some(_)) => Duration::ZERO,
+                Ok(None) => self.cfg.poll_interval,
+                Err(e) => {
                     crate::notify_database_error(self.database_error_hook.as_ref(), &e);
                     warn!(error = %e, "image reconciliation error; backing off");
-                    let mut s = self.status.lock().await;
-                    s.last_error = Some(e.to_string());
-                    drop(s);
+                    self.status.lock().await.last_error = Some(e.to_string());
                     Duration::from_secs(2)
                 }
             };
 
-            // For successful work, keep `cpu_permit` alive during this sleep
-            // so another background subsystem cannot consume the cooldown.
+            // CPU cooldown was already paid with the permit held above.
             if race(time::sleep(nap), shutdown.as_ref()).await.is_none() {
                 info!("image redact worker: shutdown signal received, exiting");
                 return;
@@ -396,7 +391,12 @@ impl ImageWorker {
         db: &Arc<screenpipe_db::DatabaseManager>,
     ) -> Result<Option<FrameRedactionOutcome>, anyhow::Error> {
         for job in db
-            .release_pending_aged("image", 16, self.cfg.min_age_seconds)
+            .release_pending_ordered(
+                "image",
+                16,
+                self.cfg.min_age_seconds,
+                self.release_oldest.fetch_xor(true, Ordering::SeqCst),
+            )
             .await?
         {
             let id: i64 = job.id.parse()?;
@@ -522,6 +522,42 @@ mod tests {
         .await
         .unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn empty_image_queue_releases_cpu_lane_before_idle_poll() {
+        let pool = setup().await;
+        let governor = ResourceGovernor::new(Default::default());
+        let initial = governor.acquire_background_cpu().await;
+        let worker = ImageWorker::new(
+            pool,
+            Arc::new(StubRedactor),
+            ImageWorkerConfig {
+                poll_interval: Duration::from_secs(10),
+                max_cpu_cooldown: Duration::from_millis(20),
+                idle_between_frames: Duration::ZERO,
+                resource_governor: Some(governor.clone()),
+                ..Default::default()
+            },
+        );
+        let shutdown = Arc::new(Notify::new());
+        let monitor = worker.clone();
+        let task = worker.spawn_with_shutdown(shutdown.clone());
+        while !monitor.status().await.running {
+            tokio::task::yield_now().await;
+        }
+        // The worker is queued behind our initial permit. A later background
+        // task must acquire promptly after the empty lookup, not after 10s.
+        tokio::task::yield_now().await;
+        drop(initial);
+        let next =
+            tokio::time::timeout(Duration::from_secs(1), governor.acquire_background_cpu()).await;
+        shutdown.notify_one();
+        task.await.unwrap();
+        assert!(
+            next.is_ok(),
+            "idle image worker held the shared lane during polling"
+        );
     }
 
     /// Stub redactor — flags one region per frame.
