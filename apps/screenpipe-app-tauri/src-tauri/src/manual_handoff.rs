@@ -2,12 +2,10 @@
 // https://screenpipe.com
 
 //! A deliberate launch selects a build before either single-instance path runs.
-//! The private socket authenticates the connecting process, never a supplied PID.
+//! A selected replacement terminates the verified previous process before starting.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
-const PROTOCOL: u32 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Identity {
@@ -49,21 +47,6 @@ fn select(current: &Identity, candidate: &Identity) -> Selection {
         }
         _ => Selection::Reject,
     }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Request {
-    protocol: u32,
-    replace: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Response {
-    protocol: u32,
-    identity: Identity,
-    outcome: String,
-    error: Option<String>,
 }
 
 fn report_failure(root: &std::path::Path, stage: &str, error: &str) {

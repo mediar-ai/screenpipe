@@ -34,13 +34,6 @@ extern "C" {
 }
 extern "C" {
     fn csops(pid: i32, op: u32, data: *mut libc::c_void, len: usize) -> i32;
-    fn csops_audittoken(
-        pid: i32,
-        op: u32,
-        data: *mut libc::c_void,
-        len: usize,
-        audit: *const u32,
-    ) -> i32;
 }
 
 fn word(data: &[u8], offset: usize) -> Result<usize> {
@@ -102,24 +95,9 @@ fn directory_identity(directory: &[u8], expected_hash: &str) -> Result<String> {
     Ok(std::str::from_utf8(&tail[..end])?.to_owned())
 }
 
-pub(super) fn verify(
-    pid: i32,
-    audit: Option<&[u32; 8]>,
-    expected_identifier: &str,
-    expected_cert: &[u8],
-) -> Result<()> {
-    let call = |op, buffer: &mut [u8]| unsafe {
-        match audit {
-            Some(token) => csops_audittoken(
-                pid,
-                op,
-                buffer.as_mut_ptr().cast(),
-                buffer.len(),
-                token.as_ptr(),
-            ),
-            None => csops(pid, op, buffer.as_mut_ptr().cast(), buffer.len()),
-        }
-    };
+pub(super) fn verify(pid: i32, expected_identifier: &str, expected_cert: &[u8]) -> Result<()> {
+    let call =
+        |op, buffer: &mut [u8]| unsafe { csops(pid, op, buffer.as_mut_ptr().cast(), buffer.len()) };
     let mut status = [0; 4];
     if call(0, &mut status) != 0 || u32::from_ne_bytes(status) & 1 == 0 {
         bail!("running code is no longer valid");
