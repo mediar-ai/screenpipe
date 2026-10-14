@@ -407,6 +407,56 @@ impl Pipeline {
 
 #[async_trait]
 impl Redactor for Pipeline {
+    fn provides_model_detection(&self) -> bool {
+        self.ai
+            .as_ref()
+            .is_some_and(|ai| ai.provides_model_detection())
+    }
+
+    async fn redact_required(&self, text: &str) -> Result<RedactionOutput, RedactError> {
+        let ai = self
+            .ai
+            .as_ref()
+            .filter(|ai| ai.provides_model_detection())
+            .ok_or_else(|| RedactError::Unavailable("required PII model is unavailable".into()))?;
+        let key = cache_key(
+            text,
+            &format!("required:{}", self.policy_identity()),
+            self.version(),
+        );
+        if let Some(hit) = self.cache.get(&key).await {
+            return Ok((*hit).clone());
+        }
+        let mut current = apply_policy(
+            regex_adapter::redact_one(text),
+            &self.cfg.policy,
+            self.pseudonyms.as_deref(),
+        );
+        let attempt = match &self.ai_failure_circuit {
+            Some(circuit) => Some(circuit.begin_attempt().await.ok_or_else(|| {
+                RedactError::Unavailable("required PII model is backing off".into())
+            })?),
+            None => None,
+        };
+        // No short-input or regex-coverage shortcut can certify a model run.
+        let result = ai.redact_required(&current.redacted).await;
+        if let (Some(circuit), Some(attempt)) = (&self.ai_failure_circuit, attempt) {
+            if result.is_ok() {
+                circuit.record_success(attempt).await;
+            } else {
+                circuit.record_failure(attempt).await;
+            }
+        }
+        let detected = result?;
+        current.redacted = if detected.spans.is_empty() {
+            detected.redacted
+        } else {
+            apply_policy(detected, &self.cfg.policy, self.pseudonyms.as_deref()).redacted
+        };
+        self.cache.insert(key, current.clone()).await;
+        Ok(current)
+    }
+
     fn policy_identity(&self) -> String {
         format!(
             "{}:{}:{:?}:{}:{}:pseudonyms={}:ai={}",

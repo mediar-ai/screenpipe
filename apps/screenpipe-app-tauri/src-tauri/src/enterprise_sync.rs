@@ -230,6 +230,53 @@ mod imp {
 
     #[async_trait::async_trait]
     impl LocalApiClient for ScreenpipeLocalClient {
+        async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.release_policy()
+                .await
+                .map(|p| p.text)
+                .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))
+        }
+        async fn fetch_release_page(
+            &self,
+            kind: &str,
+            after: i64,
+            cutoff: &str,
+            limit: u32,
+        ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
+            let response = self
+                .auth(
+                    self.http
+                        .get(format!("{}/privacy/ready/{kind}", self.api_url_base)),
+                )
+                .query(&[
+                    ("after", after.to_string()),
+                    ("cutoff", cutoff.to_string()),
+                    ("limit", limit.to_string()),
+                ])
+                .send()
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+            if !response.status().is_success() {
+                return Err(EnterpriseSyncError::LocalApi(
+                    "privacy release page unavailable; retry pending".into(),
+                ));
+            }
+            response
+                .json()
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+        }
+
         async fn begin_export(
             &self,
         ) -> Result<Option<Box<dyn crate::enterprise::sync::ExportAdmission>>, EnterpriseSyncError>
@@ -677,7 +724,9 @@ mod imp {
         ) -> Result<Option<Vec<u8>>, EnterpriseSyncError> {
             if !self.image_uploads_allowed() {
                 // A settings refusal is not evidence that the local image is missing.
-                return Err(EnterpriseSyncError::BackfillImages("screenshot_policy_disabled"));
+                return Err(EnterpriseSyncError::BackfillImages(
+                    "screenshot_policy_disabled",
+                ));
             }
 
             // Same image `/frames/{id}` serves in the UI — decoded from local
@@ -1603,14 +1652,14 @@ mod imp {
                         // Hidden installs may never create the migration UI.
                         // This returns after scheduling native maintenance so
                         // policy revocation continues to be polled while it runs.
-                        crate::storage_migration::maybe_start_hidden_ui_migration(app.clone()).await;
+                        crate::storage_migration::maybe_start_hidden_ui_migration(app.clone())
+                            .await;
                     }
                     NativeAuthorizationResult::RecordingDisabled => {
                         info!("enterprise: recording paused for this device by workspace admin");
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
-                            &app,
-                        )
-                        .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(&app)
+                                .await;
                     }
                     NativeAuthorizationResult::RequiresAccount => {
                         warn!(
@@ -1623,10 +1672,9 @@ mod imp {
                             crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
-                            &app,
-                        )
-                        .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(&app)
+                                .await;
                         show_enterprise_auth_recovery(&app);
                     }
                     NativeAuthorizationResult::Rejected
@@ -1635,10 +1683,9 @@ mod imp {
                             crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
-                            &app,
-                        )
-                        .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(&app)
+                                .await;
                         show_enterprise_auth_recovery(&app);
                     }
                     NativeAuthorizationResult::Unavailable(error) => {

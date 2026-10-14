@@ -24,7 +24,7 @@ pub(super) struct BackfillRequest {
     id: String,
     license_id: String,
     device_id: String,
-    start_at: chrono::DateTime<chrono::Utc>,
+    pub(super) start_at: chrono::DateTime<chrono::Utc>,
     end_at: chrono::DateTime<chrono::Utc>,
     streams: Vec<BackfillStream>,
     #[serde(default)]
@@ -161,6 +161,7 @@ impl BackfillRequest {
     fn initial_cursor(&self) -> Cursor {
         let start = Some(self.start_at.to_rfc3339());
         Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: start.clone(),
             last_audio_ts: start.clone(),

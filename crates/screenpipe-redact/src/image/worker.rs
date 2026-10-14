@@ -93,6 +93,7 @@ pub struct ImageWorkerStatus {
 
 #[derive(Clone)]
 pub struct ImageWorker {
+    release_db: Option<Arc<screenpipe_db::DatabaseManager>>,
     pool: SqlitePool,
     writer: SqliteWritePool,
     redactor: Arc<dyn ImageRedactor>,
@@ -115,6 +116,7 @@ impl ImageWorker {
         cfg: ImageWorkerConfig,
     ) -> Self {
         Self {
+            release_db: None,
             pool,
             writer,
             redactor,
@@ -129,6 +131,11 @@ impl ImageWorker {
     /// not invoke this hook even when their text happens to mention I/O.
     pub fn with_database_error_hook(mut self, hook: DatabaseErrorHook) -> Self {
         self.database_error_hook = Some(hook);
+        self
+    }
+
+    pub fn with_release_storage(mut self, db: Arc<screenpipe_db::DatabaseManager>) -> Self {
+        self.release_db = Some(db);
         self
     }
 
@@ -284,6 +291,11 @@ impl ImageWorker {
     /// `Ok(Some(outcome))` if work was done, `Ok(None)` if the queue
     /// was empty.
     async fn process_one(&self) -> Result<Option<FrameRedactionOutcome>, anyhow::Error> {
+        if let Some(db) = &self.release_db {
+            if db.release_policy().await?.images {
+                return self.process_release_image(db).await;
+            }
+        }
         let row = sqlx::query(
             r#"
             SELECT f.id, f.name,
@@ -377,6 +389,87 @@ impl ImageWorker {
         s.last_error = None;
 
         Ok(Some(outcome))
+    }
+
+    async fn process_release_image(
+        &self,
+        db: &Arc<screenpipe_db::DatabaseManager>,
+    ) -> Result<Option<FrameRedactionOutcome>, anyhow::Error> {
+        for job in db
+            .release_pending_aged("image", 16, self.cfg.min_age_seconds)
+            .await?
+        {
+            let id: i64 = job.id.parse()?;
+            let timestamp = db.get_frame_timestamp(id).await?;
+            if timestamp
+                .is_none_or(|at| (chrono::Utc::now() - at).num_seconds() < self.cfg.min_age_seconds)
+            {
+                continue;
+            }
+            let Some(path) = job
+                .values
+                .get("snapshot_path")
+                .and_then(|s| s.as_deref())
+                .filter(|s| !s.is_empty())
+                .or_else(|| job.values.get("name").and_then(|s| s.as_deref()))
+            else {
+                db.defer_release(&job).await?;
+                continue;
+            };
+            let path = std::path::Path::new(path);
+            if !matches!(
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+                    .as_deref(),
+                Some("jpg" | "jpeg" | "png" | "webp" | "bmp")
+            ) || !path.is_file()
+            {
+                db.defer_release(&job).await?;
+                continue;
+            }
+            let process = async {
+                let before = tokio::fs::metadata(path).await?;
+                let mut regions = self.redactor.detect(path).await?;
+                let payloads = db
+                    .frame_payloads(&[id], screenpipe_db::storage::Projection::Detail)
+                    .await?;
+                if let Some(tree) = payloads
+                    .get(&id)
+                    .and_then(|p| p.accessibility_tree_json.as_deref())
+                {
+                    let (width, height) = image::image_dimensions(path)?;
+                    let context = crate::a11y_context::A11yContext::parse(tree).unwrap_or_default();
+                    crate::a11y_context::merge_image_regions(
+                        &mut regions,
+                        context.forced_image_regions(width, height),
+                    );
+                }
+                let after = tokio::fs::metadata(path).await?;
+                if before.len() != after.len() || before.modified()? != after.modified()? {
+                    anyhow::bail!("image changed during privacy processing");
+                }
+                let outcome = redact_frame(path, &regions, &self.cfg.policy)?;
+                if !db.publish_image_release(&job).await? {
+                    return Ok::<_, anyhow::Error>(None);
+                }
+                let mut status = self.status.lock().await;
+                status.frames_redacted_total += 1;
+                status.regions_redacted_total += outcome.regions_redacted as u64;
+                status.last_redacted_at = Some(chrono::Utc::now());
+                status.last_error = None;
+                Ok(Some(outcome))
+            }
+            .await;
+            match process {
+                Ok(outcome) => return Ok(outcome),
+                Err(error) => {
+                    db.defer_release(&job).await?;
+                    return Err(error);
+                }
+            }
+        }
+        Ok(None)
     }
 
     async fn mark_redacted(&self, frame_id: i64) -> Result<(), sqlx::Error> {

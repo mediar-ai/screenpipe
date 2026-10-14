@@ -212,6 +212,8 @@ impl EnterpriseSyncConfig {
 /// language portability if we ever read it from JS.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Cursor {
+    #[serde(default)]
+    pub privacy: std::collections::BTreeMap<String, PrivacyCursor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     source_id: Option<String>,
     /// ISO-8601 UTC. Latest `frames.timestamp` we have successfully ingested.
@@ -302,6 +304,12 @@ impl Cursor {
     }
 }
 
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct PrivacyCursor {
+    pub sequence: i64,
+    pub cutoff: String,
+}
+
 // ─── Local API trait (mockable) ─────────────────────────────────────────────
 
 /// Abstraction over the local screenpipe HTTP API — kept generic so tests can
@@ -314,6 +322,21 @@ pub trait ExportAdmission: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait LocalApiClient: Send + Sync {
+    async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+        Ok(false)
+    }
+    async fn fetch_release_page(
+        &self,
+        _kind: &str,
+        _after: i64,
+        _cutoff: &str,
+        _limit: u32,
+    ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
+        Err(EnterpriseSyncError::Configuration(
+            "privacy release API unavailable".into(),
+        ))
+    }
+
     async fn begin_export(&self) -> Result<Option<Box<dyn ExportAdmission>>, EnterpriseSyncError> {
         Ok(None)
     }
@@ -962,7 +985,51 @@ async fn run_one_sync_inner(
         streams = request.restrict_streams(streams)?;
     }
 
-    let mut frames = if streams.frames {
+    let protected = local.privacy_release_required().await?;
+    if protected && backfill.is_some() {
+        return Err(EnterpriseSyncError::Configuration("Historical replay is unavailable until privacy completion can be bounded to the requested range".into()));
+    }
+    let mut privacy_more = false;
+    let mut privacy_next = cursor.privacy.clone();
+    let mut ready = std::collections::HashMap::new();
+    if protected {
+        for (kind, enabled) in [
+            ("frames", streams.frames),
+            ("audio", streams.audio),
+            ("input", streams.ui_events),
+            ("memory", streams.memories),
+        ] {
+            if !enabled {
+                continue;
+            }
+            let checkpoint = privacy_next
+                .entry(kind.into())
+                .or_insert_with(|| PrivacyCursor {
+                    sequence: 0,
+                    cutoff: backfill
+                        .map(|r| r.start_at.to_rfc3339())
+                        .unwrap_or_else(|| {
+                            (chrono::Utc::now()
+                                - chrono::Duration::from_std(SAFE_BACKFILL).unwrap())
+                            .to_rfc3339()
+                        }),
+                });
+            let page = local
+                .fetch_release_page(kind, checkpoint.sequence, &checkpoint.cutoff, PAGE_LIMIT)
+                .await?;
+            privacy_more |= page.more;
+            checkpoint.sequence = page.sequence;
+            ready.insert(kind, page.rows);
+        }
+    }
+    let mut frames = if protected {
+        serde_json::from_value(
+            ready
+                .remove("frames")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.frames {
         local
             .fetch_frames_since(
                 cursor.last_frame_ts.as_deref(),
@@ -973,7 +1040,14 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    let mut audio = if streams.audio {
+    let mut audio = if protected {
+        serde_json::from_value(
+            ready
+                .remove("audio")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.audio {
         local
             .fetch_audio_since(
                 cursor.last_audio_ts.as_deref(),
@@ -987,7 +1061,14 @@ async fn run_one_sync_inner(
     // UI events are best-effort — a backend that doesn't expose them yet
     // (or blocks the search query) shouldn't kill the whole sync batch.
     // The frame + audio paths are the load-bearing ones.
-    let mut ui = if streams.ui_events {
+    let mut ui = if protected {
+        serde_json::from_value(
+            ready
+                .remove("input")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.ui_events {
         match local
             .fetch_ui_events_since(cursor.last_ui_ts.as_deref(), cursor.boundary.ui, PAGE_LIMIT)
             .await
@@ -1027,7 +1108,14 @@ async fn run_one_sync_inner(
     // Memories are best-effort too — a client that predates the trait
     // method, or a server without the /memories route, must not kill
     // the frame+audio path. The default trait impl returns empty.
-    let mut memories = if streams.memories {
+    let mut memories = if protected {
+        serde_json::from_value(
+            ready
+                .remove("memory")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.memories {
         match local
             .fetch_memories_since(
                 cursor.last_memory_ts.as_deref(),
@@ -1048,30 +1136,31 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    let mut feedback = if streams.feedback != crate::enterprise_policy::FeedbackSyncMode::Off {
-        match local
-            .fetch_feedback_since(
-                cursor.last_feedback_ts.as_deref(),
-                cursor.boundary.feedback_id.as_deref(),
-                PAGE_LIMIT,
-            )
-            .await
-        {
-            Ok(rows) => rows,
-            Err(error) => {
-                if backfill.is_some() {
-                    return Err(error);
+    let mut feedback =
+        if !protected && streams.feedback != crate::enterprise_policy::FeedbackSyncMode::Off {
+            match local
+                .fetch_feedback_since(
+                    cursor.last_feedback_ts.as_deref(),
+                    cursor.boundary.feedback_id.as_deref(),
+                    PAGE_LIMIT,
+                )
+                .await
+            {
+                Ok(rows) => rows,
+                Err(error) => {
+                    if backfill.is_some() {
+                        return Err(error);
+                    }
+                    warn!(
+                        "enterprise sync: feedback fetch failed (skipping): {}",
+                        error
+                    );
+                    Vec::new()
                 }
-                warn!(
-                    "enterprise sync: feedback fetch failed (skipping): {}",
-                    error
-                );
-                Vec::new()
             }
-        }
-    } else {
-        Vec::new()
-    };
+        } else {
+            Vec::new()
+        };
     if streams.feedback == crate::enterprise_policy::FeedbackSyncMode::Ratings {
         for row in &mut feedback {
             row.comment = None;
@@ -1082,7 +1171,7 @@ async fn run_one_sync_inner(
     // Parsed app data is a separate privacy-sensitive stream. It is best
     // effort because parser support is optional and older local servers do
     // not expose content_type=parsed.
-    let mut parsed = if streams.parsed {
+    let mut parsed = if !protected && streams.parsed {
         match local
             .fetch_parsed_since(
                 cursor.last_parsed_ts.as_deref(),
@@ -1103,7 +1192,7 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    let activities = if streams.activities {
+    let activities = if !protected && streams.activities {
         match local
             .fetch_activities_since(cursor.boundary.activity_ts.as_deref())
             .await
@@ -1139,8 +1228,18 @@ async fn run_one_sync_inner(
         && activities.is_empty()
         && feedback.is_empty()
     {
+        if protected {
+            if let Some(token) = &export {
+                drop(token.admit().await?);
+            }
+            cursor.privacy = privacy_next;
+            cursor.save(&cfg.cursor_path)?;
+        }
         debug!("enterprise sync: nothing new since last tick");
-        return Ok(SyncTickReport::default());
+        return Ok(SyncTickReport {
+            privacy_more,
+            ..Default::default()
+        });
     }
 
     // A server restart/database replacement during the reads must not label a
@@ -1185,6 +1284,7 @@ async fn run_one_sync_inner(
         None
     };
     let mut next_cursor = cursor.clone();
+    next_cursor.privacy = privacy_next;
     advance_timestamp_boundary(
         &mut next_cursor.last_frame_ts,
         &mut next_cursor.boundary.frames,
@@ -1318,6 +1418,7 @@ async fn run_one_sync_inner(
     cursor.save(&cfg.cursor_path)?;
 
     Ok(SyncTickReport {
+        privacy_more,
         frames: frames.len(),
         parsed: parsed.len(),
         activities: activities.len(),
@@ -1356,6 +1457,7 @@ fn advance_timestamp_boundary<T>(
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SyncTickReport {
+    pub privacy_more: bool,
     pub frames: usize,
     pub parsed: usize,
     pub activities: usize,
@@ -1372,7 +1474,8 @@ impl SyncTickReport {
     /// behind it. Point-in-time snapshots are deliberately excluded.
     pub fn may_have_more(&self) -> bool {
         let limit = PAGE_LIMIT as usize;
-        self.frames >= limit
+        self.privacy_more
+            || self.frames >= limit
             || self.parsed >= limit
             || self.audio >= limit
             || self.ui >= limit
@@ -3136,6 +3239,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let p = dir.path().join("c.json");
         let c = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T10:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -3181,6 +3285,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let p = dir.path().join("c.json");
         Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("t".to_string()),
             last_audio_ts: None,
@@ -3331,6 +3436,209 @@ pub(crate) mod tests {
     }
 
     // ─── run_one_sync (with mocks) ──────────────────────────────────────
+
+    struct PrivacyLocal {
+        db: Arc<screenpipe_db::DatabaseManager>,
+        protected: Arc<screenpipe_db::DatabaseManager>,
+        revoke: std::sync::atomic::AtomicBool,
+    }
+    struct PrivacyAdmission {
+        db: Arc<screenpipe_db::DatabaseManager>,
+        token: screenpipe_db::storage::StorageReadToken,
+    }
+    #[async_trait::async_trait]
+    impl ExportAdmission for PrivacyAdmission {
+        async fn admit(
+            &self,
+        ) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, EnterpriseSyncError> {
+            self.token
+                .admit(&self.db.pool)
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "test export admission",
+                    cause: e.to_string(),
+                })
+        }
+    }
+    #[async_trait::async_trait]
+    impl LocalApiClient for PrivacyLocal {
+        async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+            Ok(true)
+        }
+        async fn begin_export(
+            &self,
+        ) -> Result<Option<Box<dyn ExportAdmission>>, EnterpriseSyncError> {
+            Ok(Some(Box::new(PrivacyAdmission {
+                db: self.db.clone(),
+                token: self.db.storage_export_token().await.unwrap(),
+            })))
+        }
+        async fn fetch_release_page(
+            &self,
+            kind: &str,
+            after: i64,
+            cutoff: &str,
+            limit: u32,
+        ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
+            let page = self
+                .protected
+                .release_export_page(kind, after, cutoff, limit)
+                .await
+                .unwrap();
+            if self.revoke.swap(false, Ordering::SeqCst) {
+                self.db
+                    .configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                        identity: "v2".into(),
+                        text: true,
+                        images: false,
+                    })
+                    .await
+                    .unwrap();
+            }
+            Ok(page)
+        }
+        async fn fetch_frames_since(
+            &self,
+            _since: Option<&str>,
+            _offset: u32,
+            _limit: u32,
+        ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+            panic!("protected sync must not read legacy frames")
+        }
+        async fn fetch_audio_since(
+            &self,
+            _since: Option<&str>,
+            _offset: u32,
+            _limit: u32,
+        ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+            panic!("protected sync must not read legacy audio")
+        }
+    }
+
+    #[tokio::test]
+    async fn privacy_upload_e2e_waits_retries_resumes_late_completion_and_revokes_before_send() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _mode = UploadModeEnvGuard::clear();
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        let dir = TempDir::new().unwrap();
+        let db = Arc::new(
+            screenpipe_db::DatabaseManager::new(
+                dir.path().join("recording.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "v1".into(),
+            text: true,
+            images: false,
+        })
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 seconds'),'SYNTHETIC_SECRET_OLD'),(2,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'SYNTHETIC_SECRET_NEW')").await.unwrap();
+        let local = PrivacyLocal {
+            protected: db.protected_reads().await.unwrap(),
+            db: db.clone(),
+            revoke: std::sync::atomic::AtomicBool::new(false),
+        };
+        let server = wiremock::MockServer::start().await;
+        let failures = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let fail = failures.clone();
+        wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+            .respond_with(move |_: &wiremock::Request| {
+                wiremock::ResponseTemplate::new(if fail.load(Ordering::SeqCst) {
+                    503
+                } else {
+                    200
+                })
+            })
+            .mount(&server)
+            .await;
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let http = reqwest::Client::new();
+        let mut cursor = Cursor::default();
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .frames,
+            0
+        );
+        assert!(server.received_requests().await.unwrap().is_empty());
+        let jobs = db.release_pending("frames", 10).await.unwrap();
+        let mut safe = jobs[0].values.clone();
+        safe.insert("full_text".into(), Some("sanitized newer".into()));
+        assert!(db.publish_release(&jobs[0], &safe).await.unwrap());
+        let checkpoint = std::fs::read(&cfg.cursor_path).unwrap();
+        assert!(run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .is_err());
+        assert_eq!(std::fs::read(&cfg.cursor_path).unwrap(), checkpoint);
+        failures.store(false, Ordering::SeqCst);
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .frames,
+            1
+        );
+        let mut cursor = Cursor::load(&cfg.cursor_path);
+        let mut safe = jobs[1].values.clone();
+        safe.insert("full_text".into(), Some("sanitized older".into()));
+        assert!(db.publish_release(&jobs[1], &safe).await.unwrap());
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .frames,
+            1,
+            "late completion must survive cursor restart"
+        );
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 3);
+        for request in &requests {
+            assert!(!String::from_utf8_lossy(&request.body).contains("SYNTHETIC_SECRET"));
+        }
+        assert!(String::from_utf8_lossy(&requests.last().unwrap().body).contains("sanitized older"));
+        // Prepare a ready body, then tighten policy between fetch and transport.
+        db.execute_raw_sql_write("UPDATE frames SET full_text='changed' WHERE id=1")
+            .await
+            .unwrap();
+        let job = db.release_pending("frames", 10).await.unwrap().remove(0);
+        assert!(db.publish_release(&job, &job.values).await.unwrap());
+        local.revoke.store(true, Ordering::SeqCst);
+        let checkpoint = std::fs::read(&cfg.cursor_path).unwrap();
+        assert!(run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .is_err());
+        assert_eq!(std::fs::read(&cfg.cursor_path).unwrap(), checkpoint);
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            3,
+            "revoked data reached transport"
+        );
+        db.close().await;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "off".into(),
+            "all".into(),
+        );
+    }
 
     /// Mock that yields a fixed batch then empty forever. Records last `since`
     /// passed in so tests can assert cursor advanced.
@@ -3713,6 +4021,7 @@ pub(crate) mod tests {
 
     fn initialized_cursor() -> Cursor {
         Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-08-04T00:00:00Z".to_string()),
             last_audio_ts: Some("2026-08-04T00:00:00Z".to_string()),
@@ -4360,6 +4669,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, "http://does-not-matter".into());
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T10:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T10:00:00Z".to_string()),
@@ -4419,6 +4729,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -4472,6 +4783,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-07-27T23:26:23Z".to_string()),
             last_audio_ts: Some("2026-07-27T23:26:23Z".to_string()),
@@ -4520,6 +4832,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-07-31T23:59:59Z".to_string()),
             last_audio_ts: Some("2026-07-31T23:59:59Z".to_string()),
@@ -4576,6 +4889,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-07-31T23:59:59Z".to_string()),
             last_audio_ts: Some("2026-07-31T23:59:59Z".to_string()),
@@ -4628,6 +4942,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", failing_server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-07-27T23:26:23Z".to_string()),
             last_audio_ts: Some("2026-07-27T23:26:23Z".to_string()),
@@ -4692,6 +5007,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let original_cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -4757,6 +5073,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -4804,6 +5121,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -4860,6 +5178,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -4925,6 +5244,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5085,6 +5405,7 @@ pub(crate) mod tests {
             format!("{}/complete", server.uri()),
         );
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5192,6 +5513,7 @@ pub(crate) mod tests {
                     .mount(&server)
                     .await;
                 let mut cursor = Cursor {
+                    privacy: Default::default(),
                     source_id: None,
                     last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
                     last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5289,6 +5611,7 @@ pub(crate) mod tests {
             format!("{}/complete", server.uri()),
         );
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5327,6 +5650,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5364,6 +5688,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5407,6 +5732,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),
@@ -5669,6 +5995,7 @@ pub(crate) mod tests {
         let dir = TempDir::new().unwrap();
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
         let mut cursor = Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: Some("2026-05-07T09:00:00Z".to_string()),
             last_audio_ts: Some("2026-05-07T09:00:00Z".to_string()),

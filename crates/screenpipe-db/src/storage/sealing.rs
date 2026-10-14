@@ -121,10 +121,36 @@ impl DatabaseManager {
         window_name: Option<&str>,
         browser_url: Option<&str>,
     ) -> Result<bool, sqlx::Error> {
+        self.replace_frame_payload_with_release(
+            payload,
+            policy,
+            completed_surfaces,
+            window_name,
+            browser_url,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn replace_frame_payload_with_release(
+        &self,
+        payload: &FramePayload,
+        policy: &str,
+        completed_surfaces: u8,
+        window_name: Option<&str>,
+        browser_url: Option<&str>,
+        release: Option<&crate::privacy_release::ReleaseJob>,
+    ) -> Result<bool, sqlx::Error> {
         let Some(storage) = &self.storage else {
             return Err(storage_error("replacement requires hybrid storage"));
         };
         let mut tx = self.begin_immediate_with_retry().await?;
+        if let Some(job) = release {
+            let current:(String,i64)=sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind=? AND id=?),0) FROM _privacy_policy WHERE id=1").bind(&job.kind).bind(&job.id).fetch_one(&mut **tx.conn()).await?;
+            if current != (job.policy.clone(), job.revision) {
+                return Ok(false);
+            }
+        }
         let row = sqlx::query("SELECT p.generation,p.state,p.file_id,p.bytes,m.policy,m.staging_bytes FROM frame_payloads p CROSS JOIN storage_metadata m WHERE p.frame_id=?")
             .bind(payload.id).fetch_optional(&mut **tx.conn()).await?;
         let Some(row) = row else {
@@ -179,6 +205,9 @@ impl DatabaseManager {
         sqlx::query("UPDATE storage_metadata SET maintenance=0")
             .execute(&mut **tx.conn())
             .await?;
+        if let Some(job) = release {
+            crate::privacy_release::certify(&mut **tx.conn(), job).await?;
+        }
         tx.commit().await?;
         Ok(true)
     }

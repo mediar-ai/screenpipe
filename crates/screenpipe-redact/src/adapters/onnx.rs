@@ -57,7 +57,7 @@ use crate::{RedactError, RedactedSpan, RedactionOutput, Redactor, SpanLabel};
 // substring to report `pipeline+onnx` (the previous name,
 // `v45_phase5_pruned`, silently broke that match).
 const ONNX_REDACTOR_NAME: &str = "v50_distilled6l_onnx";
-const ONNX_REDACTOR_VERSION: u32 = 7;
+pub(crate) const ONNX_REDACTOR_VERSION: u32 = 7;
 
 /// Configuration for an ONNX text redactor.
 #[derive(Debug, Clone)]
@@ -307,6 +307,9 @@ impl OnnxRedactor {
 #[cfg(not(feature = "onnx-cpu"))]
 #[async_trait]
 impl Redactor for OnnxRedactor {
+    fn provides_model_detection(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         ONNX_REDACTOR_NAME
     }
@@ -725,6 +728,9 @@ mod runtime {
 
     #[async_trait]
     impl Redactor for OnnxRedactor {
+        fn provides_model_detection(&self) -> bool {
+            true
+        }
         fn name(&self) -> &str {
             ONNX_REDACTOR_NAME
         }

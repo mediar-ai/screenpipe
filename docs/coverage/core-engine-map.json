@@ -333,6 +333,7 @@
         "src/routes/meetings.rs",
         "src/routes/memories.rs",
         "src/routes/pipe_store.rs",
+        "src/routes/privacy_release.rs",
         "src/routes/request_origin.rs",
         "src/routes/response_format.rs",
         "src/routes/retranscribe.rs",
@@ -1061,7 +1062,8 @@
         "tests/audio_pipeline_benchmark/quality_regression.rs",
         "tests/audio_pipeline_benchmark/smart_mode_benchmark.rs",
         "tests/audio_pipeline_benchmark/vad_benchmark.rs",
-        "tests/vad_frame_continuity_test.rs"
+        "tests/vad_frame_continuity_test.rs",
+        "tests/vad_min_speech_ratio_gate_test.rs"
       ],
       "platforms": [
         "windows",

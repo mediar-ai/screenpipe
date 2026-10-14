@@ -58,7 +58,7 @@ const IDLE_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 /// v6 = v5 corpus + miss-finder-derived Ralph batches (vendor license
 /// keys, vendor PATs/sba_ tokens, redacted-placeholder hard-negatives).
 /// Bench: zero-leak 80.9% (+1.5pp vs v3), secret_probe 31/34 (+3 vs v5).
-const OPF_TEXT_VERSION: u32 = 6;
+pub(crate) const OPF_TEXT_VERSION: u32 = 6;
 
 /// Configuration for [`OpfAdapter::load`]. Defaults aim at the
 /// canonical screenpipe install layout.
@@ -391,6 +391,9 @@ fn map_output(out: opf::RedactionOutput) -> RedactionOutput {
 
 #[async_trait]
 impl Redactor for OpfAdapter {
+    fn provides_model_detection(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         "opf-rs"
     }

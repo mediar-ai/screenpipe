@@ -186,6 +186,21 @@ pub trait Redactor: Send + Sync {
         self.redact(text).await
     }
 
+    /// Strict release processing requires an actual configured model. Regex
+    /// adapters deliberately do not claim this capability.
+    fn provides_model_detection(&self) -> bool {
+        false
+    }
+
+    async fn redact_required(&self, text: &str) -> Result<RedactionOutput, RedactError> {
+        if !self.provides_model_detection() {
+            return Err(RedactError::Unavailable(
+                "required PII model is unavailable".into(),
+            ));
+        }
+        self.redact_complete(text).await
+    }
+
     /// Preferred number of inputs for one backend inference call.
     ///
     /// The default preserves the historical one-input-at-a-time behavior for
@@ -226,4 +241,24 @@ pub trait Redactor: Send + Sync {
     ) -> Result<Option<(RedactionOutput, RedactionMap)>, RedactError> {
         Ok(None)
     }
+}
+
+/// Desired detector contract, available before model initialization succeeds.
+/// Adapter model upgrades must bump their existing version constants.
+pub fn release_model_identity() -> String {
+    let mut versions = vec![
+        format!("tinfoil:{}", adapters::tinfoil::TINFOIL_REDACTOR_VERSION),
+        format!(
+            "tinfoil-image:{}",
+            adapters::tinfoil_image::TINFOIL_IMAGE_VERSION
+        ),
+        format!("rfdetr:{}", adapters::rfdetr::RFDETR_VERSION),
+        format!("mlx:{}", adapters::rfdetr_mlx::VERSION),
+    ];
+    #[cfg(feature = "onnx-cpu")]
+    versions.push(format!("onnx:{}", adapters::onnx::ONNX_REDACTOR_VERSION));
+    #[cfg(feature = "opf-text")]
+    versions.push(format!("opf:{}", adapters::opf::OPF_TEXT_VERSION));
+    versions.shrink_to_fit();
+    versions.join(";")
 }

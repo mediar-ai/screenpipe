@@ -513,6 +513,20 @@ impl ServerCore {
             }
         };
         info!("Database initialized at {}", db_path);
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: format!(
+                "pii-release-v1:{}:{}:{:?}:{:?}:{}",
+                screenpipe_redact::release_model_identity(),
+                config.pii_backend,
+                config.pii_redaction_labels,
+                config.pii_redaction_columns,
+                config.pii_redaction_pseudonyms
+            ),
+            text: config.async_pii_redaction,
+            images: config.async_image_pii_redaction,
+        })
+        .await
+        .map_err(|e| format!("Cannot configure privacy release policy: {e}"))?;
 
         // Finish fallible database setup before sharing the owner with pipes,
         // HTTP, or background workers. A failure must close this generation.
@@ -1438,6 +1452,7 @@ impl ServerCore {
                         ..Default::default()
                     },
                 )
+                .with_release_storage(Arc::clone(&db))
                 .with_database_error_hook(redact_database_error_hook.clone())
                 .spawn_with_shutdown(redact_shutdown.clone());
             } else {
@@ -1447,6 +1462,7 @@ impl ServerCore {
                 // The concrete model name + version are logged once it
                 // loads, so they never drift on a model bump.
                 let shutdown = redact_shutdown.clone();
+                let image_release_db = Arc::clone(&db);
                 let labels = pii_labels.clone();
                 let database_error_hook = redact_database_error_hook.clone();
                 tokio::spawn(async move {
@@ -1471,6 +1487,7 @@ impl ServerCore {
                                     ..Default::default()
                                 },
                             )
+                            .with_release_storage(image_release_db)
                             .with_database_error_hook(database_error_hook)
                             .spawn_with_shutdown(shutdown);
                         }

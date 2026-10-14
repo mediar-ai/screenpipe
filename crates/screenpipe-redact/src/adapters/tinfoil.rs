@@ -72,7 +72,7 @@ use crate::{RedactError, RedactionOutput, Redactor};
 /// Same threshold the existing `screenpipe-engine::privacy_filter` uses.
 pub const MIN_FILTER_CHARS: usize = 8;
 
-const TINFOIL_REDACTOR_VERSION: u32 = 1;
+pub(crate) const TINFOIL_REDACTOR_VERSION: u32 = 1;
 const DEFAULT_ENCLAVE: &str = "pii.screenpipe.containers.tinfoil.dev";
 /// GitHub repo whose Sigstore-attested release measurement must match
 /// the running enclave (Step 2/3 of Tinfoil's verification).
@@ -339,12 +339,19 @@ pub(crate) fn strip_scheme_and_path(s: &str) -> &str {
 
 #[async_trait]
 impl Redactor for TinfoilRedactor {
+    fn provides_model_detection(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         "tinfoil"
     }
 
     fn version(&self) -> u32 {
         TINFOIL_REDACTOR_VERSION
+    }
+
+    async fn redact_required(&self, text: &str) -> Result<RedactionOutput, RedactError> {
+        self.redact_one_inner(text, false).await
     }
 
     async fn redact_batch(&self, texts: &[String]) -> Result<Vec<RedactionOutput>, RedactError> {
@@ -358,7 +365,15 @@ impl Redactor for TinfoilRedactor {
 
 impl TinfoilRedactor {
     async fn redact_one(&self, text: &str) -> Result<RedactionOutput, RedactError> {
-        if text.chars().count() < MIN_FILTER_CHARS {
+        self.redact_one_inner(text, true).await
+    }
+
+    async fn redact_one_inner(
+        &self,
+        text: &str,
+        allow_shortcut: bool,
+    ) -> Result<RedactionOutput, RedactError> {
+        if allow_shortcut && text.chars().count() < MIN_FILTER_CHARS {
             return Ok(RedactionOutput {
                 input: text.to_string(),
                 redacted: text.to_string(),
@@ -449,6 +464,12 @@ mod tests {
             .redact("this text is long enough to trigger a request")
             .await;
         assert!(res.is_err(), "expected attestation error, got {:?}", res);
+    }
+
+    #[tokio::test]
+    async fn required_short_text_does_not_bypass_failed_model() {
+        let r = TinfoilRedactor::new(cfg("127.0.0.1.never.invalid"));
+        assert!(r.redact_required("hi").await.is_err());
     }
 
     #[tokio::test]

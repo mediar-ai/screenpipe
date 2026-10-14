@@ -31,7 +31,7 @@ use crate::RedactError;
 use crate::SpanLabel;
 
 const NAME: &str = "rfdetr-mlx";
-const VERSION: u32 = 9; // tracks rfdetr_v9 weights
+pub(crate) const VERSION: u32 = 9; // tracks rfdetr_v9 weights
 
 /// Minimum macOS major version that's safe for MLX at runtime.
 ///

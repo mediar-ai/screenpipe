@@ -544,6 +544,7 @@ fn group_related_tags(rows: Vec<(String, i64)>) -> std::collections::HashMap<Str
 }
 
 pub struct SearchCacheEntry {
+    privacy_epoch: i64,
     json_body: Bytes,
     result_count: usize,
 }
@@ -569,6 +570,7 @@ fn build_search_cache_entry(response: &SearchResponse) -> Option<SearchCacheEntr
         return None;
     }
     Some(SearchCacheEntry {
+        privacy_epoch: 0,
         json_body: Bytes::from(json_body),
         result_count: response.data.len(),
     })
@@ -1185,7 +1187,19 @@ pub(crate) async fn search(
             JsonResponse(json!({"error":e.to_string()})),
         )
     })?;
+    let release_epoch = state
+        .db
+        .release_epoch()
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(json!({"code":"privacy_pending"})),
+            )
+        })?
+        .unwrap_or(0);
     let cache_key = compute_search_cache_key(&query)
+        ^ (release_epoch as u64).rotate_left(7)
         ^ (storage_read.revision as u64).rotate_left(17)
         ^ state
             .starred_revision
@@ -1193,7 +1207,7 @@ pub(crate) async fn search(
             .rotate_left(37);
 
     if !history_restricted && !query.include_frames && cacheable_render && !pipe_data_restricted {
-        if let Some(cached) = state.search_cache.get(&cache_key).await {
+        if let Some(cached) = state.search_cache.get(&cache_key).await.filter(|entry| entry.privacy_epoch == release_epoch) {
             debug!("search cache hit for key {}", cache_key);
             capture_direct_api_search_value(&api_client, cached.result_count);
             let _admission = storage_read.admit(&state.db.pool).await.map_err(|e| {
@@ -1738,7 +1752,7 @@ pub(crate) async fn search(
         && cacheable_render
         && !pipe_data_restricted
     {
-        build_search_cache_entry(&response)
+        build_search_cache_entry(&response).map(|mut entry| {entry.privacy_epoch = release_epoch; entry})
     } else {
         None
     };

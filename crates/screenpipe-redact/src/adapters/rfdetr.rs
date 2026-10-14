@@ -77,7 +77,7 @@ use crate::RedactError;
 use crate::SpanLabel;
 
 const RFDETR_NAME: &str = "rfdetr";
-const RFDETR_VERSION: u32 = 38; // matches the rfdetr_v38 ONNX (fp16, 512px, real-app trained)
+pub(crate) const RFDETR_VERSION: u32 = 38; // matches the rfdetr_v38 ONNX (fp16, 512px, real-app trained)
 
 #[cfg(feature = "onnx-cpu")]
 const NUM_CLASSES: usize = 12;
