@@ -6398,6 +6398,49 @@
         ],
         "command": "bun --no-env-file test apps/screenpipe-app-tauri/lib/utils/meeting-speaker-source.eval.test.ts"
       }
+    },
+    {
+      "id": "app-historical-analytics-false-persistence",
+      "name": "Preserve explicit falsy preferences across historical settings reload",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "648c89abeb770ab5a2630fa90d9fcd80e1bbc813"
+      },
+      "base_ref": "500c8fc3e658fd8045e19f35b814dc310b5c65a7",
+      "oracle_ref": "648c89abeb770ab5a2630fa90d9fcd80e1bbc813",
+      "oracle_paths": [
+        "screenpipe-app-tauri/lib/hooks/use-settings.tsx"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "privacy",
+        "settings",
+        "historical-contract"
+      ],
+      "prompt": "In this historical app revision, loading saved settings replaces explicit false, zero and empty-string choices with defaults. Repair the actual useSettings hook while retaining its public interface. Loading must preserve false analyticsEnabled, enableFrameCache and isFirstTimeUser; zero fps and aiMaxContextChars; and empty aiModel and customPrompt. Accepted analyticsEnabled=false, fps=0 and customPrompt=\"\" updates must be visible immediately and survive unmount/remount from the synthetic store, preserving unrelated port and model values. Absent or null fields must retain this revision's defaults, including analytics enabled and macOS fps 0.2 and apple-native OCR. Loading explicit preferences, ordinary values, empty ignoredWindows or absent fields must not write the store. Ordinary values and empty ignoredWindows must be preserved. Custom dataDir must still be returned by getDataDir. Tests mount the real React hook with synthetic native storage, platform and path ports; no network or native builds are needed. The storage port verifies accepted values across hook reload, not physical disk durability or native process restart. These scalar fields and default rules belong to this historical revision; do not apply them to a later settings schema. No particular private helper or implementation path is required.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/settings-falsy.fixture.tsx.txt",
+            "destination_path": "screenpipe-app-tauri/lib/hooks/eval-settings-falsy.test.tsx"
+          },
+          {
+            "local_path": "graders/settings-falsy.config.mjs",
+            "destination_path": "screenpipe-app-tauri/eval-settings-falsy.config.mjs"
+          }
+        ],
+        "command": "cd screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-settings-falsy.config.mjs"
+      }
     }
   ]
 }
