@@ -36,6 +36,7 @@ const BUSINESS_HOSTED_MODELS = [
 	'gpt-5.5-pro',
 	'gpt-5.4',
 	'gpt-5.4-pro',
+	'gemini-4-argon',
 	'claude-sonnet-5',
 	'claude-opus-5',
 	'claude-fable-5',

@@ -284,7 +284,8 @@ async function tryModel(
 
     // Flex tier applies only to the Vertex Gemini lane. Set per-attempt (not on
     // the shared body) so a cascade to glm-5 runs standard tier.
-    const useFlex = flexEligible && isGeminiModel(model);
+    // Argon launches on standard service; do not inherit the retired Gemini flex policy.
+    const useFlex = flexEligible && isGeminiModel(model) && model !== 'gemini-4-argon';
 
     const callOnce = async (withFlex: boolean): Promise<Response> => {
       const rb = { ...reqBody } as RequestBody;
