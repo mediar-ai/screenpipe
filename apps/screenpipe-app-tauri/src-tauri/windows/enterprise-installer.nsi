@@ -717,6 +717,7 @@ Function ElevateMachineInstall
       StrCpy $R1 "failed_missing_executable"
     ${EndIf}
     FileOpen $1 "$R0\update-install.log" a
+    FileSeek $1 0 END
     FileWrite $1 'installer_elevation_failed: result=$ElevationResult scope=all recovery=original_app_relaunch_$R1$\r$\n'
     FileClose $1
     ${If} $R1 == "succeeded"
