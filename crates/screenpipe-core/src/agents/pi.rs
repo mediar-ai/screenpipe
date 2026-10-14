@@ -95,6 +95,9 @@ fn user_skill_fingerprint(root: &Path) -> std::io::Result<String> {
 
 pub const PI_PACKAGE: &str = "@earendil-works/pi-coding-agent@0.84.1";
 pub const PI_AI_PACKAGE: &str = "@earendil-works/pi-ai@0.84.1";
+// Keep the required extension compatible with the pinned Pi host. Newer
+// pi-subagents releases use host APIs that 0.84.1 does not export.
+pub const REQUIRED_PI_EXTENSION_PACKAGE: &str = "npm:pi-subagents@0.70.0";
 pub const TINFOIL_SDK_VERSION: &str = "1.2.1";
 pub const PI_NAMESPACE_DIR: &str = "@earendil-works";
 pub const SCREENPIPE_API_URL: &str = "https://api.screenpipe.com/v1";
@@ -2739,15 +2742,16 @@ pub fn pi_config_dir() -> Result<PathBuf> {
         _ => crate::paths::default_screenpipe_data_dir().join("pi-config"),
     };
     seed_pi_config_from_global(&dir);
-    ensure_pi_compaction_default(&dir)?;
+    ensure_pi_settings_defaults(&dir)?;
     Ok(dir)
 }
 
+/// Maintain compatible managed packages and conservative compaction defaults.
 /// Pi's 20k recent-history default leaves too little room for the system prompt,
 /// skill instructions and a summary on 32k models. Use its standard setting for
 /// both chat and Pipes. Explicit user settings (including disabled compaction)
 /// remain authoritative; no model selection or summarization logic lives here.
-fn ensure_pi_compaction_default(config_dir: &Path) -> Result<()> {
+fn ensure_pi_settings_defaults(config_dir: &Path) -> Result<()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _guard = LOCK
         .lock()
@@ -2765,19 +2769,91 @@ fn ensure_pi_compaction_default(config_dir: &Path) -> Result<()> {
     let Some(object) = settings.as_object_mut() else {
         return Ok(());
     };
+    let mut changed = false;
     let compaction = object.entry("compaction").or_insert_with(|| json!({}));
-    let Some(compaction) = compaction.as_object_mut() else {
-        return Ok(());
-    };
-    if compaction.contains_key("keepRecentTokens") {
+    if let Some(compaction) = compaction.as_object_mut() {
+        if !compaction.contains_key("keepRecentTokens") {
+            compaction.insert("keepRecentTokens".into(), json!(8192));
+            changed = true;
+        }
+    }
+    // Scheduled tasks use this path without opening desktop chat. Pi's package
+    // resolver replaces a mismatched installed version before loading extensions.
+    // Do not add optional packages to profiles that never enabled subagents.
+    if settings
+        .get("packages")
+        .and_then(|v| v.as_array())
+        .is_some_and(|packages| {
+            packages.iter().any(|package| {
+                pi_extension_package_source(package).is_some_and(is_required_pi_extension_source)
+            })
+        })
+    {
+        changed |= normalize_required_pi_extension_setting(&mut settings)?;
+        if settings.get("npmCommand").is_none() {
+            if let Some(bun) = find_bun_executable() {
+                settings["npmCommand"] = json!([bun]);
+                changed = true;
+            }
+        }
+    }
+    if !changed {
         return Ok(());
     }
-    compaction.insert("keepRecentTokens".into(), json!(8192));
     std::fs::create_dir_all(config_dir)?;
     let mut temporary = tempfile::NamedTempFile::new_in(config_dir)?;
     serde_json::to_writer_pretty(temporary.as_file_mut(), &settings)?;
     temporary.persist(path)?;
     Ok(())
+}
+
+fn pi_extension_package_source(package: &serde_json::Value) -> Option<&str> {
+    package
+        .as_str()
+        .or_else(|| package.get("source").and_then(|v| v.as_str()))
+}
+
+fn is_required_pi_extension_source(source: &str) -> bool {
+    pi_package_source_matches(&source.to_ascii_lowercase(), "pi-subagents")
+}
+
+/// Register the tested subagent package without dropping unrelated settings.
+pub fn normalize_required_pi_extension_setting(settings: &mut serde_json::Value) -> Result<bool> {
+    if !settings.is_object() {
+        *settings = json!({});
+    }
+    let obj = settings
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("Pi settings must be a JSON object"))?;
+    let packages = obj
+        .entry("packages".to_string())
+        .or_insert_with(|| json!([]));
+    if !packages.is_array() {
+        *packages = json!([]);
+    }
+    let entries = packages
+        .as_array_mut()
+        .ok_or_else(|| anyhow!("Pi packages must be a JSON array"))?;
+    let already_canonical = entries
+        .iter()
+        .filter(|package| {
+            pi_extension_package_source(package).is_some_and(is_required_pi_extension_source)
+        })
+        .count()
+        == 1
+        && entries
+            .iter()
+            .any(|package| package.as_str() == Some(REQUIRED_PI_EXTENSION_PACKAGE));
+    if already_canonical {
+        return Ok(false);
+    }
+    // Keep the tested version and all of its tools enabled. A filtered object
+    // can otherwise list pi-subagents while silently hiding its tool.
+    entries.retain(|package| {
+        !pi_extension_package_source(package).is_some_and(is_required_pi_extension_source)
+    });
+    entries.push(json!(REQUIRED_PI_EXTENSION_PACKAGE));
+    Ok(true)
 }
 
 fn pi_package_source_matches(source: &str, package_name: &str) -> bool {
@@ -5656,7 +5732,7 @@ mod tests {
             r#"{"theme":"dark","compaction":{"enabled":false,"reserveTokens":12000}}"#,
         )
         .unwrap();
-        ensure_pi_compaction_default(dir.path()).unwrap();
+        ensure_pi_settings_defaults(dir.path()).unwrap();
         let settings: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         assert_eq!(settings["theme"], "dark");
@@ -5665,7 +5741,7 @@ mod tests {
             json!({"enabled":false,"reserveTokens":12000,"keepRecentTokens":8192})
         );
         let original = std::fs::read(&path).unwrap();
-        ensure_pi_compaction_default(dir.path()).unwrap();
+        ensure_pi_settings_defaults(dir.path()).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), original);
     }
 
@@ -5680,15 +5756,53 @@ mod tests {
             r#"{"compaction":null}"#,
         ] {
             std::fs::write(&path, original).unwrap();
-            ensure_pi_compaction_default(dir.path()).unwrap();
+            ensure_pi_settings_defaults(dir.path()).unwrap();
             assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
         }
     }
 
     #[test]
+    fn pi_subagents_pin_migrates_existing_settings_before_scheduled_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        for package in [
+            json!("npm:pi-subagents"),
+            json!("npm:pi-subagents@0.78.0"),
+            json!({"source":"npm:PI-SUBAGENTS@0.78.0", "extensions":[]}),
+        ] {
+            let mut settings = json!({
+                "theme":"dark", "npmCommand":["custom-bun"],
+                "compaction":{"keepRecentTokens":24000},
+                "packages":["npm:other-extension", package, "npm:pi-subagents@0.33.1"]
+            });
+            std::fs::write(&path, serde_json::to_vec(&settings).unwrap()).unwrap();
+            ensure_pi_settings_defaults(dir.path()).unwrap();
+            settings["packages"] = json!(["npm:other-extension", REQUIRED_PI_EXTENSION_PACKAGE]);
+            let migrated: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            assert_eq!(migrated, settings);
+            let original = std::fs::read(&path).unwrap();
+            ensure_pi_settings_defaults(dir.path()).unwrap();
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn pi_subagents_pin_registers_fresh_desktop_profiles() {
+        let mut settings = json!({"theme":"dark", "packages":["npm:other-extension"]});
+        assert!(normalize_required_pi_extension_setting(&mut settings).unwrap());
+        assert_eq!(
+            settings["packages"],
+            json!(["npm:other-extension", REQUIRED_PI_EXTENSION_PACKAGE])
+        );
+        assert_eq!(settings["theme"], "dark");
+        assert!(!normalize_required_pi_extension_setting(&mut settings).unwrap());
+    }
+
+    #[test]
     fn pi_compaction_default_initializes_fresh_config() {
         let dir = tempfile::tempdir().unwrap();
-        ensure_pi_compaction_default(dir.path()).unwrap();
+        ensure_pi_settings_defaults(dir.path()).unwrap();
         let settings: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.path().join("settings.json")).unwrap())
                 .unwrap();
