@@ -1207,7 +1207,12 @@ pub(crate) async fn search(
             .rotate_left(37);
 
     if !history_restricted && !query.include_frames && cacheable_render && !pipe_data_restricted {
-        if let Some(cached) = state.search_cache.get(&cache_key).await.filter(|entry| entry.privacy_epoch == release_epoch) {
+        if let Some(cached) = state
+            .search_cache
+            .get(&cache_key)
+            .await
+            .filter(|entry| entry.privacy_epoch == release_epoch)
+        {
             debug!("search cache hit for key {}", cache_key);
             capture_direct_api_search_value(&api_client, cached.result_count);
             let _admission = storage_read.admit(&state.db.pool).await.map_err(|e| {
@@ -1752,7 +1757,10 @@ pub(crate) async fn search(
         && cacheable_render
         && !pipe_data_restricted
     {
-        build_search_cache_entry(&response).map(|mut entry| {entry.privacy_epoch = release_epoch; entry})
+        build_search_cache_entry(&response).map(|mut entry| {
+            entry.privacy_epoch = release_epoch;
+            entry
+        })
     } else {
         None
     };
