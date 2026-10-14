@@ -146,8 +146,13 @@ pub(crate) fn show_control_start_failed(app: &AppHandle, port: u16, error: &anyh
         return;
     }
     app.dialog()
-        .title("screenpipe could not start its local server")
-        .message(format!("Local server on port {port}: {error:#}"))
+        .message(crate::localization::ui_format(
+            "local server on port {port}: {error}",
+            &[("port", port.to_string()), ("error", format!("{error:#}"))],
+        ))
+        .title(crate::localization::ui_text(
+            "screenpipe could not start its local server",
+        ))
         .buttons(MessageDialogButtons::Ok)
         .show(|_| {});
 }
@@ -226,10 +231,10 @@ async fn kill_unix_listener(port: u16, lsof: &str) -> anyhow::Result<Vec<i32>> {
         // silently leave an unresponsive owner holding the startup port.
         if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
             let error = std::io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::ESRCH) {
-                return Err(error)
-                    .with_context(|| format!("SIGKILL failed; pid={pid}; port={port}"));
+            if error.raw_os_error() == Some(libc::ESRCH) {
+                continue;
             }
+            return Err(error).with_context(|| format!("SIGKILL failed; pid={pid}; port={port}"));
         }
         killed.push(pid);
     }
