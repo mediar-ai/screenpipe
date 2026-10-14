@@ -1,5 +1,17 @@
 # Coding-agent regression evals
 
+`app-historical-analytics-false-persistence` mounts the historical settings hook
+with synthetic native storage. Fourteen outcomes cover explicit false, zero and
+empty strings, accepted updates across remount, missing/null defaults, ordinary
+values, empty collections and a custom data directory. The exact parent loses
+ten outcomes and preserves four; the complete historical fix passes fourteen.
+Run `bun test evals/coding-agent/calibrate-settings-falsy.test.js` for controls.
+Fixtures and third-party dependency links appear only at grading. The legacy
+scalar fields/default rules are historical, not current-schema requirements.
+Current provider opt-out, opt-in and managed-policy boundaries were checked
+separately. This does not prove native disk durability, real process restart,
+execution isolation or model improvement.
+
 `app-meeting-speaker-source` executes the actual transcript renderer and full
 meeting Markdown builder with synthetic chunks. Twelve outcomes distinguish
 per-stream generic labels while preserving explicit names, grouping, the gap
