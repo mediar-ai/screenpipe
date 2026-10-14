@@ -1125,6 +1125,7 @@ fn select_meeting_inputs(
     process_inputs: Vec<String>,
     follow_default: bool,
     configured: HashSet<String>,
+    available: &HashSet<String>,
     default_input: Option<String>,
     user_disabled: &HashSet<String>,
 ) -> (Vec<String>, &'static str) {
@@ -1132,10 +1133,15 @@ fn select_meeting_inputs(
         .into_iter()
         .filter(|name| name.ends_with(" (input)"))
         .collect();
+    let available_configured: Vec<String> = configured_inputs
+        .iter()
+        .filter(|name| available.contains(*name))
+        .cloned()
+        .collect();
     // A resolved but explicitly paused microphone must stay paused; do not
     // interpret that privacy choice as a resolver failure and open another mic.
-    let (mut inputs, source) = if !follow_default && !configured_inputs.is_empty() {
-        (configured_inputs, "configured")
+    let (mut inputs, source) = if !follow_default && !available_configured.is_empty() {
+        (available_configured, "configured")
     } else if !process_inputs.is_empty() {
         (process_inputs, "process")
     } else if follow_default {
@@ -1257,10 +1263,23 @@ pub(crate) async fn run_meeting_piggyback_sweep(
     // in automatic mode. Session capture allows Bluetooth for this meeting.
     let mic_capture_active = engaged && meeting.is_some();
     let (resolved_inputs, mic_source) = if mic_capture_active {
+        let follow_default = audio_manager.use_system_default_audio().await;
+        let available: HashSet<String> = if follow_default {
+            HashSet::new()
+        } else {
+            audio_manager
+                .devices()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .map(|d| d.to_string())
+                .collect()
+        };
         select_meeting_inputs(
             process_inputs,
-            audio_manager.use_system_default_audio().await,
+            follow_default,
             audio_manager.enabled_devices().await,
+            &available,
             crate::core::device::default_input_device()
                 .ok()
                 .map(|d| d.to_string()),
@@ -1766,6 +1785,7 @@ mod tests {
             vec![],
             true,
             [builtin.clone()].into(),
+            &HashSet::new(),
             Some(bt.clone()),
             &HashSet::new(),
         );
@@ -1775,6 +1795,7 @@ mod tests {
             vec![builtin.clone()],
             true,
             HashSet::new(),
+            &HashSet::new(),
             Some(bt),
             &HashSet::new(),
         );
@@ -1791,6 +1812,7 @@ mod tests {
             vec![],
             false,
             configured,
+            &HashSet::new(),
             Some(default.clone()),
             &HashSet::new(),
         );
@@ -1800,6 +1822,7 @@ mod tests {
             vec![default.clone()],
             true,
             HashSet::new(),
+            &HashSet::new(),
             Some("Other (input)".into()),
             &[default].into(),
         );
@@ -1810,16 +1833,28 @@ mod tests {
     fn explicit_mic_choice_wins_over_the_meeting_apps_mic() {
         let macbook = "MacBook Pro Microphone (input)".to_string();
         let airpods = "AirPods Max (input)".to_string();
-        let configured = [macbook.clone(), "System Audio (output)".into()].into();
+        let configured: HashSet<String> = [macbook.clone(), "System Audio (output)".into()].into();
         let (inputs, source) = select_meeting_inputs(
             vec![airpods.clone()],
             false,
-            configured,
-            Some(airpods),
+            configured.clone(),
+            &[macbook.clone(), airpods.clone()].into(),
+            Some(airpods.clone()),
             &HashSet::new(),
         );
         assert_eq!(inputs, vec![macbook]);
         assert_eq!(source, "configured");
+        // Lid closed: the chosen mic is gone, so follow the meeting app's mic.
+        let (inputs, source) = select_meeting_inputs(
+            vec![airpods.clone()],
+            false,
+            configured,
+            &[airpods.clone()].into(),
+            Some(airpods.clone()),
+            &HashSet::new(),
+        );
+        assert_eq!(inputs, vec![airpods]);
+        assert_eq!(source, "process");
     }
 
     #[test]
