@@ -8,7 +8,7 @@
 
 use screenpipe_core::agents::pi::{
     apply_custom_provider_compat, screenpipe_cloud_models, PI_AI_PACKAGE, PI_NAMESPACE_DIR,
-    PI_PACKAGE, SCREENPIPE_API_URL, TINFOIL_SDK_VERSION,
+    PI_PACKAGE, REQUIRED_PI_EXTENSION_PACKAGE, SCREENPIPE_API_URL, TINFOIL_SDK_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -83,7 +83,6 @@ const TITLE_SESSION_PREFIX: &str = "__title:";
 /// Reserved namespace for temporary side chats. Keep in sync with
 /// `lib/chat/ephemeral-side-conversation.ts`.
 const EPHEMERAL_SIDE_CONVERSATION_PREFIX: &str = "temporary-side-chat-";
-const REQUIRED_PI_EXTENSION_PACKAGE: &str = "npm:pi-subagents";
 const CONVERSATION_HISTORY_OPEN: &str = "<conversation_history>";
 const CONVERSATION_HISTORY_CLOSE: &str = "</conversation_history>";
 const PI_INSTALL_ARGS: [&str; 2] = ["install", "--ignore-scripts"];
@@ -5338,45 +5337,9 @@ fn is_required_pi_extension_package_source(source: &str) -> bool {
         .is_some_and(|name| name.eq_ignore_ascii_case("pi-subagents"))
 }
 
-fn normalize_required_pi_extension_setting(
-    settings: &mut serde_json::Value,
-) -> Result<bool, String> {
-    if !settings.is_object() {
-        *settings = json!({});
-    }
-    let obj = settings
-        .as_object_mut()
-        .ok_or_else(|| "Pi settings must be a JSON object".to_string())?;
-    let packages = obj
-        .entry("packages".to_string())
-        .or_insert_with(|| json!([]));
-    if !packages.is_array() {
-        *packages = json!([]);
-    }
-    let entries = packages
-        .as_array_mut()
-        .ok_or_else(|| "Pi packages must be a JSON array".to_string())?;
-    let already_canonical = entries
-        .iter()
-        .filter(|package| {
-            package_source_string(package).is_some_and(is_required_pi_extension_package_source)
-        })
-        .count()
-        == 1
-        && entries
-            .iter()
-            .any(|package| package.as_str() == Some(REQUIRED_PI_EXTENSION_PACKAGE));
-    if already_canonical {
-        return Ok(false);
-    }
-    // Replace version-pinned or filtered object entries with the canonical,
-    // unrestricted package. A filtered `{ source, extensions: [...] }` entry
-    // can otherwise list pi-subagents while silently hiding its tool.
-    entries.retain(|package| {
-        !package_source_string(package).is_some_and(is_required_pi_extension_package_source)
-    });
-    entries.push(json!(REQUIRED_PI_EXTENSION_PACKAGE));
-    Ok(true)
+fn normalize_required_pi_extension_setting(settings: &mut serde_json::Value) -> Result<bool, String> {
+    screenpipe_core::agents::pi::normalize_required_pi_extension_setting(settings)
+        .map_err(|error| error.to_string())
 }
 
 fn ensure_required_pi_extension_setting() -> Result<(), String> {
@@ -5524,6 +5487,9 @@ fn valid_github_path_part(part: &str) -> bool {
 }
 
 fn pi_package_source_looks_installed(source: &str) -> bool {
+    if is_required_pi_extension_package_source(source) {
+        return get_pi_config_dir().is_ok_and(|dir| required_pi_extension_is_installed(&dir));
+    }
     if let Some(package_name) = npm_package_name_from_source(source) {
         if let Ok(config_dir) = get_pi_config_dir() {
             return config_dir
@@ -5642,18 +5608,34 @@ async fn run_pi_package_command(args: Vec<String>) -> Result<(), String> {
         .map_err(|e| format!("Pi package command panicked: {}", e))?
 }
 
+fn required_pi_extension_is_installed(config_dir: &Path) -> bool {
+    let manifest = config_dir.join("npm/node_modules/pi-subagents/package.json");
+    let installed = std::fs::read(manifest)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    installed
+        .as_ref()
+        .and_then(|value| value.get("version"))
+        .and_then(|v| v.as_str())
+        == REQUIRED_PI_EXTENSION_PACKAGE.strip_prefix("npm:pi-subagents@")
+}
+
 async fn ensure_required_pi_extension_package() -> Result<(), String> {
     let lock = REQUIRED_PI_PACKAGE_INSTALL_LOCK.get_or_init(|| Mutex::new(()));
     let _guard = lock.lock().await;
     ensure_required_pi_extension_setting()?;
-    if pi_package_source_looks_installed(REQUIRED_PI_EXTENSION_PACKAGE) {
+    if required_pi_extension_is_installed(&get_pi_config_dir()?) {
         return Ok(());
     }
     run_pi_package_command(vec![
         "install".to_string(),
         REQUIRED_PI_EXTENSION_PACKAGE.to_string(),
     ])
-    .await
+    .await?;
+    if !required_pi_extension_is_installed(&get_pi_config_dir()?) {
+        return Err(format!("Required Pi extension was not installed: {}", REQUIRED_PI_EXTENSION_PACKAGE));
+    }
+    Ok(())
 }
 
 async fn stop_idle_pi_sessions_for_package_change(state: &PiState) -> Result<(), String> {
@@ -5696,6 +5678,11 @@ pub async fn pi_install_extension_package(
     source: String,
 ) -> Result<Vec<PiExtensionPackage>, String> {
     let source = validate_pi_extension_package_source(&source)?;
+    let source = if is_required_pi_extension_package_source(&source) {
+        REQUIRED_PI_EXTENSION_PACKAGE.to_string()
+    } else {
+        source
+    };
     stop_idle_pi_sessions_for_package_change(&state).await?;
     run_pi_package_command(vec!["install".to_string(), source]).await?;
     stop_idle_pi_sessions_for_package_change(&state).await?;
@@ -6634,9 +6621,24 @@ mod tests {
         assert!(super::normalize_required_pi_extension_setting(&mut settings).unwrap());
         assert_eq!(
             settings["packages"],
-            json!(["npm:other-tool", "npm:pi-subagents"])
+            json!(["npm:other-tool", super::REQUIRED_PI_EXTENSION_PACKAGE])
         );
         assert!(!super::normalize_required_pi_extension_setting(&mut settings).unwrap());
+    }
+
+    #[test]
+    fn required_subagents_install_check_rejects_incompatible_or_broken_manifests() {
+        let dir = tempfile::tempdir().unwrap();
+        let package_dir = dir.path().join("npm/node_modules/pi-subagents");
+        std::fs::create_dir_all(&package_dir).unwrap();
+        assert!(!super::required_pi_extension_is_installed(dir.path()));
+        for manifest in [r#"{"version":"0.78.0"}"#, "invalid", "{}"] {
+            std::fs::write(package_dir.join("package.json"), manifest).unwrap();
+            assert!(!super::required_pi_extension_is_installed(dir.path()));
+        }
+        let version = super::REQUIRED_PI_EXTENSION_PACKAGE.rsplit('@').next().unwrap();
+        std::fs::write(package_dir.join("package.json"), json!({"version":version}).to_string()).unwrap();
+        assert!(super::required_pi_extension_is_installed(dir.path()));
     }
 
     #[test]

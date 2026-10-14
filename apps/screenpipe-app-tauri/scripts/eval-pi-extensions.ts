@@ -1,7 +1,7 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 
-// Real pinned Pi + the published extension that reproduced the support error.
+// Real pinned Pi repairing a previously installed incompatible extension.
 // Only the model response is synthetic; all installs/config live in a temp dir.
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -13,6 +13,11 @@ const config = join(root, "pi-config");
 const runtime = join(root, "pi-agent");
 const project = join(root, "project");
 const source = await readFile(resolve(import.meta.dir, "../../../crates/screenpipe-core/src/agents/pi.rs"), "utf8");
+const packageSource = source.match(/REQUIRED_PI_EXTENSION_PACKAGE: &str = "([^"]+)"/)![1];
+const extensionVersion = packageSource.split("@").at(-1)!;
+const brokenVersion = "0.78.0"; // Uses toToolDeclaration, absent from Pi 0.84.1.
+const configuredPackage = process.argv.includes("--incompatible-package")
+  ? `npm:pi-subagents@${brokenVersion}` : packageSource;
 const version = source.match(/PI_PACKAGE: &str = "@earendil-works\/pi-coding-agent@([^"]+)"/)![1];
 // Read the production spawn policy so removing it also fails the runtime eval.
 const isolation = source.slice(source.indexOf("pub fn apply_pi_isolation_env("), source.indexOf("/// Marker file recording"));
@@ -62,13 +67,13 @@ try {
   for (const dir of [runtime, join(config, "npm"), project]) await mkdir(dir, { recursive: true });
   for (const [dir, dependencies] of [
     [runtime, { "@earendil-works/pi-coding-agent": version }],
-    [join(config, "npm"), { "pi-subagents": "0.70.0" }],
+    [join(config, "npm"), { "pi-subagents": brokenVersion }],
   ] as const) {
     await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module", dependencies }));
     const install = await run([process.execPath, "install", "--ignore-scripts"], dir);
     assert.equal(install.code, 0, install.stderr);
   }
-  await writeFile(join(config, "settings.json"), JSON.stringify({ packages: ["npm:pi-subagents@0.70.0"], retry: { enabled: false } }));
+  await writeFile(join(config, "settings.json"), JSON.stringify({ packages: [configuredPackage], npmCommand: [process.execPath], retry: { enabled: false } }));
   await writeFile(join(config, "models.json"), JSON.stringify({ providers: { eval: {
     baseUrl: `http://127.0.0.1:${server.port}/v1`, api: "openai-completions", apiKey: "fictional-eval-key",
     models: [{ id: "eval", name: "Eval", reasoning: false, input: ["text"], contextWindow: 128000, maxTokens: 256,
@@ -76,7 +81,8 @@ try {
   } } }));
   const cli = join(runtime, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
   const args = [process.execPath, cli, "--provider", "eval", "--model", "eval", "--no-session", "--no-skills", "--no-prompt-templates", "--no-context-files"];
-  for (const mode of ["rpc", "json"]) {
+  // A scheduled run must recover before anyone opens interactive chat.
+  for (const mode of ["json", "rpc"]) {
     const result = await run([...args, "--mode", mode, ...(mode === "json" ? ["--print", "Say extension startup works."] : [])], project, mode === "rpc");
     assert.doesNotMatch(result.stderr, /Failed to load extension/, `${mode}: ${result.stderr}`);
     const events = result.stdout.split("\n").filter(line => line.startsWith("{")).map(line => JSON.parse(line));
@@ -86,7 +92,9 @@ try {
     if (mode === "json") assert.equal(result.code, 0, result.stderr);
     assert(requests.at(-1)?.tools?.some(tool => tool.function.name === "subagent"), `${mode}: subagent tool missing`);
     assert(requests.at(-1)?.tools?.some(tool => tool.function.name === "bg_wait"), `${mode}: bg_wait tool missing`);
-    console.log(`PASS ${mode}: published pi-subagents loaded, tools available, assistant response completed`);
+    const installed = JSON.parse(await readFile(join(config, "npm/node_modules/pi-subagents/package.json"), "utf8"));
+    assert.equal(installed.version, extensionVersion, `${mode}: incompatible package was not replaced`);
+    console.log(`PASS ${mode}: pi-subagents ${brokenVersion} repaired to ${extensionVersion}, tools available, assistant response completed`);
   }
   // A real extension error must still report its originating cause.
   const broken = join(project, "broken.ts");
