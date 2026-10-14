@@ -28,6 +28,62 @@ $bundleDir = Join-Path $releaseDir "bundle\nsis"
 $fixtureDir = Join-Path $ResultsDir "fixture"
 New-Item -ItemType Directory -Force -Path $fixtureDir, $releaseDir | Out-Null
 
+function Build-ProofPayload([string] $Label) {
+  $source = Join-Path $fixtureDir "proof-payload-$Label.cs"
+  $output = Join-Path $fixtureDir "proof-payload-$Label.exe"
+  $code = @"
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
+using System.Windows.Forms;
+
+static class ProofPayload {
+  [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetTokenInformation(IntPtr h, int c, out int v, int n, out int r);
+  [DllImport("advapi32.dll", SetLastError=true)] static extern bool GetTokenInformation(IntPtr h, int c, IntPtr v, int n, out int r);
+  [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+  [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthority(IntPtr sid, uint index);
+  [STAThread] static void Main(string[] args) {
+    var identity = WindowsIdentity.GetCurrent();
+    var principal = new WindowsPrincipal(identity);
+    int elevation = 0, elevationType = 0, size;
+    GetTokenInformation(identity.Token, 20, out elevation, 4, out size);
+    GetTokenInformation(identity.Token, 18, out elevationType, 4, out size);
+    var data = Environment.GetEnvironmentVariable("SCREENPIPE_DATA_DIR");
+    if (String.IsNullOrEmpty(data)) data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".screenpipe");
+    Directory.CreateDirectory(data);
+    var marker = Path.Combine(data, "installer-proof-launch-$Label.txt");
+    var text = "label=$Label\r\nsid=" + identity.User.Value + "\r\nelevated=" + elevation + "\r\nelevation_type=" + elevationType + "\r\nis_admin=" + principal.IsInRole(WindowsBuiltInRole.Administrator) + "\r\nintegrity=" + GetIntegrity() + "\r\narguments=" + String.Join(" ", args) + "\r\n";
+    File.WriteAllText(marker, text, new UTF8Encoding(false));
+    MessageBox.Show("installer proof fixture $Label\n\n" + text + "\nmarker=" + marker, "Screenpipe installer proof fixture", MessageBoxButtons.OK, MessageBoxIcon.Information);
+  }
+  static string GetIntegrity() {
+    try {
+      int size; GetTokenInformation(WindowsIdentity.GetCurrent().Token, 25, IntPtr.Zero, 0, out size);
+      var buffer = Marshal.AllocHGlobal(size);
+      try {
+        if (!GetTokenInformation(WindowsIdentity.GetCurrent().Token, 25, buffer, size, out size)) return "unavailable";
+        var sid = Marshal.ReadIntPtr(buffer);
+        var count = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+        var rid = Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(count - 1)));
+        return rid >= 0x4000 ? "system" : rid >= 0x3000 ? "high" : rid >= 0x2000 ? "medium" : "low";
+      } finally { Marshal.FreeHGlobal(buffer); }
+    }
+    catch { return "unavailable"; }
+  }
+}
+"@
+  [IO.File]::WriteAllText($source, $code, [Text.UTF8Encoding]::new($false))
+  $csc = Join-Path ([Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) "csc.exe"
+  & $csc /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /out:$output $source
+  if ($LASTEXITCODE -or -not (Test-Path $output)) { throw "proof payload $Label compilation failed" }
+  return $output
+}
+
 function Write-FixtureConfig([string] $Path, [string] $Version, [bool] $LegacyMachine) {
   $config = @{
     version = $Version
@@ -67,9 +123,11 @@ $legacyInstallerA = Join-Path $fixtureDir "screenpipe-enterprise-legacy-machine-
 if (-not $InstallOnly) {
   Push-Location $appRoot
   try {
-    $installerA = Build-Fixture "A" "91.0.0" "$env:WINDIR\System32\where.exe"
-    $installerB = Build-Fixture "B" "92.0.0" "$env:WINDIR\System32\whoami.exe"
-    $legacyInstallerA = Build-Fixture "legacy-machine-A" "91.0.0" "$env:WINDIR\System32\where.exe" $true
+    $payloadA = Build-ProofPayload "A"
+    $payloadB = Build-ProofPayload "B"
+    $installerA = Build-Fixture "A" "91.0.0" $payloadA
+    $installerB = Build-Fixture "B" "92.0.0" $payloadB
+    $legacyInstallerA = Build-Fixture "legacy-machine-A" "91.0.0" $payloadA $true
   } finally {
     Pop-Location
   }

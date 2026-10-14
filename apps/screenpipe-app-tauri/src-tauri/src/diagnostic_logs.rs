@@ -274,6 +274,23 @@ mod tests {
         crate::enterprise::sync::tests::check_retained_diagnostic(dir.path()).await;
     }
 
+    #[tokio::test]
+    async fn installer_elevation_failure_reaches_redacted_support_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        tokio::fs::write(
+            dir.path().join(crate::update_diagnostics::LOG_NAME),
+            "installer_elevation_failed: result=1223 scope=all recovery=original_app_relaunch_succeeded contact=private-person@example.com\n",
+        )
+        .await
+        .unwrap();
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("installer_elevation_failed: result=1223"));
+        assert!(report.contains("recovery=original_app_relaunch_succeeded"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
     #[cfg(feature = "enterprise-build")]
     #[tokio::test(flavor = "current_thread")]
     async fn sync_retry_failure_reaches_support_after_collection_and_redaction() {

@@ -346,6 +346,18 @@ Function PageLeaveReinstall
   ${EndIf}
 
   reinst_uninstall:
+    !if "${INSTALLMODE}" == "both"
+      ; Existing machine installs can require an administrator-only uninstaller.
+      ; Elevate before invoking it instead of waiting for the later location page.
+      ${If} $ExistingScope == "all"
+        StrCpy $InstallScope "all"
+        Call RequireMachinePrivilege
+        ${If} $ElevationResult != 0
+          MessageBox MB_OK|MB_ICONINFORMATION "Administrator approval was not completed. The existing Screenpipe installation was not changed." /SD IDOK
+          Abort
+        ${EndIf}
+      ${EndIf}
+    !endif
     HideWindow
     ClearErrors
 
@@ -647,7 +659,8 @@ Function ElevateMachineInstall
   FileOpen $0 "$PLUGINSDIR\screenpipe-elevate.ps1" w
   FileWriteUTF16LE /BOM $0 '$$ErrorActionPreference = "Stop"$\r$\n'
   FileWriteUTF16LE $0 '$$i = Get-Content -LiteralPath "$PLUGINSDIR\screenpipe-elevate-input.txt" -Encoding Unicode$\r$\n'
-  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS /P /D=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch { $$e = $$_.Exception; while ($$e -and -not ($$e -is [System.ComponentModel.Win32Exception])) { $$e = $$e.InnerException }; if ($$e) { exit $$e.NativeErrorCode }; exit 2 }$\r$\n'
+  FileWriteUTF16LE $0 '$$s = [System.Diagnostics.ProcessStartInfo]::new(); $$s.FileName = $$i[0]; $$s.Arguments = $$i[1] + " /SPALLUSERS /P /D=" + $$i[2]; $$s.UseShellExecute = $$true; $$s.Verb = "runas"$\r$\n'
+  FileWriteUTF16LE $0 'try { $$p = [System.Diagnostics.Process]::Start($$s); $$p.WaitForExit(); exit $$p.ExitCode } catch { $$e = $$_.Exception; while ($$e -and -not ($$e -is [System.ComponentModel.Win32Exception])) { $$e = $$e.InnerException }; if ($$e) { exit $$e.NativeErrorCode }; exit 2 }$\r$\n'
   FileClose $0
   nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate.ps1"'
   Pop $0
@@ -665,11 +678,16 @@ Function ElevateMachineInstall
     CreateDirectory "$R0"
     ${If} ${FileExists} "$ExistingInstallDir\${MAINBINARYNAME}.exe"
       ClearErrors
-      nsis_tauri_utils::RunAsUser "$ExistingInstallDir\${MAINBINARYNAME}.exe" ""
+      ${GetOptions} $CMDLINE "/ARGS" $R2
       ${If} ${Errors}
-        StrCpy $R1 "failed"
-      ${Else}
+        StrCpy $R2 ""
+      ${EndIf}
+      nsis_tauri_utils::RunAsUser "$ExistingInstallDir\${MAINBINARYNAME}.exe" "$R2"
+      Pop $R1
+      ${If} $R1 == 0
         StrCpy $R1 "succeeded"
+      ${Else}
+        StrCpy $R1 "failed_result_$R1"
       ${EndIf}
     ${Else}
       StrCpy $R1 "failed_missing_executable"
@@ -1105,7 +1123,8 @@ Function un.ElevateMachineUninstall
   FileWriteUTF16LE /BOM $0 '$$ErrorActionPreference = "Stop"$\r$\n'
   FileWriteUTF16LE $0 '$$i = Get-Content -LiteralPath "$PLUGINSDIR\screenpipe-elevate-uninstall-input.txt" -Encoding Unicode$\r$\n'
   ; NSIS requires _?= to be the final uninstaller argument and it must not be quoted.
-  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS _?=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch { $$e = $$_.Exception; while ($$e -and -not ($$e -is [System.ComponentModel.Win32Exception])) { $$e = $$e.InnerException }; if ($$e) { exit $$e.NativeErrorCode }; exit 2 }$\r$\n'
+  FileWriteUTF16LE $0 '$$s = [System.Diagnostics.ProcessStartInfo]::new(); $$s.FileName = $$i[0]; $$s.Arguments = $$i[1] + " /SPALLUSERS _?=" + $$i[2]; $$s.UseShellExecute = $$true; $$s.Verb = "runas"$\r$\n'
+  FileWriteUTF16LE $0 'try { $$p = [System.Diagnostics.Process]::Start($$s); $$p.WaitForExit(); exit $$p.ExitCode } catch { $$e = $$_.Exception; while ($$e -and -not ($$e -is [System.ComponentModel.Win32Exception])) { $$e = $$e.InnerException }; if ($$e) { exit $$e.NativeErrorCode }; exit 2 }$\r$\n'
   FileClose $0
   nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate-uninstall.ps1"'
   Pop $0
