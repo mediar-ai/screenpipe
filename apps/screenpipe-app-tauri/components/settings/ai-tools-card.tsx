@@ -353,7 +353,7 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
             ) : (
               <Plus className="h-3.5 w-3.5" />
             )}
-            {bulkRunning ? ui("Connecting...") : ui(perplexityDetected ? "Connect automatically" : "Connect all")}
+            {bulkRunning ? ui("Connecting...") : perplexityDetected ? ui("Connect automatically") : ui("Connect all")}
           </Button>
         ) : (
           <Button
@@ -504,7 +504,7 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
                   disabled={bulkRunning}
                   className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors disabled:opacity-50"
                 >
-                  {confirmingDisconnect ? ui("Click again to confirm") : ui(perplexityDetected ? "Disconnect automatic apps…" : "Disconnect all…")}
+                  {confirmingDisconnect ? ui("Click again to confirm") : perplexityDetected ? ui("Disconnect automatic apps…") : ui("Disconnect all…")}
                 </button>
                 {!allConnected && (
                   <Button
