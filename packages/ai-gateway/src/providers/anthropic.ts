@@ -183,7 +183,7 @@ export class AnthropicProvider implements AIProvider {
 	/** Current Claude 5 models reject non-default sampling parameters with HTTP 400. */
 	private temperatureForModel(body: RequestBody): number | undefined {
 		const model = this.normalizeModel(body.model);
-		return model === 'claude-opus-5' || model === 'claude-sonnet-5'
+		return model === 'claude-opus-5' || model === 'claude-sonnet-5' || model === 'claude-haiku-5-5'
 			? undefined
 			: body.temperature;
 	}
@@ -195,7 +195,7 @@ export class AnthropicProvider implements AIProvider {
 		const requested = body.reasoning_effort;
 		const model = this.normalizeModel(body.model);
 		const supportsEffort = [
-			/^claude-(?:fable|mythos|opus|sonnet)-5(?:$|-)/,
+			/^claude-(?:fable|mythos|opus|sonnet|haiku)-5(?:$|-)/,
 			/^claude-opus-4-(?:5|6|7|8)(?:$|-)/,
 			/^claude-sonnet-4-6(?:$|-)/,
 			/^claude-mythos-preview(?:$|-)/,

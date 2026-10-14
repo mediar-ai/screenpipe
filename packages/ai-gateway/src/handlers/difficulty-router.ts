@@ -15,8 +15,8 @@ export type Tier = 'trivial' | 'normal' | 'hard';
 // Tier → chain head. The caller appends the existing AUTO_WATERFALL as fallback,
 // so a head error still cascades to the proven cheap chain.
 export const TIER_HEAD: Record<Tier, string> = {
-  trivial: 'gpt-6-luna',     // keep even small requests on the current Auto model
-  normal: 'gpt-6-luna',      // current interactive Auto default
+  trivial: 'claude-haiku-5-5',     // keep even small requests on the current Auto model
+  normal: 'claude-haiku-5-5',      // current interactive Auto default
   hard: 'gpt-5.6-sol',         // reserve frontier for explicitly difficult tasks
 };
 
