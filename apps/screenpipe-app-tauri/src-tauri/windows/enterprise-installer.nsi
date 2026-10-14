@@ -92,6 +92,7 @@ Var IncomingInstallDir
 Var CurrentUserDefaultDir
 Var AllUsersDefaultDir
 Var ElevationResult
+Var RawCommandLine
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -556,7 +557,14 @@ Function ToggleScopeControls
   Call UpdateScopeControls
 FunctionEnd
 
+Function SyncInstallDirectory
+  ${If} $InstallDirControl != ""
+    ${NSD_GetText} $InstallDirControl $INSTDIR
+  ${EndIf}
+FunctionEnd
+
 Function SelectCurrentUserScope
+  Call SyncInstallDirectory
   StrCpy $0 $INSTDIR
   Call SetCurrentUserScope
   ${If} $ExistingScope == ""
@@ -567,6 +575,7 @@ Function SelectCurrentUserScope
 FunctionEnd
 
 Function SelectAllUsersScope
+  Call SyncInstallDirectory
   StrCpy $0 $INSTDIR
   Call SetAllUsersScope
   ${If} $ExistingScope == ""
@@ -577,6 +586,7 @@ Function SelectAllUsersScope
 FunctionEnd
 
 Function BrowseInstallDirectory
+  Call SyncInstallDirectory
   nsDialogs::SelectFolderDialog "Select the Screenpipe install folder" "$INSTDIR"
   Pop $0
   ${If} $0 != "error"
@@ -637,7 +647,7 @@ Function ElevateMachineInstall
   FileOpen $0 "$PLUGINSDIR\screenpipe-elevate.ps1" w
   FileWriteUTF16LE /BOM $0 '$$ErrorActionPreference = "Stop"$\r$\n'
   FileWriteUTF16LE $0 '$$i = Get-Content -LiteralPath "$PLUGINSDIR\screenpipe-elevate-input.txt" -Encoding Unicode$\r$\n'
-  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS /P /D=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch [System.ComponentModel.Win32Exception] { exit $$_.Exception.NativeErrorCode } catch { exit 2 }$\r$\n'
+  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS /P /D=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch { $$e = $$_.Exception; while ($$e -and -not ($$e -is [System.ComponentModel.Win32Exception])) { $$e = $$e.InnerException }; if ($$e) { exit $$e.NativeErrorCode }; exit 2 }$\r$\n'
   FileClose $0
   nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate.ps1"'
   Pop $0
@@ -648,61 +658,102 @@ Function ElevateMachineInstall
     Quit
   ${EndIf}
   ${If} $ExistingInstallDir != ""
-    CreateDirectory "$PROFILE\.screenpipe"
-    FileOpen $1 "$PROFILE\.screenpipe\update-install.log" a
-    FileWrite $1 'installer_elevation_failed: result=$ElevationResult scope=all recovery=original_app_relaunched$\r$\n'
-    FileClose $1
-    ${If} ${FileExists} "$ExistingInstallDir\${MAINBINARYNAME}.exe"
-      nsis_tauri_utils::RunAsUser "$ExistingInstallDir\${MAINBINARYNAME}.exe" ""
+    ReadEnvStr $R0 "SCREENPIPE_DATA_DIR"
+    ${If} $R0 == ""
+      StrCpy $R0 "$PROFILE\.screenpipe"
     ${EndIf}
-    MessageBox MB_OK|MB_ICONSTOP "Administrator approval was not completed (Windows result $ElevationResult). The existing Screenpipe app has been reopened." /SD IDOK
+    CreateDirectory "$R0"
+    ${If} ${FileExists} "$ExistingInstallDir\${MAINBINARYNAME}.exe"
+      ClearErrors
+      nsis_tauri_utils::RunAsUser "$ExistingInstallDir\${MAINBINARYNAME}.exe" ""
+      ${If} ${Errors}
+        StrCpy $R1 "failed"
+      ${Else}
+        StrCpy $R1 "succeeded"
+      ${EndIf}
+    ${Else}
+      StrCpy $R1 "failed_missing_executable"
+    ${EndIf}
+    FileOpen $1 "$R0\update-install.log" a
+    FileWrite $1 'installer_elevation_failed: result=$ElevationResult scope=all recovery=original_app_relaunch_$R1$\r$\n'
+    FileClose $1
+    ${If} $R1 == "succeeded"
+      MessageBox MB_OK|MB_ICONSTOP "Administrator approval was not completed (Windows result $ElevationResult). The existing Screenpipe app was reopened." /SD IDOK
+    ${Else}
+      MessageBox MB_OK|MB_ICONSTOP "Administrator approval was not completed (Windows result $ElevationResult). Setup could not reopen the existing Screenpipe app." /SD IDOK
+    ${EndIf}
     SetErrorLevel $ElevationResult
     Quit
   ${EndIf}
-  MessageBox MB_OK|MB_ICONINFORMATION "Administrator approval was not completed. You can continue with 'Just for me' or try again." /SD IDOK
-  Call SelectCurrentUserScope
-  ${NSD_Check} $ScopeCurrentRadio
-  Abort
+  ${If} $PassiveMode = 1
+  ${OrIf} ${Silent}
+    SetErrorLevel $ElevationResult
+    Quit
+  ${EndIf}
 FunctionEnd
 
-Function PageLeaveInstallLocation
-  ${NSD_GetText} $InstallDirControl $INSTDIR
+Function ValidateInstallSelection
   ${If} $INSTDIR == ""
     MessageBox MB_OK|MB_ICONSTOP "Choose an install folder." /SD IDOK
-    Abort
+    SetErrors
+    Return
   ${EndIf}
-  ${GetRoot} "$INSTDIR" $0
-  ${If} $0 == ""
+  System::Call 'shlwapi::PathIsRelativeW(w "$INSTDIR") i.r0'
+  ${If} $0 != 0
     MessageBox MB_OK|MB_ICONSTOP "Enter a complete Windows path, such as C:\Apps\Screenpipe." /SD IDOK
-    Abort
+    SetErrors
+    Return
   ${EndIf}
   ${If} $InstallScope == "current"
     ClearErrors
     CreateDirectory "$INSTDIR"
     ${If} ${Errors}
       MessageBox MB_OK|MB_ICONSTOP "Setup cannot create or write to $INSTDIR. Choose another folder." /SD IDOK
-      Abort
+      SetErrors
+      Return
     ${EndIf}
     GetTempFileName $0 "$INSTDIR"
     ${If} ${Errors}
       MessageBox MB_OK|MB_ICONSTOP "Setup cannot write to $INSTDIR. Choose another folder." /SD IDOK
-      Abort
+      SetErrors
+      Return
     ${EndIf}
     Delete "$0"
   ${EndIf}
   ${If} $ExistingScope != ""
   ${AndIf} $InstallScope != $ExistingScope
     MessageBox MB_OK|MB_ICONSTOP "Changing install scope requires removing the existing Screenpipe installation first. Your recordings and settings are not removed." /SD IDOK
-    Abort
+    SetErrors
+    Return
   ${EndIf}
   ${If} $ExistingInstallDir != ""
   ${AndIf} $INSTDIR != $ExistingInstallDir
     MessageBox MB_OK|MB_ICONSTOP "Changing the directory of an existing Screenpipe installation requires removing it first. Your recordings and settings are not removed." /SD IDOK
+    SetErrors
+    Return
+  ${EndIf}
+  ClearErrors
+FunctionEnd
+
+Function PageLeaveInstallLocation
+  Call SyncInstallDirectory
+  Call ValidateInstallSelection
+  ${If} ${Errors}
     Abort
+  ${EndIf}
+  ${If} $InstallScope == "all"
+    Call RequireMachinePrivilege
+    ${If} $ElevationResult != 0
+      MessageBox MB_OK|MB_ICONINFORMATION "Administrator approval was not completed. Choose 'Just for me' to continue without administrator access, or try again." /SD IDOK
+      Call SelectCurrentUserScope
+      ${NSD_Check} $ScopeCurrentRadio
+      Abort
+    ${EndIf}
   ${EndIf}
 FunctionEnd
 
 Function RequireMachinePrivilege
+  StrCpy $ElevationResult 0
   ${If} $InstallScope != "all"
     Return
   ${EndIf}
@@ -715,7 +766,16 @@ FunctionEnd
 
 Function .onInit
   StrCpy $IncomingInstallDir ""
-  ${If} $INSTDIR != "${PLACEHOLDER_INSTALL_DIR}"
+  System::Call 'kernel32::GetCommandLineW() w.r0'
+  StrCpy $RawCommandLine $0
+  ClearErrors
+  ${GetOptions} $RawCommandLine "/D=" $0
+  ${IfNot} ${Errors}
+    ; NSIS silently discards a non-absolute /D before .onInit. Preserve the
+    ; caller's actual value so our shared validator can reject it.
+    StrCpy $IncomingInstallDir $0
+    StrCpy $INSTDIR $0
+  ${ElseIf} $INSTDIR != "${PLACEHOLDER_INSTALL_DIR}"
     StrCpy $IncomingInstallDir $INSTDIR
   ${EndIf}
   ${GetOptions} $CMDLINE "/P" $PassiveMode
@@ -794,7 +854,15 @@ Section EarlyChecks
     ; This section runs for interactive, passive, and silent installs. No
     ; machine registration or Program Files write is reachable without a real
     ; administrative token.
-    Call RequireMachinePrivilege
+    Call ValidateInstallSelection
+    ${If} ${Errors}
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    ${If} $PassiveMode = 1
+    ${OrIf} ${Silent}
+      Call RequireMachinePrivilege
+    ${EndIf}
   !endif
   ; Abort silent installer if downgrades is disabled
   !if "${ALLOWDOWNGRADES}" == "false"
@@ -1037,7 +1105,7 @@ Function un.ElevateMachineUninstall
   FileWriteUTF16LE /BOM $0 '$$ErrorActionPreference = "Stop"$\r$\n'
   FileWriteUTF16LE $0 '$$i = Get-Content -LiteralPath "$PLUGINSDIR\screenpipe-elevate-uninstall-input.txt" -Encoding Unicode$\r$\n'
   ; NSIS requires _?= to be the final uninstaller argument and it must not be quoted.
-  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS _?=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch [System.ComponentModel.Win32Exception] { exit $$_.Exception.NativeErrorCode } catch { exit 2 }$\r$\n'
+  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS _?=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch { $$e = $$_.Exception; while ($$e -and -not ($$e -is [System.ComponentModel.Win32Exception])) { $$e = $$e.InnerException }; if ($$e) { exit $$e.NativeErrorCode }; exit 2 }$\r$\n'
   FileClose $0
   nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate-uninstall.ps1"'
   Pop $0

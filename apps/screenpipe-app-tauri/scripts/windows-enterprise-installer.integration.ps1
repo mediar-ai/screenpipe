@@ -15,6 +15,7 @@ versions. It does not build or exercise the Screenpipe engine.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)] [string] $ResultsDir,
+  [ValidateSet("current", "machine", "legacy-machine")] [string] $Matrix = "current",
   [switch] $CompileOnly,
   [switch] $InstallOnly
 )
@@ -27,23 +28,31 @@ $bundleDir = Join-Path $releaseDir "bundle\nsis"
 $fixtureDir = Join-Path $ResultsDir "fixture"
 New-Item -ItemType Directory -Force -Path $fixtureDir, $releaseDir | Out-Null
 
-function Write-FixtureConfig([string] $Path, [string] $Version) {
+function Write-FixtureConfig([string] $Path, [string] $Version, [bool] $LegacyMachine) {
   $config = @{
     version = $Version
     bundle = @{
       resources = @()
       externalBin = @()
-      windows = @{ signCommand = $null; webviewInstallMode = @{ type = "skip" } }
+      windows = @{
+        signCommand = $null
+        webviewInstallMode = @{ type = "skip" }
+        nsis = if ($LegacyMachine) { @{ installMode = "perMachine"; template = $null } } else { @{} }
+      }
     }
   } | ConvertTo-Json -Depth 8
   [IO.File]::WriteAllText($Path, $config, [Text.UTF8Encoding]::new($false))
 }
 
-function Build-Fixture([string] $Label, [string] $Version, [string] $Payload) {
+function Build-Fixture([string] $Label, [string] $Version, [string] $Payload, [bool] $LegacyMachine = $false) {
   $configPath = Join-Path $fixtureDir "$Label.json"
-  Write-FixtureConfig $configPath $Version
+  Write-FixtureConfig $configPath $Version $LegacyMachine
   Copy-Item -LiteralPath $Payload -Destination (Join-Path $releaseDir "screenpipe-app.exe") -Force
-  & bun scripts/native-build-queue.ts enterprise-bundle --config $configPath | Out-Host
+  if ($LegacyMachine) {
+    & bun scripts/native-build-queue.ts enterprise-bundle --upstream-template --config $configPath | Out-Host
+  } else {
+    & bun scripts/native-build-queue.ts enterprise-bundle --config $configPath | Out-Host
+  }
   if ($LASTEXITCODE) { throw "fixture $Label bundle failed: $LASTEXITCODE" }
   $built = Get-ChildItem $bundleDir -Filter "screenpipe enterprise_${Version}_x64-setup.exe" | Select-Object -First 1
   if (-not $built) { throw "fixture $Label installer was not produced" }
@@ -54,11 +63,13 @@ function Build-Fixture([string] $Label, [string] $Version, [string] $Payload) {
 
 $installerA = Join-Path $fixtureDir "screenpipe-enterprise-A.exe"
 $installerB = Join-Path $fixtureDir "screenpipe-enterprise-B.exe"
+$legacyInstallerA = Join-Path $fixtureDir "screenpipe-enterprise-legacy-machine-A.exe"
 if (-not $InstallOnly) {
   Push-Location $appRoot
   try {
     $installerA = Build-Fixture "A" "91.0.0" "$env:WINDIR\System32\where.exe"
     $installerB = Build-Fixture "B" "92.0.0" "$env:WINDIR\System32\whoami.exe"
+    $legacyInstallerA = Build-Fixture "legacy-machine-A" "91.0.0" "$env:WINDIR\System32\where.exe" $true
   } finally {
     Pop-Location
   }
@@ -70,13 +81,11 @@ $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $profileKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid"
 $userProfile = (Get-ItemPropertyValue $profileKey ProfileImagePath)
 $localAppData = Join-Path $userProfile "AppData\Local"
-# CreateProcessWithLogonW callers can accidentally inherit the launching
-# account's environment. Give NSIS the paths belonging to the actual token.
-$env:USERPROFILE = $userProfile
-$env:HOME = $userProfile
-$env:LOCALAPPDATA = $localAppData
-$env:APPDATA = Join-Path $userProfile "AppData\Roaming"
-$installDir = Join-Path $localAppData "Screenpipe fixture ü space"
+$installDir = if ($Matrix -eq "current") {
+  Join-Path $localAppData "Screenpipe fixture ü space"
+} else {
+  Join-Path $env:ProgramData "Screenpipe fixture $Matrix ü space"
+}
 $dataDir = Join-Path $userProfile ".screenpipe"
 $sentinel = Join-Path $dataDir "installer-acceptance-sentinel.txt"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
@@ -87,8 +96,12 @@ function Invoke-Installer([string] $Path, [string[]] $Arguments) {
   if ($process.ExitCode) { throw "$Path exited $($process.ExitCode)" }
 }
 
-Invoke-Installer $installerA @("/S", "/D=$installDir")
-$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise"
+$firstInstaller = if ($Matrix -eq "legacy-machine") { $legacyInstallerA } else { $installerA }
+$scopeArgs = if ($Matrix -eq "current") { @() } elseif ($Matrix -eq "machine") { @("/SPALLUSERS") } else { @() }
+Invoke-Installer $firstInstaller (@("/S") + $scopeArgs + @("/D=$installDir"))
+$registryRoot = if ($Matrix -eq "current") { "HKCU:" } else { "HKLM:" }
+$otherRegistryRoot = if ($Matrix -eq "current") { "HKLM:" } else { "HKCU:" }
+$uninstallKey = "$registryRoot\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise"
 $registeredA = Get-ItemProperty $uninstallKey
 if ($registeredA.DisplayVersion -ne "91.0.0" -or $registeredA.InstallLocation.Trim('"') -ne $installDir) {
   throw "A registry scope/version/path mismatch"
@@ -96,15 +109,16 @@ if ($registeredA.DisplayVersion -ne "91.0.0" -or $registeredA.InstallLocation.Tr
 $hashA = (Get-FileHash (Join-Path $installDir "screenpipe-app.exe") -Algorithm SHA256).Hash
 
 # Matches Tauri's normal update mode; /D is final by NSIS contract.
-Invoke-Installer $installerB @("/S", "/P", "/UPDATE", "/D=$installDir")
+# Existing scope and destination must be detected without /D or /SPALLUSERS.
+Invoke-Installer $installerB @("/S", "/P", "/UPDATE")
 $registeredB = Get-ItemProperty $uninstallKey
 $hashB = (Get-FileHash (Join-Path $installDir "screenpipe-app.exe") -Algorithm SHA256).Hash
 if ($registeredB.DisplayVersion -ne "92.0.0" -or $hashA -eq $hashB) {
   throw "B did not replace A with distinct version and bytes"
 }
 if (-not (Test-Path -LiteralPath $sentinel)) { throw "actual app-data sentinel was removed" }
-if (Test-Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise") {
-  throw "per-user fixture created a duplicate HKLM registration"
+if (Test-Path "$otherRegistryRoot\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise") {
+  throw "$Matrix fixture created a duplicate registration in the other scope"
 }
 
 $uninstaller = Join-Path $installDir "uninstall.exe"
@@ -120,4 +134,5 @@ if (-not (Test-Path -LiteralPath $sentinel)) { throw "uninstall removed actual a
   HashA = $hashA
   HashB = $hashB
   Sentinel = $sentinel
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ResultsDir "per-user-native-result.json") -Encoding utf8
+  Matrix = $Matrix
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ResultsDir "$Matrix-native-result.json") -Encoding utf8
