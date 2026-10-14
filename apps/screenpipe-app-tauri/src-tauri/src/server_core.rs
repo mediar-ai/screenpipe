@@ -352,6 +352,7 @@ impl ServerCore {
         workflow_catalog_dir: Option<std::path::PathBuf>,
         runtime_lifetime: tokio::sync::oneshot::Sender<()>,
     ) -> Result<Self, String> {
+        screenpipe_engine::meeting_watcher::set_capture_stopped(true);
         screenpipe_core::health_diagnostics::begin_startup(&config.data_dir);
         screenpipe_core::health_diagnostics::configure_media_required(
             !config.disable_audio

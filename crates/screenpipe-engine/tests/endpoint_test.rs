@@ -2012,4 +2012,31 @@ mod tests {
             "read-only verification must not store OCR boxes"
         );
     }
+
+    #[tokio::test]
+    async fn manual_meeting_start_is_refused_while_recording_is_stopped() {
+        let (app, db) = setup_test_app().await;
+        let start = || {
+            Request::builder()
+                .method("POST")
+                .uri("/meetings/start")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"app":"manual"}"#))
+                .unwrap()
+        };
+
+        screenpipe_engine::meeting_watcher::set_capture_stopped(true);
+        let refused = app.clone().oneshot(start()).await.unwrap();
+        let status = refused.status();
+        let body = to_bytes(refused.into_body(), usize::MAX).await.unwrap();
+        screenpipe_engine::meeting_watcher::set_capture_stopped(false);
+        assert_eq!(status, StatusCode::CONFLICT);
+        let error: TestErrorResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error.error, "recording_stopped");
+        assert!(db.get_most_recent_active_meeting().await.unwrap().is_none());
+
+        let started = app.oneshot(start()).await.unwrap();
+        assert_eq!(started.status(), StatusCode::OK);
+        assert!(db.get_most_recent_active_meeting().await.unwrap().is_some());
+    }
 }

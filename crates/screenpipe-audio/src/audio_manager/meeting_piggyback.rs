@@ -1128,17 +1128,19 @@ fn select_meeting_inputs(
     default_input: Option<String>,
     user_disabled: &HashSet<String>,
 ) -> (Vec<String>, &'static str) {
+    let configured_inputs: Vec<String> = configured
+        .into_iter()
+        .filter(|name| name.ends_with(" (input)"))
+        .collect();
     // A resolved but explicitly paused microphone must stay paused; do not
     // interpret that privacy choice as a resolver failure and open another mic.
-    let (mut inputs, source) = if !process_inputs.is_empty() {
+    let (mut inputs, source) = if !follow_default && !configured_inputs.is_empty() {
+        (configured_inputs, "configured")
+    } else if !process_inputs.is_empty() {
         (process_inputs, "process")
     } else if follow_default {
         (default_input.into_iter().collect(), "system_default")
     } else {
-        let configured_inputs: Vec<String> = configured
-            .into_iter()
-            .filter(|name| name.ends_with(" (input)"))
-            .collect();
         (configured_inputs, "configured")
     };
     inputs.retain(|name| !user_disabled.contains(name));
@@ -1802,6 +1804,22 @@ mod tests {
             &[default].into(),
         );
         assert!(inputs.is_empty());
+    }
+
+    #[test]
+    fn explicit_mic_choice_wins_over_the_meeting_apps_mic() {
+        let macbook = "MacBook Pro Microphone (input)".to_string();
+        let airpods = "AirPods Max (input)".to_string();
+        let configured = [macbook.clone(), "System Audio (output)".into()].into();
+        let (inputs, source) = select_meeting_inputs(
+            vec![airpods.clone()],
+            false,
+            configured,
+            Some(airpods),
+            &HashSet::new(),
+        );
+        assert_eq!(inputs, vec![macbook]);
+        assert_eq!(source, "configured");
     }
 
     #[test]
