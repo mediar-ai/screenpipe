@@ -12,6 +12,9 @@ import { AiToolsCard } from "@/components/settings/ai-tools-card";
 
 const libMocks = vi.hoisted(() => ({
   detectAiTools: vi.fn(),
+  isPerplexityDetected: vi.fn(async () => false),
+  buildPerplexitySetupCommand: vi.fn(async () => "fixture-command"),
+  isLocalJsonMcpInstalled: vi.fn(async () => false),
   connectAiTool: vi.fn(),
   disconnectAiTool: vi.fn(),
   connectAiToolTargets: vi.fn(),
@@ -22,6 +25,7 @@ const libMocks = vi.hoisted(() => ({
   isGeminiMcpInstalled: vi.fn(async () => false),
   isRunnerMcpInstalled: vi.fn(async () => false),
   isWindsurfMcpInstalled: vi.fn(async () => false),
+  isOpencodeMcpInstalled: vi.fn(async () => false),
   isVscodeMcpInstalled: vi.fn(async () => false),
 }));
 
@@ -56,6 +60,10 @@ vi.mock("@/lib/ai-tools-mcp", () => ({
     runner: "Runner",
     windsurf: "Windsurf (Devin Desktop)",
     vscode: "VS Code",
+    opencode: "OpenCode",
+    antigravity: "Antigravity",
+    cline: "Cline (VS Code)",
+    kiro: "Kiro IDE",
   },
   SKILLS_TARGET: {
     claude: "claude",
@@ -67,6 +75,7 @@ vi.mock("@/lib/ai-tools-mcp", () => ({
 
 vi.mock("@/lib/hooks/use-hardcoded-tiles", () => hookMocks);
 vi.mock("@/lib/external-agent-skills", () => skillsMocks);
+vi.mock("@tauri-apps/plugin-os", () => ({ platform: () => "macos" }));
 vi.mock("posthog-js", () => ({ default: { capture: vi.fn() } }));
 
 describe("AiToolsCard", () => {
@@ -74,6 +83,8 @@ describe("AiToolsCard", () => {
     vi.clearAllMocks();
     grokMocks.isGrokBotConnected.mockResolvedValue(false);
     libMocks.detectAiTools.mockResolvedValue(["claude", "codex"]);
+    libMocks.isPerplexityDetected.mockResolvedValue(false);
+    libMocks.isLocalJsonMcpInstalled.mockResolvedValue(false);
     libMocks.connectAiTool.mockResolvedValue({ command: "/app/bun", args: [] });
     libMocks.disconnectAiTool.mockResolvedValue(undefined);
     libMocks.connectAiToolTargets.mockImplementation(async (targets: string[]) => ({
@@ -85,12 +96,73 @@ describe("AiToolsCard", () => {
       failed: [],
     }));
     libMocks.isClaudeCodeMcpInstalled.mockResolvedValue(false);
+    libMocks.isOpencodeMcpInstalled.mockResolvedValue(false);
     hookMocks.getInstalledMcpVersion.mockResolvedValue(null);
     hookMocks.isCodexMcpInstalled.mockResolvedValue(false);
     skillsMocks.areExternalAgentSkillsInstalled.mockResolvedValue(false);
   });
 
   afterEach(() => cleanup());
+
+  it.each(["antigravity", "cline", "kiro"])("connects and removes %s without skills", async (id) => {
+    libMocks.detectAiTools.mockResolvedValue([id]);
+    render(<AiToolsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /AI apps/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Connect (Antigravity|Cline|Kiro)/i }));
+    await waitFor(() => expect(libMocks.connectAiToolTargets).toHaveBeenCalledWith([id]));
+    expect(await screen.findByText("All 1 connected")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    await waitFor(() => expect(libMocks.disconnectAiToolTargets).toHaveBeenCalledWith([id]));
+    expect(skillsMocks.areExternalAgentSkillsInstalled).not.toHaveBeenCalled();
+  });
+
+  it("shows Perplexity-only setup without a Connect all button or invented connection", async () => {
+    libMocks.detectAiTools.mockResolvedValue([]);
+    libMocks.isPerplexityDetected.mockResolvedValue(true);
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<AiToolsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /manage/i }));
+    expect(screen.queryByRole("button", { name: /connect all/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Set up" }));
+    expect(libMocks.buildPerplexitySetupCommand).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Copy setup command" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("fixture-command"));
+    expect(await screen.findByRole("button", { name: "Command copied" })).toBeVisible();
+    expect(screen.queryByText("Connected")).toBeNull();
+    expect(screen.queryByText("fixture-command")).toBeNull();
+    expect(libMocks.connectAiToolTargets).not.toHaveBeenCalled();
+  });
+
+  it("keeps Perplexity outside automatic connection counts and reports copy errors", async () => {
+    libMocks.detectAiTools.mockResolvedValue(["kiro"]);
+    libMocks.isPerplexityDetected.mockResolvedValue(true);
+    libMocks.isLocalJsonMcpInstalled.mockResolvedValue(true);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) } });
+    render(<AiToolsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /manage/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Set up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy setup command" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not copy");
+    expect(libMocks.connectAiToolTargets).not.toHaveBeenCalled();
+    expect(await screen.findByText("1 of 1 automatic connections set up")).toBeVisible();
+  });
+
+  it("connects OpenCode without skills and can remove the confirmed connection", async () => {
+    libMocks.detectAiTools.mockResolvedValue(["opencode"]);
+    libMocks.connectAiToolTargets.mockImplementationOnce(async (targets: string[]) => {
+      libMocks.isOpencodeMcpInstalled.mockResolvedValue(true);
+      return { succeeded: targets, failed: [] };
+    });
+    render(<AiToolsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /connect all/i }));
+    await waitFor(() => expect(libMocks.connectAiToolTargets).toHaveBeenCalledWith(["opencode"]));
+    expect(await screen.findByText("All 1 connected")).toBeVisible();
+    expect(await screen.findByText("OpenCode")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    await waitFor(() => expect(libMocks.disconnectAiToolTargets).toHaveBeenCalledWith(["opencode"]));
+    expect(skillsMocks.areExternalAgentSkillsInstalled).not.toHaveBeenCalled();
+  });
 
   it("shows VS Code as connected and allows removing its MCP connection", async () => {
     libMocks.detectAiTools.mockResolvedValue(["vscode"]);

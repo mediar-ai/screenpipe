@@ -64,6 +64,101 @@ async fn short_cue_between_native_windows_reaches_transcription() {
     assert!(calls.iter().all(|call| call.len() == 512));
 }
 
+fn burst_audio(total_frames: usize, speech_frames: &[usize]) -> Vec<f32> {
+    let mut audio = vec![0.0; total_frames * 512];
+    for &frame in speech_frames {
+        for (i, sample) in audio[frame * 512..(frame + 1) * 512].iter_mut().enumerate() {
+            *sample = if i % 2 == 0 { 0.5 } else { -0.5 };
+        }
+    }
+    audio
+}
+
+async fn admit(audio: &[f32]) -> (bool, usize, f32) {
+    let vad: Arc<tokio::sync::Mutex<Box<dyn VadEngine + Send>>> =
+        Arc::new(tokio::sync::Mutex::new(Box::new(WindowVad {
+            seen: Arc::new(Mutex::new(Vec::new())),
+        })));
+    let (mut segments, accepted, ratio) = prepare_segments(
+        audio,
+        vad,
+        None,
+        Arc::new(Mutex::new(EmbeddingManager::new(4))),
+        None,
+        "synthetic microphone",
+        false,
+        false,
+    )
+    .await
+    .unwrap();
+    let samples = match segments.recv().await {
+        Some(segment) => segment.samples.len(),
+        None => 0,
+    };
+    (accepted, samples, ratio)
+}
+
+#[tokio::test]
+async fn short_burst_in_a_30s_chunk_is_admitted_with_the_full_chunk() {
+    let audio = burst_audio(30 * 16000 / 512, &[400, 401, 402, 403, 404]);
+    let (accepted, samples, ratio) = admit(&audio).await;
+    assert!(
+        accepted,
+        "a short spoken word must not be diluted by chunk length, ratio={ratio}"
+    );
+    assert_eq!(samples, audio.len());
+}
+
+#[tokio::test]
+async fn short_burst_in_a_5s_chunk_stays_admitted() {
+    let audio = burst_audio(5 * 16000 / 512, &[60, 61, 62, 63, 64]);
+    let (accepted, samples, ratio) = admit(&audio).await;
+    assert!(accepted, "control chunk must stay admitted, ratio={ratio}");
+    assert_eq!(samples, audio.len());
+}
+
+#[tokio::test]
+async fn exact_5s_chunk_keeps_the_whole_chunk_ratio() {
+    let mut audio = burst_audio(157, &[0, 1, 2, 156]);
+    audio.truncate(5 * 16000);
+    let (accepted, samples, ratio) = admit(&audio).await;
+    assert!(accepted, "a 5 s chunk must behave as before, ratio={ratio}");
+    assert_eq!(ratio, 4.0 / 157.0);
+    assert_eq!(samples, audio.len());
+}
+
+#[tokio::test]
+async fn speech_at_both_ends_of_a_6s_chunk_stays_admitted() {
+    let audio = burst_audio(200, &[0, 1, 2, 197, 198, 199]);
+    let (accepted, samples, ratio) = admit(&audio).await;
+    assert!(
+        accepted,
+        "nothing main admits may be rejected, ratio={ratio}"
+    );
+    assert_eq!(ratio, 6.0 / 200.0);
+    assert_eq!(samples, audio.len());
+}
+
+#[tokio::test]
+async fn speech_too_thin_for_any_window_is_still_rejected() {
+    let total_frames = 30 * 16000 / 512;
+    let sparse: Vec<usize> = (0..total_frames).step_by(93).collect();
+    let (accepted, samples, ratio) = admit(&burst_audio(total_frames, &sparse)).await;
+    assert!(
+        !accepted,
+        "speech spread below the density threshold must stay rejected, ratio={ratio}"
+    );
+    assert_eq!(samples, 0);
+}
+
+#[tokio::test]
+async fn silent_30s_chunk_is_rejected() {
+    let (accepted, samples, ratio) = admit(&burst_audio(30 * 16000 / 512, &[])).await;
+    assert!(!accepted, "silence must stay rejected");
+    assert_eq!(ratio, 0.0);
+    assert_eq!(samples, 0);
+}
+
 #[test]
 fn webrtc_accepts_30ms_of_16khz_audio() {
     let mut vad = WebRtcVad::new();

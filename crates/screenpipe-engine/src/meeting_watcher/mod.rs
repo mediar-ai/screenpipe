@@ -28,7 +28,19 @@ pub use ui_scan::run_meeting_detection_loop;
 
 use screenpipe_audio::meeting_detector::MeetingDetector;
 use screenpipe_db::DatabaseManager;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Set by the desktop app while no capture session runs (search/UI only).
+/// The CLI always captures and never sets it.
+static CAPTURE_STOPPED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_capture_stopped(stopped: bool) {
+    CAPTURE_STOPPED.store(stopped, Ordering::SeqCst);
+}
+
+pub fn capture_stopped() -> bool {
+    CAPTURE_STOPPED.load(Ordering::SeqCst)
+}
 use std::sync::Arc;
 use tokio::sync::broadcast;
 

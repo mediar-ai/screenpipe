@@ -1,0 +1,22 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import {test,expect,vi,beforeEach,afterEach} from 'vitest';
+import {renderHook,act,waitFor,cleanup} from '@testing-library/react';
+const s=vi.hoisted(()=>({values:{} as Record<string,any>,writes:[]as any[],saves:0}));
+vi.mock('@tauri-apps/plugin-store',()=>({createStore:async()=>({get:async(k:string)=>structuredClone(s.values[k]),set:async(k:string,v:any)=>{s.writes.push([k,structuredClone(v)]);s.values[k]=structuredClone(v)},save:async()=>{s.saves++}})}));
+vi.mock('@tauri-apps/api/path',()=>({localDataDir:async()=>'/synthetic/data',join:async(...v:string[])=>v.join('/'),homeDir:async()=>'/synthetic/home'}));
+vi.mock('@tauri-apps/plugin-os',()=>({platform:()=>'macos'}));
+vi.mock('posthog-js',()=>({default:{identify:vi.fn()}}));
+import {useSettings}from './use-settings';
+beforeEach(()=>{s.values={};s.writes=[];s.saves=0;vi.stubGlobal('fetch',()=>{throw Error('network forbidden')})});afterEach(()=>{cleanup();vi.unstubAllGlobals()});
+async function loaded(){const h=renderHook(()=>useSettings());await waitFor(()=>expect(h.result.current.settings.isLoading).toBe(false));return h}
+for(const[key,value]of Object.entries({analyticsEnabled:false,enableFrameCache:false,isFirstTimeUser:false,fps:0,aiMaxContextChars:0,aiModel:'',customPrompt:''})){
+ test(`loading preserves explicit ${key}=${JSON.stringify(value)}`,async()=>{s.values={[key]:value};const h=await loaded();expect(h.result.current.settings[key]).toBe(value);expect(s.writes).toEqual([])})
+}
+test('missing fields use defaults and platform defaults',async()=>{const h=await loaded();expect(h.result.current.settings.analyticsEnabled).toBe(true);expect(h.result.current.settings.fps).toBe(0.2);expect(h.result.current.settings.ocrEngine).toBe('apple-native');expect(s.writes).toEqual([])});
+test('null fields use defaults',async()=>{s.values={analyticsEnabled:null,fps:null};const h=await loaded();expect(h.result.current.settings.analyticsEnabled).toBe(true);expect(h.result.current.settings.fps).toBe(0.2)});
+test('ordinary values and empty collections remain intact',async()=>{s.values={fps:2,aiModel:'synthetic-model',devMode:true,ignoredWindows:[]};const h=await loaded();expect(h.result.current.settings).toMatchObject(s.values)});
+for(const[key,value,old]of [['analyticsEnabled',false,true],['fps',0,2],['customPrompt','','synthetic prior']]as const){
+ test(`accepted ${key} update survives hook remount and preserves unrelated preference`,async()=>{s.values={[key]:old,port:4242,aiModel:'synthetic-model'};const h=await loaded();await act(async()=>{await h.result.current.updateSettings({[key]:value})});expect(h.result.current.settings[key]).toBe(value);h.unmount();const reloaded=await loaded();expect(reloaded.result.current.settings[key]).toBe(value);expect(reloaded.result.current.settings.port).toBe(4242);expect(reloaded.result.current.settings.aiModel).toBe('synthetic-model')})
+}
+test('custom data directory remains available',async()=>{s.values={dataDir:'/synthetic/custom'};const h=await loaded();expect(await h.result.current.getDataDir()).toBe('/synthetic/custom')});
