@@ -5778,7 +5778,8 @@ mod tests {
             std::fs::write(&path, serde_json::to_vec(&settings).unwrap()).unwrap();
             ensure_pi_settings_defaults(dir.path()).unwrap();
             settings["packages"] = json!(["npm:other-extension", REQUIRED_PI_EXTENSION_PACKAGE]);
-            let migrated: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            let migrated: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
             assert_eq!(migrated, settings);
             let original = std::fs::read(&path).unwrap();
             ensure_pi_settings_defaults(dir.path()).unwrap();
@@ -5790,7 +5791,10 @@ mod tests {
     fn pi_subagents_pin_registers_fresh_desktop_profiles() {
         let mut settings = json!({"theme":"dark", "packages":["npm:other-extension"]});
         assert!(normalize_required_pi_extension_setting(&mut settings).unwrap());
-        assert_eq!(settings["packages"], json!(["npm:other-extension", REQUIRED_PI_EXTENSION_PACKAGE]));
+        assert_eq!(
+            settings["packages"],
+            json!(["npm:other-extension", REQUIRED_PI_EXTENSION_PACKAGE])
+        );
         assert_eq!(settings["theme"], "dark");
         assert!(!normalize_required_pi_extension_setting(&mut settings).unwrap());
     }
