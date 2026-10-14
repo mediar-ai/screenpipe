@@ -876,7 +876,13 @@ impl AudioManager {
             .write()
             .await
             .insert(device.to_string());
-        self.start_device(&device).await?;
+        if device.device_type == crate::core::device::DeviceType::Input
+            && self.meeting_piggyback_owns_normal_capture().await
+        {
+            self.start_session_device(&device, None).await?;
+        } else {
+            self.start_device(&device).await?;
+        }
         if !self.is_device_actively_streaming(&device) {
             return Err(anyhow!(
                 "Device {} did not start: capture is gated or the stream is unavailable",
@@ -3206,6 +3212,39 @@ mod tests {
             .unwrap_err();
         assert!(error.to_string().contains("waiting for an active meeting"));
         assert!(manager.session_devices().is_empty());
+    }
+
+    #[tokio::test]
+    async fn resume_during_smart_recording_meeting_opens_a_session_stream() {
+        let db = Arc::new(
+            DatabaseManager::new("sqlite::memory:", Default::default())
+                .await
+                .unwrap(),
+        );
+        let detector = Arc::new(MeetingDetector::new());
+        let manager = AudioManager::new(
+            AudioManagerOptions {
+                is_disabled: true, // Construct without models or opening hardware.
+                experimental_meeting_piggyback: true,
+                meeting_detector: Some(detector.clone()),
+                ..Default::default()
+            },
+            db,
+        )
+        .await
+        .unwrap();
+        manager.options.write().await.is_disabled = false;
+        *manager.status.write().await = AudioManagerStatus::Running;
+        detector.set_v2_in_meeting(true);
+        manager.set_piggyback_owns_capture(true);
+        let name = "SCR-590 microphone (input)";
+        manager.pause_device(name).await.ok();
+        let error = manager.resume_device(name).await.unwrap_err().to_string();
+        assert!(
+            !error.contains("did not start"),
+            "resume must try the meeting-session stream, not the gated normal start: {error}"
+        );
+        assert!(!manager.user_disabled_devices().await.contains(name));
     }
 
     #[tokio::test]

@@ -1553,7 +1553,7 @@ fn native_shortcut_action_callback_inner(action_ptr: *const std::os::raw::c_char
                                     .header("Content-Type", "application/json")
                                     .body(r#"{"app":"manual"}"#),
                             );
-                            if let Ok(res) = req.send() {
+                            if let Ok(res) = req.send().and_then(|r| r.error_for_status()) {
                                 track_native_overlay_event(
                                     &app_clone,
                                     "shortcut_reminder_meeting_toggled",

@@ -326,6 +326,7 @@ impl CaptureSession {
             );
         }
 
+        screenpipe_engine::meeting_watcher::set_capture_stopped(false);
         info!("Capture session started successfully");
 
         Ok(Self {
@@ -366,6 +367,7 @@ impl CaptureSession {
     /// Quit-to-search must report failures before claiming capture is stopped.
     pub async fn stop_checked(mut self) -> Result<(), String> {
         info!("Stopping capture session");
+        screenpipe_engine::meeting_watcher::set_capture_stopped(true);
         let mut failures = Vec::new();
 
         // Signal UI recorder to stop
