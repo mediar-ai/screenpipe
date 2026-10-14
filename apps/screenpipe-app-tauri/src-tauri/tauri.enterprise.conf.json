@@ -49,7 +49,8 @@
     "windows": {
       "signCommand": "powershell -ExecutionPolicy Bypass -File sign-ssl.ps1 %1",
       "nsis": {
-        "installMode": "perMachine",
+        "installMode": "both",
+        "template": "windows/enterprise-installer.nsi",
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp",
         "installerIcon": "icons/icon.ico",
