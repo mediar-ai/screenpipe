@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   ownedBrowserHide: vi.fn(),
   ownedBrowserTabHide: vi.fn(),
   ownedBrowserNavigate: vi.fn(),
+  ownedBrowserTabNavigate: vi.fn(),
+  ownedBrowserTabClose: vi.fn(),
   ownedBrowserSetBounds: vi.fn(),
 }));
 
@@ -79,9 +81,9 @@ vi.mock("@/lib/utils/tauri", () => ({
     ownedBrowserResolveSessionAccess: mocks.ownedBrowserResolveSessionAccess,
     ownedBrowserSetBounds: mocks.ownedBrowserSetBounds,
     ownedBrowserTabClearBrowsingData: vi.fn().mockResolvedValue(undefined),
-    ownedBrowserTabClose: vi.fn().mockResolvedValue(undefined),
+    ownedBrowserTabClose: mocks.ownedBrowserTabClose,
     ownedBrowserTabHide: mocks.ownedBrowserTabHide,
-    ownedBrowserTabNavigate: vi.fn().mockResolvedValue(undefined),
+    ownedBrowserTabNavigate: mocks.ownedBrowserTabNavigate,
     ownedBrowserTabSetBounds: vi.fn().mockResolvedValue(undefined),
     confirmBrowserCookieAccessForSession: vi.fn().mockResolvedValue(undefined),
     setBrowserCookieAccessState: mocks.setBrowserCookieAccessState,
@@ -145,6 +147,8 @@ describe("BrowserSidebar session access", () => {
     mocks.ownedBrowserHide.mockReset().mockResolvedValue(undefined);
     mocks.ownedBrowserTabHide.mockReset().mockResolvedValue(undefined);
     mocks.ownedBrowserNavigate.mockReset().mockResolvedValue(undefined);
+    mocks.ownedBrowserTabNavigate.mockReset().mockResolvedValue(undefined);
+    mocks.ownedBrowserTabClose.mockReset().mockResolvedValue(undefined);
     mocks.ownedBrowserSetBounds.mockReset().mockResolvedValue(undefined);
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
@@ -191,7 +195,7 @@ describe("BrowserSidebar session access", () => {
     expect(open).toHaveBeenCalledWith("/reports/weekly.md");
   });
 
-  it("shows a session prompt emitted immediately after a replacement navigation", async () => {
+  it.each(["navigation_id", "navigationId"])("shows a session prompt emitted immediately after a replacement navigation (%s)", async (navigationKey) => {
     render(<BrowserSidebar conversationId="chat-1" />);
     expect(mocks.listeners.has("owned-browser:navigate")).toBe(true);
     expect(mocks.listeners.has("owned-browser:session-access-request")).toBe(
@@ -224,7 +228,7 @@ describe("BrowserSidebar session access", () => {
         url: "https://www.reddit.com/",
         host: "reddit.com",
         already_granted: false,
-        navigationId: "nav-2",
+        [navigationKey]: "nav-2",
         owner: "chat-1",
       });
     });
@@ -246,7 +250,7 @@ describe("BrowserSidebar session access", () => {
       });
       emit("owned-browser:session-access-request", {
         request_id: "request-consent", url: "https://example.com/", host: "example.com",
-        already_granted: false, navigationId: "consent", owner: "chat-1",
+        already_granted: false, navigation_id: "consent", owner: "chat-1",
       });
     });
     expect(screen.getByText("Use your browser login?")).toBeInTheDocument();
@@ -257,6 +261,54 @@ describe("BrowserSidebar session access", () => {
     await waitFor(() => expect(mocks.ownedBrowserResolveSessionAccess).toHaveBeenCalledWith("request-consent", allow));
     expect(mocks.setBrowserCookieAccessState).toHaveBeenCalledWith(allow, !allow);
     expect(mocks.updateSettings).toHaveBeenCalledWith({ browserCookieAccessGranted: allow });
+  });
+
+  it.each([true, false])("shows native consent for a user-created tab and resolves the choice: %s", async allow => {
+    render(<BrowserSidebar conversationId="chat-1" />);
+    act(() => {
+      window.dispatchEvent(new CustomEvent("screenpipe:browser-sidebar-new-tab"));
+    });
+    const tabId = screen.getByTestId(/^tab-loading-tab-/).getAttribute("data-testid")!.replace("tab-loading-", "");
+    mocks.ownedBrowserTabHide.mockClear();
+    act(() => {
+      emit("owned-browser:navigate", {
+        tabId, url: "https://google.com/", owner: "chat-1", navigationId: "native-tab-nav", reveal: true,
+      });
+      // Exact field casing serialized by BrowserSessionAccessRequestPayload.
+      emit("owned-browser:session-access-request", {
+        request_id: "native-tab-request", url: "https://google.com/", host: "google.com",
+        already_granted: false, navigation_id: "native-tab-nav", owner: "chat-1",
+      });
+    });
+    expect(screen.getByText("Use your browser login?")).toBeVisible();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.getByTestId(`tab-loading-${tabId}`)).toHaveTextContent("false");
+    expect(mocks.ownedBrowserTabHide).toHaveBeenCalledWith(tabId);
+    expect(mocks.ownedBrowserResolveSessionAccess).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: allow ? "Use browser session" : "Continue logged out" }));
+    await waitFor(() => expect(mocks.ownedBrowserResolveSessionAccess).toHaveBeenCalledWith("native-tab-request", allow));
+    await waitFor(() => expect(screen.queryByText("Use your browser login?")).toBeNull());
+  });
+
+  it.each([
+    ["stale navigation", "chat-1", "old-nav"],
+    ["missing navigation", "chat-1", undefined],
+    ["another chat", "chat-2", "current-nav"],
+    ["missing owner", undefined, "current-nav"],
+  ])("ignores native consent for %s", (_reason, owner, navigationId) => {
+    render(<BrowserSidebar conversationId="chat-1" />);
+    act(() => {
+      emit("owned-browser:navigate", {
+        url: "https://google.com/", owner: "chat-1", navigationId: "current-nav", reveal: true,
+      });
+      emit("owned-browser:session-access-request", {
+        request_id: "ignored-request", url: "https://google.com/", host: "google.com",
+        already_granted: false, navigation_id: navigationId, owner,
+      });
+    });
+    expect(screen.queryByText("Use your browser login?")).toBeNull();
+    expect(mocks.ownedBrowserResolveSessionAccess).not.toHaveBeenCalled();
+    expect(mocks.setBrowserCookieAccessState).not.toHaveBeenCalled();
   });
 
   it("pauses loading indicators while protected-cookie help is visible", () => {
