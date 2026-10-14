@@ -32,9 +32,10 @@ the target hive/path, and only then launches it. A process launch proves only
 launch—not resumed recording.
 
 The registered machine directory and canonical uninstaller must be owned by
-Windows administrators and not writable by ordinary users. A signed
-uninstaller must use the same approved publisher certificate as the new
-installer. The script refuses an insecure/custom legacy directory rather than
+Windows administrators and not writable by ordinary users. A signed old
+uninstaller may use a different valid Mediar certificate than the new installer
+(for certificate renewal), but both must have OS-valid Mediar publisher trust.
+The script refuses an insecure/custom legacy directory rather than
 executing its contents elevated. The new signed file must also identify itself
 as the ordinary `screenpipe enterprise` product.
 

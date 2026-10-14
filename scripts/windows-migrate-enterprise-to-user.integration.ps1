@@ -50,7 +50,8 @@ function Invoke-MigrationPs51([string]$Installer,[string]$Hash) {
 function Invoke-AsTarget([string]$Executable,[string]$Arguments) {
   $name = 'Screenpipe migration integration ' + [guid]::NewGuid().ToString('N')
   $principal = New-ScheduledTaskPrincipal -UserId $target.Value -LogonType Interactive -RunLevel Limited
-  $task = New-ScheduledTask -Action (New-ScheduledTaskAction -Execute $Executable -Argument $Arguments) -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero))
+  $action = if ($Arguments) { New-ScheduledTaskAction -Execute $Executable -Argument $Arguments } else { New-ScheduledTaskAction -Execute $Executable }
+  $task = New-ScheduledTask -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero))
   Register-ScheduledTask -TaskName $name -TaskPath '\Screenpipe\' -InputObject $task | Out-Null
   try {
     Start-ScheduledTask -TaskName $name -TaskPath '\Screenpipe\'
@@ -65,6 +66,11 @@ Invoke-Setup $LegacyInstallerA @('/S',('/D=' + $machineDir))
 $machineAcl = New-Object Security.AccessControl.DirectorySecurity
 $machineAcl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)')
 Set-Acl -LiteralPath $machineDir -AclObject $machineAcl
+$oldUninstaller = Join-Path $machineDir 'uninstall.exe'
+$signedOld = Get-AuthenticodeSignature -LiteralPath $oldUninstaller
+$newSigner = (Get-AuthenticodeSignature -LiteralPath $InstallerB).SignerCertificate
+Assert ($signedOld.Status -eq 'Valid') 'old uninstaller certificate A is not OS-valid'
+Assert ($newSigner -and $newSigner.Thumbprint -ne $signedOld.SignerCertificate.Thumbprint) 'old uninstaller certificate A and new installer certificate B must differ'
 $before = Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise'
 $hashA = (Get-FileHash (Join-Path $machineDir 'screenpipe-app.exe')).Hash
 $hashBInstaller = (Get-FileHash $InstallerB).Hash
@@ -74,6 +80,64 @@ try { & $migration -TargetUser $TargetUser -InstallerPath $InstallerB -Installer
 catch { $badHashRejected = $_.Exception.Message -match 'SHA-256' }
 Assert $badHashRejected 'bad hash was not rejected'
 Assert ((Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise').DisplayVersion -eq $before.DisplayVersion) 'bad hash changed machine install'
+
+# An explicit target write ACE is unsafe even when owner and broad-group ACLs
+# otherwise look correct. Ordinary Users read/execute remains supported.
+$uninstallerAcl = Get-Acl -LiteralPath $oldUninstaller
+$targetWrite = New-Object Security.AccessControl.FileSystemAccessRule($target,'Write','Allow')
+$uninstallerAcl.AddAccessRule($targetWrite)
+Set-Acl -LiteralPath $oldUninstaller -AclObject $uninstallerAcl
+$explicitTargetWriteRejected = $false
+try { & $migration -TargetUser $TargetUser -InstallerPath $InstallerB -InstallerSha256 $hashBInstaller -InstallDirectory $userDir -Confirm:$false }
+catch { $explicitTargetWriteRejected = $_.Exception.Message -match 'untrusted SID' }
+Assert $explicitTargetWriteRejected 'explicit target-write ACE on old uninstaller was not rejected'
+Assert (Test-Path -LiteralPath $oldUninstaller) 'unsafe uninstaller ACL test removed the app'
+$uninstallerAcl.RemoveAccessRuleAll($targetWrite)
+Set-Acl -LiteralPath $oldUninstaller -AclObject $uninstallerAcl
+
+# A target-created staging junction must be rejected without following it or
+# overwriting an administrator canary.
+$stageRoot = Join-Path $env:ProgramData 'ScreenpipeMigration'
+Assert (-not (Test-Path -LiteralPath $stageRoot)) 'security fixture requires an absent migration staging root'
+$canaryDir = Join-Path $ResultsDir 'staging-junction-canary'
+New-Item -ItemType Directory -Force -Path $canaryDir | Out-Null
+$canary = Join-Path $canaryDir 'user-phase.ps1'
+Set-Content -LiteralPath $canary -Value 'ADMIN-CANARY'
+Invoke-AsTarget "$env:WINDIR\System32\cmd.exe" ("/d /c mklink /J `"$stageRoot`" `"$canaryDir`"")
+$junctionRejected = $false
+try { & $migration -TargetUser $TargetUser -InstallerPath $InstallerB -InstallerSha256 $hashBInstaller -InstallDirectory $userDir -Confirm:$false }
+catch { $junctionRejected = $_.Exception.Message -match 'reparse point' }
+Assert $junctionRejected 'target-created staging junction was not rejected'
+Assert ((Get-Content -Raw -LiteralPath $canary).Trim() -eq 'ADMIN-CANARY') 'staging junction overwrote the admin canary'
+[IO.Directory]::Delete($stageRoot)
+
+# Establish the same protected namespace production creates, then prove the
+# same-target lock returns immediately and explicitly.
+$rootAcl = New-Object Security.AccessControl.DirectorySecurity
+$rootAcl.SetSecurityDescriptorSddlForm("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;$($target.Value))")
+New-Item -ItemType Directory -Path $stageRoot | Out-Null; Set-Acl -LiteralPath $stageRoot -AclObject $rootAcl
+$targetStage = Join-Path $stageRoot $target.Value.Replace('-','_')
+New-Item -ItemType Directory -Path $targetStage | Out-Null; Set-Acl -LiteralPath $targetStage -AclObject $rootAcl
+$heldLock = [IO.File]::Open((Join-Path $targetStage 'migration.lock'),'OpenOrCreate','ReadWrite','None')
+$alreadyRunningRejected = $false
+try {
+  try { & $migration -TargetUser $TargetUser -InstallerPath $InstallerB -InstallerSha256 $hashBInstaller -InstallDirectory $userDir -Confirm:$false }
+  catch { $alreadyRunningRejected = $_.Exception.Message -match 'already running' }
+} finally { $heldLock.Dispose() }
+Assert $alreadyRunningRejected 'same-target concurrent run did not return already-running'
+
+$blockedDestinationAcl = New-Object Security.AccessControl.DirectorySecurity
+$blockedDestinationAcl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)')
+New-Item -ItemType Directory -Force -Path $userDir | Out-Null
+Set-Acl -LiteralPath $userDir -AclObject $blockedDestinationAcl
+$destinationRejectedBeforeRemoval = $false
+try { & $migration -TargetUser $TargetUser -InstallerPath $InstallerB -InstallerSha256 $hashBInstaller -InstallDirectory $userDir -Confirm:$false }
+catch { $destinationRejectedBeforeRemoval = $true }
+Assert $destinationRejectedBeforeRemoval 'pre-existing unwritable destination was not rejected'
+Assert (Test-Path -LiteralPath $oldUninstaller) 'destination preflight failure removed the old app'
+$sameHostLockProbe = [IO.File]::Open((Join-Path $targetStage 'migration.lock'),'Open','ReadWrite','None')
+$sameHostLockProbe.Dispose()
+[IO.Directory]::Delete($userDir)
 
 $tasksBefore = @(Get-ScheduledTask -TaskPath '\Screenpipe\' -ErrorAction SilentlyContinue).Count
 & $migration -TargetUser $TargetUser -InstallerPath $InstallerB -InstallerSha256 $hashBInstaller -InstallDirectory $userDir -WhatIf
@@ -115,6 +179,11 @@ Assert ((Get-Content -Raw $statePath | ConvertFrom-Json).Phase -eq 'user-install
 $userAcl = New-Object Security.AccessControl.DirectorySecurity
 $userAcl.SetSecurityDescriptorSddlForm("O:$($target.Value)G:$($target.Value)D:P(A;OICI;FA;;;$($target.Value))(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)")
 Set-Acl -LiteralPath $userDir -AclObject $userAcl
+# Simulate restart after the uninstaller completed but before the durable phase
+# advanced. Absence of both recorded old exe and HKLM registration must recover.
+$interrupted = Get-Content -Raw $statePath | ConvertFrom-Json
+$interrupted.Phase = 'uninstalling-machine'
+$interrupted | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding UTF8
 Invoke-MigrationPs51 $InstallerB $hashBInstaller
 $registeredB = Target-Uninstall
 Assert ($null -ne $registeredB) 'target HKU registration missing after migration'
@@ -128,7 +197,14 @@ $markerB = Join-Path $profile '.screenpipe\installer-proof-launch-B.txt'
 $markerBText = Get-Content -Raw $markerB
 Assert ($markerBText -match ('sid=' + [regex]::Escape($target.Value)) -and $markerBText -match 'elevated=0' -and $markerBText -match 'is_admin=False') 'B did not launch with the target limited token'
 
-# A completed rerun is a verified no-op.
+# An interrupted finalization with the exact expected per-user installation
+# must retry verification/launch, then a completed rerun is a verified no-op.
+$retryState = Get-Content -Raw $statePath | ConvertFrom-Json
+$retryState.Phase = 'user-install-failed'
+$retryState | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding UTF8
+Remove-Item -LiteralPath $markerB -Force
+Invoke-MigrationPs51 $InstallerB $hashBInstaller
+Assert (Test-Path -LiteralPath $markerB) 'interrupted finalization did not retry target launch'
 Invoke-MigrationPs51 $InstallerB $hashBInstaller
 
 # A normal B -> C update stays in the target's limited token and retains scope/path.
@@ -138,9 +214,14 @@ $hashC = (Get-FileHash (Join-Path $userDir 'screenpipe-app.exe')).Hash
 Assert ($registeredC.DisplayVersion -ne $registeredB.DisplayVersion -and $hashC -ne $hashB) 'C did not replace B with a distinct version/hash'
 Assert ($registeredC.InstallLocation.Trim('"') -eq $userDir) 'C changed the per-user update path'
 Assert (-not (Test-Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise')) 'C update created machine registration'
-Invoke-AsTarget (Join-Path $userDir 'screenpipe-app.exe') ''
-$markerC = Get-Content -Raw (Join-Path $profile '.screenpipe\installer-proof-launch-C.txt')
+$userExe = Join-Path $userDir 'screenpipe-app.exe'
+$markerCPath = Join-Path $profile '.screenpipe\installer-proof-launch-C.txt'
+Remove-Item -LiteralPath $markerCPath -Force -ErrorAction SilentlyContinue
+Invoke-AsTarget "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" ("-NoProfile -NonInteractive -Command `"Start-Process -FilePath '" + $userExe.Replace("'","''") + "'`"")
+for ($i=0; $i -lt 40 -and -not (Test-Path -LiteralPath $markerCPath); $i++) { Start-Sleep -Milliseconds 250 }
+$markerC = Get-Content -Raw $markerCPath
 Assert ($markerC -match 'elevated=0' -and $markerC -match 'is_admin=False') 'C did not launch non-elevated as target'
+Get-CimInstance Win32_Process -Filter "Name='screenpipe-app.exe'" | Where-Object { $_.ExecutablePath -eq $userExe } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 
 [pscustomobject]@{
   TargetSid = $target.Value
@@ -152,6 +233,12 @@ Assert ($markerC -match 'elevated=0' -and $markerC -match 'is_admin=False') 'C d
   PayloadHashC = $hashC
   SentinelPreserved = Test-Path $sentinel
   BadHashRejectedBeforeMutation = $badHashRejected
+  ExplicitTargetWriteRejected = $explicitTargetWriteRejected
+  StagingJunctionRejected = $junctionRejected
+  StagingCanaryPreserved = $true
+  AlreadyRunningRejected = $alreadyRunningRejected
+  UnwritableDestinationRejectedBeforeRemoval = $destinationRejectedBeforeRemoval
+  OldAndNewSignerThumbprintsDiffer = $true
   FailedAfterRemoval = $failedAfterRemoval
   RecoveryPhase = (Get-Content -Raw $statePath | ConvertFrom-Json).Phase
   AutostartArgumentsPreserved = $true

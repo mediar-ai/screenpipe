@@ -100,7 +100,7 @@ function Get-Signature([string] $Path) {
   }
   $cert.Thumbprint
 }
-function Assert-SamePublisherSignature([string] $Path, [string] $Thumbprint, [string] $Label) {
+function Assert-MediarSignature([string] $Path, [string] $Label) {
   $signature = Get-AuthenticodeSignature -LiteralPath $Path
   if ($Label -eq 'machine uninstaller' -and $signature.Status -eq [Management.Automation.SignatureStatus]::NotSigned) {
     return
@@ -108,8 +108,9 @@ function Assert-SamePublisherSignature([string] $Path, [string] $Thumbprint, [st
   if ($signature.Status -ne [Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
     Fail "$Label Authenticode signature is not valid (status $($signature.Status))"
   }
-  if ($signature.SignerCertificate.Thumbprint -ne $Thumbprint) {
-    Fail "$Label is not signed by the same trusted publisher certificate as the new installer"
+  $organization = $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+  if ($organization -ne $publisher -and $signature.SignerCertificate.Subject -notmatch '(^|,\s*)(O|CN)="?Mediar, Inc\.?"?($|,)') {
+    Fail "$Label signer is '$($signature.SignerCertificate.Subject)', not $publisher"
   }
 }
 function Get-Target([string] $Name) {
@@ -156,32 +157,67 @@ function Assert-NoReparseAncestors([string] $Path) {
     $cursor = $parent
   }
 }
+function Get-Sid($Identity) {
+  if ($Identity -is [Security.Principal.SecurityIdentifier]) { return $Identity.Value }
+  if ($Identity -isnot [Security.Principal.IdentityReference]) { $Identity = New-Object Security.Principal.NTAccount([string]$Identity) }
+  $Identity.Translate([Security.Principal.SecurityIdentifier]).Value
+}
 function Assert-AdminControlled([string] $Path, [string] $Label) {
   Assert-NoReparseAncestors $Path
   $item = Get-Item -LiteralPath $Path -Force
-  $owner = $item.GetAccessControl().Owner
-  $trustedOwners = @('NT AUTHORITY\SYSTEM','BUILTIN\Administrators','NT SERVICE\TrustedInstaller')
-  if ($owner -notin $trustedOwners) { Fail "$Label is not owned by SYSTEM, Administrators, or TrustedInstaller: $Path" }
+  $security = Get-Acl -LiteralPath $item.FullName
+  $ownerSid = Get-Sid $security.Owner
+  $trusted = @('S-1-5-18','S-1-5-32-544','S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+  if ($ownerSid -notin $trusted) { Fail "$Label is not owned by SYSTEM, Administrators, or TrustedInstaller: $Path (owner $ownerSid)" }
   $dangerous = [Security.AccessControl.FileSystemRights]::WriteData -bor
     [Security.AccessControl.FileSystemRights]::CreateDirectories -bor [Security.AccessControl.FileSystemRights]::AppendData -bor
     [Security.AccessControl.FileSystemRights]::WriteExtendedAttributes -bor [Security.AccessControl.FileSystemRights]::WriteAttributes -bor
     [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
     [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
-  $broad = @('S-1-1-0','S-1-5-11','S-1-5-32-545')
-  foreach ($rule in $item.GetAccessControl([Security.AccessControl.AccessControlSections]::Access).Access) {
-    if ($rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $dangerous) -and $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -in $broad) {
-      Fail "$Label grants write/modify/delete access to ordinary users: $Path"
+  foreach ($rule in $security.Access) {
+    if (($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) { continue }
+    $ruleSid = Get-Sid $rule.IdentityReference
+    if ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and ($rule.FileSystemRights -band $dangerous) -ne 0 -and $ruleSid -notin $trusted) {
+      Fail "$Label grants write/delete/permission access to untrusted SID $ruleSid`: $Path"
     }
   }
 }
-function Protect-Directory([string] $Path, [string] $TargetSid) {
-  Assert-NoReparseAncestors (Split-Path -Parent $Path)
-  if (-not (Test-Path -LiteralPath $Path)) { New-Item -ItemType Directory -Path $Path | Out-Null }
+function Assert-TrustedOwner([string] $Path, [string] $Label) {
   Assert-NoReparseAncestors $Path
+  $ownerSid = Get-Sid (Get-Acl -LiteralPath $Path).Owner
+  if ($ownerSid -notin @('S-1-5-18','S-1-5-32-544','S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')) {
+    Fail "$Label was not created under a trusted owner: $Path (owner $ownerSid)"
+  }
+}
+function Assert-SafeNamespaceParent([string] $Path, [string] $Label) {
+  Assert-NoReparseAncestors $Path
+  $security = Get-Acl -LiteralPath $Path
+  $ownerSid = Get-Sid $security.Owner
+  $trusted = @('S-1-5-18','S-1-5-32-544','S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+  if ($ownerSid -notin $trusted) { Fail "$Label has an untrusted owner $ownerSid`: $Path" }
+  $namespaceDanger = [Security.AccessControl.FileSystemRights]::Delete -bor
+    [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+    [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
+  foreach ($rule in $security.Access) {
+    if (($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) { continue }
+    $ruleSid = Get-Sid $rule.IdentityReference
+    if ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and ($rule.FileSystemRights -band $namespaceDanger) -ne 0 -and $ruleSid -notin $trusted) {
+      Fail "$Label grants delete-child/delete/permission access to untrusted SID $ruleSid`: $Path"
+    }
+  }
+}
+function New-ProtectedDirectory([string] $Path, [string] $TargetSid, [string] $Label) {
+  $parent = Split-Path -Parent $Path
+  Assert-SafeNamespaceParent $parent "$Label parent"
   $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetSecurityDescriptorSddlForm("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;$TargetSid)")
-  Set-Acl -LiteralPath $Path -AclObject $acl
-  Assert-AdminControlled $Path 'migration staging directory'
+  if (Test-Path -LiteralPath $Path) { Assert-AdminControlled $Path "existing $Label" }
+  else { [IO.Directory]::CreateDirectory($Path, $acl) | Out-Null; Assert-TrustedOwner $Path "new $Label" }
+  Assert-AdminControlled $Path $Label
+}
+function Initialize-Staging([string] $Root, [string] $Directory, [string] $TargetSid) {
+  New-ProtectedDirectory $Root $TargetSid 'migration staging root'
+  New-ProtectedDirectory $Directory $TargetSid 'migration target staging directory'
 }
 function New-ResultDirectory([string] $Path, [string] $TargetSid) {
   Assert-NoReparseAncestors (Split-Path -Parent $Path)
@@ -244,7 +280,9 @@ $machineEntry = if ($machine.Count) { $machine[0] } else { $null }
 $migrationId = $target.Sid.Replace('-', '_')
 $migrationDir = Join-Path $stateRoot $migrationId
 $statePath = Join-Path $migrationDir "result.json"
+if (Test-Path -LiteralPath $stateRoot) { Assert-AdminControlled $stateRoot 'existing migration staging root' }
 if (Test-Path -LiteralPath $migrationDir) { Assert-AdminControlled $migrationDir 'existing migration state directory' }
+if (Test-Path -LiteralPath $statePath) { Assert-AdminControlled $statePath 'existing migration state file' }
 $existingState = if (Test-Path -LiteralPath $statePath) { Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json } else { $null }
 if ($existingState) {
   if ($existingState.TargetSid -ne $target.Sid -or (Canonical $existingState.Destination) -ne $destination -or $existingState.InstallerSha256 -ne $actualHash -or $existingState.SignerThumbprint -ne $signerThumbprint) {
@@ -261,9 +299,19 @@ if ($user.Count -eq 1 -and -not $machineEntry) {
     Write-Host "Already migrated and administrator-verified: $($target.Account) owns version $($user[0].Version) at $destination"
     return
   }
-  Fail "TargetUser has a per-user installation without matching completed migration state; refusing to claim it is already migrated"
+  if (-not $existingState -or $existingState.Phase -notin @('uninstalling-machine','removed-pending-user-install','user-install-failed')) {
+    Fail "TargetUser has a per-user installation without matching recovery state; refusing to claim it is already migrated"
+  }
 }
-if (-not $machineEntry -and (-not $existingState -or $existingState.Phase -notin @('removed-pending-user-install','user-install-failed'))) {
+$removedKnown = -not $machineEntry -and $existingState -and $existingState.Phase -in @('removed-pending-user-install','user-install-failed')
+if (-not $machineEntry -and $existingState -and $existingState.Phase -eq 'uninstalling-machine') {
+  $recordedOldExe = [string]$existingState.OldExe
+  if ($recordedOldExe -and -not (Test-Path -LiteralPath $recordedOldExe) -and
+      -not (Read-Uninstall LocalMachine Registry64 $productKey) -and -not (Read-Uninstall LocalMachine Registry32 $productKey)) {
+    $removedKnown = $true
+  }
+}
+if (-not $machineEntry -and -not $removedKnown) {
   Fail "no supported machine-wide Screenpipe Enterprise registration was found"
 }
 if ($machineEntry) {
@@ -275,7 +323,7 @@ if ($machineEntry) {
   if ((Canonical $machineEntry.Uninstall) -ne $canonicalUninstaller) { Fail "machine UninstallString is not the canonical installer-owned uninstaller" }
   Assert-AdminControlled $oldDir 'machine installation directory'
   Assert-AdminControlled $canonicalUninstaller 'machine uninstaller'
-  Assert-SamePublisherSignature $canonicalUninstaller $signerThumbprint 'machine uninstaller'
+  Assert-MediarSignature $canonicalUninstaller 'machine uninstaller'
   $installerProductVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($sourceInstaller).ProductVersion
   try {
     $oldVersion = [version]$machineEntry.Version
@@ -315,17 +363,20 @@ Write-Host "  action:      validate target token, remove machine copy, install a
 if ($WhatIfPreference) { Write-Host "WhatIf complete: no files, tasks, processes, or registry values were changed."; return }
 if (-not $PSCmdlet.ShouldProcess($target.Account, "migrate Screenpipe Enterprise machine installation to per-user")) { return }
 
-Protect-Directory $migrationDir $target.Sid
-$stagedInstaller = Join-Path $migrationDir "screenpipe-enterprise-setup.exe"
-if (Test-Path -LiteralPath $stagedInstaller) {
-  Assert-AdminControlled $stagedInstaller 'staged installer'
-  if ((Hash-File $stagedInstaller) -ne $actualHash) { Fail "existing staged installer does not match the recovery-bound hash" }
-} else {
-  Copy-Item -LiteralPath $sourceInstaller -Destination $stagedInstaller
-}
+Initialize-Staging $stateRoot $migrationDir $target.Sid
+$lockPath = Join-Path $migrationDir 'migration.lock'
+if (Test-Path -LiteralPath $lockPath) { Assert-AdminControlled $lockPath 'existing migration lock file' }
+try { $migrationLock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+catch [IO.IOException] { Fail "another migration for this target is already running" }
+try {
+$stagedInstaller = Join-Path $migrationDir ("installer-" + [guid]::NewGuid().ToString('N') + '.exe')
+$sourceStream = [IO.File]::Open($sourceInstaller, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+$stagedStream = [IO.File]::Open($stagedInstaller, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+try { $sourceStream.CopyTo($stagedStream); $stagedStream.Flush($true) } finally { $stagedStream.Dispose(); $sourceStream.Dispose() }
+Assert-AdminControlled $stagedInstaller 'staged installer'
 if ((Hash-File $stagedInstaller) -ne $actualHash) { Fail "staged installer hash changed" }
 $null = Get-Signature $stagedInstaller
-$runner = Join-Path $migrationDir "user-phase.ps1"
+$runner = Join-Path $migrationDir ("runner-" + [guid]::NewGuid().ToString('N') + '.ps1')
 $runnerTemplate = @'
 # screenpipe — AI that knows everything you've seen, said, or heard
 # https://screenpipe.com
@@ -360,7 +411,8 @@ try {
   $signerName = $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
   if ($signature.Status -ne 'Valid' -or ($signerName -ne 'Mediar, Inc.' -and $signature.SignerCertificate.Subject -notmatch '(^|,\s*)(O|CN)="?Mediar, Inc\.?"?($|,)')) { throw 'staged installer signature/publisher is invalid' }
   $parent = Split-Path -Parent $destination; New-Item -ItemType Directory -Force -Path $parent | Out-Null
-  $probe = Join-Path $parent ('.screenpipe-migration-' + [guid]::NewGuid().ToString('N')); [IO.File]::WriteAllText($probe,'probe'); Remove-Item -LiteralPath $probe
+  New-Item -ItemType Directory -Force -Path $destination | Out-Null
+  $probe = Join-Path $destination ('.screenpipe-migration-' + [guid]::NewGuid().ToString('N')); [IO.File]::WriteAllText($probe,'probe'); Remove-Item -LiteralPath $probe
   if ($ProbeOnly) { Finish 'probe-complete' 'identity, limited token, profile, trust, and destination write probe passed'; return }
   $p = Start-Process -FilePath $installer -ArgumentList @('/S',('/D=' + $destination)) -Wait -PassThru
   if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
@@ -376,15 +428,15 @@ try {
   Start-Process -FilePath $exe
   Finish 'verified-complete' ("installed version " + $version + "; payload sha256 " + $payloadHash) $version $payloadHash
 } catch {
-  $rawCause = $_.Exception.Message -replace '[\r\n]',' '
-  $cause = $rawCause.Substring(0, [Math]::Min(512, $rawCause.Length))
+  $cause = $_.Exception.Message -replace '[\r\n]',' '
   try { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $supportLog) | Out-Null; Add-Content -LiteralPath $supportLog -Value (([DateTime]::UtcNow.ToString('o')) + ' enterprise machine-to-user migration failed; phase=' + $(if($ProbeOnly){'preflight'}else{'install'}) + '; cause=' + $cause) } catch {}
   if ($ProbeOnly) { Finish 'preflight-failed' $cause } else { Finish 'user-install-failed' $cause }
 }
 '@
-[IO.File]::WriteAllText($runner, $runnerTemplate, [Text.UTF8Encoding]::new($true))
-Protect-Directory $migrationDir $target.Sid
-$state = [ordered]@{ Phase='preflight-complete'; TargetSid=$target.Sid; TargetAccount=$target.Account; Destination=$destination; Installer=$stagedInstaller; InstallerSha256=$actualHash; SignerThumbprint=$signerThumbprint; AutostartEnabled=$restoreAutostart; AutostartArguments=$autostartArguments; MachineVersion=if($machineEntry){$machineEntry.Version}else{$existingState.MachineVersion}; UpdatedUtc=[DateTime]::UtcNow.ToString('o') }
+$runnerStream = [IO.File]::Open($runner, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+try { $runnerWriter = New-Object IO.StreamWriter($runnerStream, ([Text.UTF8Encoding]::new($true))); $runnerWriter.Write($runnerTemplate); $runnerWriter.Flush(); $runnerStream.Flush($true) } finally { if ($runnerWriter) { $runnerWriter.Dispose() } else { $runnerStream.Dispose() } }
+Assert-AdminControlled $runner 'migration runner'
+$state = [ordered]@{ Phase=if($removedKnown){'removed-pending-user-install'}else{'preflight-complete'}; TargetSid=$target.Sid; TargetAccount=$target.Account; Destination=$destination; Installer=$stagedInstaller; InstallerSha256=$actualHash; SignerThumbprint=$signerThumbprint; AutostartEnabled=$restoreAutostart; AutostartArguments=$autostartArguments; MachineVersion=if($machineEntry){$machineEntry.Version}else{$existingState.MachineVersion}; OldExe=if($machineEntry){$oldExe}else{[string]$existingState.OldExe}; UpdatedUtc=[DateTime]::UtcNow.ToString('o') }
 Save-State $state $statePath
 
 $taskPath = "\Screenpipe\"
@@ -396,12 +448,14 @@ function Invoke-UserPhase([bool] $ProbeOnly) {
   New-ResultDirectory $invocationDir $target.Sid
   $taskResult = Join-Path $invocationDir 'user-result.json'
   $configPath = Join-Path $migrationDir ("invocation-" + $invocationId + '.json')
-  [ordered]@{
-    InvocationId=$invocationId; ExpectedSid=$target.Sid; ExpectedProfile=$target.Profile; Destination=$destination
-    RestoreAutostart=$restoreAutostart; AutostartArguments=$autostartArguments; Installer=$stagedInstaller
-    ExpectedHash=$actualHash; ResultPath=$taskResult
-  } | ConvertTo-Json | Set-Content -LiteralPath $configPath -Encoding UTF8
-  Protect-Directory $migrationDir $target.Sid
+    $configJson = [ordered]@{
+      InvocationId=$invocationId; ExpectedSid=$target.Sid; ExpectedProfile=$target.Profile; Destination=$destination
+      RestoreAutostart=$restoreAutostart; AutostartArguments=$autostartArguments; Installer=$stagedInstaller
+      ExpectedHash=$actualHash; ResultPath=$taskResult
+    } | ConvertTo-Json
+    $configStream = [IO.File]::Open($configPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $configWriter = New-Object IO.StreamWriter($configStream, ([Text.UTF8Encoding]::new($true))); $configWriter.Write($configJson); $configWriter.Flush(); $configStream.Flush($true) } finally { if ($configWriter) { $configWriter.Dispose() } else { $configStream.Dispose() } }
+    Assert-AdminControlled $configPath 'migration invocation input'
   $taskName = "Screenpipe user migration $invocationId"
   $arguments = "-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File $(Quote $runner) -ConfigPath $(Quote $configPath)"
   if ($ProbeOnly) { $arguments += ' -ProbeOnly' }
@@ -434,7 +488,7 @@ try {
   $probeResult = Invoke-UserPhase $true
   if ($probeResult.Phase -ne 'probe-complete') { Fail "target-token preflight failed: $($probeResult.Cause)" }
 } catch {
-  $state.Phase='failed-before-uninstall'; $state.Cause=$_.Exception.Message; $state.UpdatedUtc=[DateTime]::UtcNow.ToString('o'); Save-State $state $statePath
+  $state.Phase=if($removedKnown){'user-install-failed'}else{'failed-before-uninstall'}; $state.Cause=$_.Exception.Message; $state.UpdatedUtc=[DateTime]::UtcNow.ToString('o'); Save-State $state $statePath
   throw
 }
 
@@ -462,4 +516,7 @@ try {
 } catch {
   if ($state.Phase -ne 'verified-complete') { $state.Phase='user-install-failed'; $state.Cause=$_.Exception.Message; $state.UpdatedUtc=[DateTime]::UtcNow.ToString('o'); Save-State $state $statePath }
   throw
+}
+} finally {
+  $migrationLock.Dispose()
 }
