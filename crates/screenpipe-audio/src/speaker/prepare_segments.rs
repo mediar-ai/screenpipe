@@ -95,9 +95,10 @@ pub async fn prepare_segments(
 
     // Measure density over a fixed window so a short word is admitted the same
     // way whether it lands in a 5 s chunk or a 30 s one.
-    let window_frames = (5 * 16000 / frame_size).max(1);
+    let window_frames = (5 * 16000usize).div_ceil(frame_size);
+    let chunk_ratio = speech_frame_count as f32 / total_frames as f32;
     let speech_ratio = if speech_frames.len() <= window_frames {
-        speech_frame_count as f32 / total_frames as f32
+        chunk_ratio
     } else {
         let mut window_speech = speech_frames[..window_frames]
             .iter()
@@ -109,7 +110,7 @@ pub async fn prepare_segments(
             window_speech -= usize::from(speech_frames[frame - window_frames]);
             densest = densest.max(window_speech);
         }
-        densest as f32 / window_frames as f32
+        chunk_ratio.max(densest as f32 / window_frames as f32)
     };
     let current_min_ratio = crate::vad::min_speech_ratio();
     debug!(

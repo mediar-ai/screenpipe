@@ -118,6 +118,28 @@ async fn short_burst_in_a_5s_chunk_stays_admitted() {
 }
 
 #[tokio::test]
+async fn exact_5s_chunk_keeps_the_whole_chunk_ratio() {
+    let mut audio = burst_audio(157, &[0, 1, 2, 156]);
+    audio.truncate(5 * 16000);
+    let (accepted, samples, ratio) = admit(&audio).await;
+    assert!(accepted, "a 5 s chunk must behave as before, ratio={ratio}");
+    assert_eq!(ratio, 4.0 / 157.0);
+    assert_eq!(samples, audio.len());
+}
+
+#[tokio::test]
+async fn speech_at_both_ends_of_a_6s_chunk_stays_admitted() {
+    let audio = burst_audio(200, &[0, 1, 2, 197, 198, 199]);
+    let (accepted, samples, ratio) = admit(&audio).await;
+    assert!(
+        accepted,
+        "nothing main admits may be rejected, ratio={ratio}"
+    );
+    assert_eq!(ratio, 6.0 / 200.0);
+    assert_eq!(samples, audio.len());
+}
+
+#[tokio::test]
 async fn speech_too_thin_for_any_window_is_still_rejected() {
     let total_frames = 30 * 16000 / 512;
     let sparse: Vec<usize> = (0..total_frames).step_by(93).collect();
