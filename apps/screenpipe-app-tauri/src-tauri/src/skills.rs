@@ -27,7 +27,7 @@ use tracing::{info, warn};
 
 pub(crate) const AI_TOOL_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
-const AI_TOOL_AUTO_CONNECT_TARGETS: [&str; 12] = [
+const AI_TOOL_AUTO_CONNECT_TARGETS: [&str; 15] = [
     "claude",
     "claude-code",
     "codex",
@@ -39,6 +39,9 @@ const AI_TOOL_AUTO_CONNECT_TARGETS: [&str; 12] = [
     "windsurf",
     "vscode",
     "opencode",
+    "antigravity",
+    "cline",
+    "kiro",
     "grokbot",
 ];
 
@@ -1846,6 +1849,12 @@ mod tests {
         assert!(ai_tool_auto_connect_opt_outs_in(&root).contains("opencode"));
         set_ai_tool_auto_connect_opt_out_in(&root, "opencode", false).unwrap();
         assert!(!ai_tool_auto_connect_opt_outs_in(&root).contains("opencode"));
+        for id in ["antigravity", "cline", "kiro"] {
+            set_ai_tool_auto_connect_opt_out_in(&root, id, true).unwrap();
+            assert!(ai_tool_auto_connect_opt_outs_in(&root).contains(id));
+            set_ai_tool_auto_connect_opt_out_in(&root, id, false).unwrap();
+            assert!(!ai_tool_auto_connect_opt_outs_in(&root).contains(id));
+        }
         assert!(set_ai_tool_auto_connect_opt_out_in(&root, "../escape", true).is_err());
         let _ = std::fs::remove_dir_all(root);
     }

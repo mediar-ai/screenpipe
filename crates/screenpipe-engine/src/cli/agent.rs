@@ -55,7 +55,7 @@ pub enum AgentCommand {
     Setup {
         /// Which agent to wire up. Omit when using --all.
         #[arg(
-            value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode", "opencode"],
+            value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode", "opencode", "antigravity", "cline", "kiro"],
             required_unless_present = "all",
             conflicts_with = "all"
         )]
@@ -75,7 +75,7 @@ pub enum AgentCommand {
     /// agent's own config or other skills.
     Remove {
         /// Which agent to unwire.
-        #[arg(value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode", "opencode"])]
+        #[arg(value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode", "opencode", "antigravity", "cline", "kiro"])]
         target: String,
     },
 }
@@ -251,6 +251,9 @@ fn detected_agents_in(home: &Path) -> Vec<DetectedAgent> {
             detected.push(DetectedAgent { target, name });
         }
     }
+    for (target, name) in detected_additional_json_agents(home) {
+        detected.push(DetectedAgent { target, name });
+    }
     if opencode_detected(home) {
         detected.push(DetectedAgent {
             target: "opencode",
@@ -320,6 +323,16 @@ fn has_screenpipe_mcp(layout: &AgentLayout) -> bool {
             })
             .is_some_and(|entry| {
                 !entry.is_null()
+                    && (!matches!(
+                        layout.client,
+                        AgentClient::Antigravity | AgentClient::Cline | AgentClient::Kiro
+                    ) || (entry.get("disabled").and_then(|v| v.as_bool()) != Some(true)
+                        && entry
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(|v| !v.trim().is_empty())
+                        && entry.get("url").is_none()
+                        && entry.get("serverUrl").is_none()))
                     && (layout.mcp_format != McpFormat::OpencodeJson
                         || (entry.get("type").and_then(|v| v.as_str()) == Some("local")
                             && entry
@@ -484,6 +497,14 @@ fn detected_desktop_agents_in(home: &Path) -> Vec<DesktopDetectedAgent> {
             });
         }
     }
+    for (id, name) in detected_additional_json_agents(home) {
+        detected.push(DesktopDetectedAgent {
+            id,
+            name,
+            mcp_target: id,
+            skills_target: None,
+        });
+    }
     if opencode_detected(home) {
         detected.push(DesktopDetectedAgent {
             id: "opencode",
@@ -587,8 +608,14 @@ fn desktop_mcp_ready(layout: &AgentLayout, launch: &McpLaunchConfig) -> bool {
                             == Some(&serde_json::json!(opencode_command(launch)))
                         && entry.get("environment") == Some(&serde_json::json!(launch.env));
                 }
-                entry.get("command").and_then(|value| value.as_str())
-                    == Some(launch.command.as_str())
+                (!matches!(
+                    layout.client,
+                    AgentClient::Antigravity | AgentClient::Cline | AgentClient::Kiro
+                ) || (entry.get("disabled").and_then(|v| v.as_bool()) != Some(true)
+                    && entry.get("url").is_none()
+                    && entry.get("serverUrl").is_none()))
+                    && entry.get("command").and_then(|value| value.as_str())
+                        == Some(launch.command.as_str())
                     && entry
                         .get("args")
                         .and_then(|value| serde_json::from_value::<Vec<String>>(value.clone()).ok())
@@ -863,6 +890,13 @@ fn layout_in(target: &str, h: &Path) -> Result<AgentLayout> {
             mcp_path: h.join(".runner/mcp.json"),
             mcp_format: McpFormat::Json,
         },
+        "antigravity" | "cline" | "kiro" => AgentLayout {
+            client,
+            name: match target { "antigravity" => "Antigravity", "cline" => "Cline (VS Code)", _ => "Kiro IDE" },
+            skills_dir: None,
+            mcp_path: additional_json_config(h, target),
+            mcp_format: McpFormat::Json,
+        },
         "opencode" => AgentLayout {
             client,
             name: "OpenCode",
@@ -885,9 +919,49 @@ fn layout_in(target: &str, h: &Path) -> Result<AgentLayout> {
             mcp_format: McpFormat::Json,
         },
         other => anyhow::bail!(
-            "unknown agent target '{other}' (use: openclaw, hermes, claude-code, claude-desktop, codex, cursor, gemini, runner, windsurf, vscode, opencode)"
+            "unknown agent target '{other}' (use: openclaw, hermes, claude-code, claude-desktop, codex, cursor, gemini, runner, windsurf, vscode, opencode, antigravity, cline, kiro)"
         ),
     })
+}
+
+// Default user-level configs documented by each client. Cline's CLI and
+// alternate editor profiles have separate configs and are not inferred here.
+fn additional_json_config(home: &Path, target: &str) -> PathBuf {
+    match target {
+        "antigravity" => home.join(".gemini/config/mcp_config.json"),
+        "kiro" => home.join(".kiro/settings/mcp.json"),
+        "cline" => vscode_config(home)
+            .parent()
+            .unwrap()
+            .join("globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
+        _ => unreachable!("unsupported JSON agent"),
+    }
+}
+
+fn detected_additional_json_agents(home: &Path) -> Vec<(&'static str, &'static str)> {
+    let mut result = Vec::new();
+    if home.join(".gemini/antigravity").is_dir()
+        || additional_json_config(home, "antigravity").is_file()
+    {
+        result.push(("antigravity", "Antigravity"));
+    }
+    if additional_json_config(home, "cline")
+        .parent()
+        .and_then(Path::parent)
+        .is_some_and(Path::is_dir)
+    {
+        result.push(("cline", "Cline (VS Code)"));
+    }
+    if home.join(".kiro/settings").is_dir()
+        || vscode_config(home)
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .is_some_and(|config| config.join("Kiro/User").is_dir())
+    {
+        result.push(("kiro", "Kiro IDE"));
+    }
+    result
 }
 
 // OpenCode follows XDG on every OS, including macOS. Use the real process
@@ -1891,6 +1965,88 @@ fn merge_mcp_toml_launch(path: &Path, launch: &McpLaunchConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn additional_json_agents_detect_setup_repair_and_opt_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        std::fs::create_dir_all(home.join(".gemini")).unwrap();
+        std::fs::create_dir_all(vscode_config(home).parent().unwrap()).unwrap();
+        assert!(detected_additional_json_agents(home).is_empty());
+        std::fs::create_dir_all(home.join(".gemini/antigravity")).unwrap();
+        std::fs::create_dir_all(home.join(".kiro/settings")).unwrap();
+        std::fs::create_dir_all(additional_json_config(home, "cline").parent().unwrap()).unwrap();
+        assert_eq!(detected_additional_json_agents(home).len(), 3);
+        for id in ["antigravity", "cline", "kiro"] {
+            let layout = layout_in(id, home).unwrap();
+            assert!(layout.skills_dir.is_none());
+            assert!(detected_agents_in(home)
+                .iter()
+                .any(|agent| agent.target == id));
+            let agent = detected_desktop_agents_in(home)
+                .into_iter()
+                .find(|agent| agent.id == id)
+                .unwrap();
+            let launch = desktop_launch_config(
+                Path::new("/bundled/bun"),
+                Some("fixture-key"),
+                "http://localhost:3030",
+                agent,
+            );
+            std::fs::create_dir_all(layout.mcp_path.parent().unwrap()).unwrap();
+            std::fs::write(
+                &layout.mcp_path,
+                r#"{"theme":"dark","mcpServers":{"other":{"command":"keep"}}}"#,
+            )
+            .unwrap();
+            merge_mcp_launch(&layout, &launch).unwrap();
+            assert!(desktop_mcp_ready(&layout, &launch));
+            assert!(is_agent_setup_in(id, home));
+            let mut root: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&layout.mcp_path).unwrap()).unwrap();
+            assert_eq!(root["theme"], "dark");
+            assert_eq!(root["mcpServers"]["other"]["command"], "keep");
+            assert_eq!(
+                root["mcpServers"]["screenpipe"]["env"]["SCREENPIPE_MCP_CLIENT"],
+                id
+            );
+            root["mcpServers"]["screenpipe"]["disabled"] = true.into();
+            std::fs::write(&layout.mcp_path, root.to_string()).unwrap();
+            assert!(!desktop_mcp_ready(&layout, &launch));
+            assert!(!is_agent_setup_in(id, home));
+            merge_mcp_launch(&layout, &launch).unwrap();
+            assert!(desktop_mcp_ready(&layout, &launch));
+            remove_mcp_json(&layout.mcp_path).unwrap();
+            let after = std::fs::read_to_string(&layout.mcp_path).unwrap();
+            let opted_out = BTreeSet::from([id.to_string()]);
+            reconcile_detected_desktop_in(
+                home,
+                Path::new("/bundled/bun"),
+                Some("fixture-key"),
+                "http://localhost:3030",
+                &opted_out,
+            );
+            assert_eq!(std::fs::read_to_string(&layout.mcp_path).unwrap(), after);
+        }
+    }
+
+    #[test]
+    fn additional_json_agents_refuse_malformed_maps_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        for id in ["antigravity", "cline", "kiro"] {
+            let layout = layout_in(id, dir.path()).unwrap();
+            std::fs::create_dir_all(layout.mcp_path.parent().unwrap()).unwrap();
+            for original in [r#"{"mcpServers":[]}"#, r#"{"mcpServers":null}"#, "{broken"] {
+                std::fs::write(&layout.mcp_path, original).unwrap();
+                assert!(merge_mcp_launch(
+                    &layout,
+                    &cli_launch_config(false, "http://localhost:3030")
+                )
+                .is_err());
+                assert_eq!(std::fs::read_to_string(&layout.mcp_path).unwrap(), original);
+            }
+        }
+    }
 
     #[test]
     fn openclaw_native_setup_migrates_legacy_and_preserves_other_servers() {

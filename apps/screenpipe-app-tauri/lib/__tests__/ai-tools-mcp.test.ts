@@ -105,6 +105,9 @@ vi.mock("@/lib/hooks/use-hardcoded-tiles", () => ({
 vi.mock("@/lib/external-agent-skills", () => skillsMock);
 
 import {
+  isPerplexityDetected,
+  isLocalJsonMcpInstalled,
+  buildPerplexitySetupCommand,
   installOpencodeMcp,
   uninstallOpencodeMcp,
   isOpencodeMcpInstalled,
@@ -817,5 +820,89 @@ describe("OpenCode MCP", () => {
     expect(await isOpencodeMcpInstalled()).toBe(false);
     fsMock.files.set(path, '{"mcp":{"screenpipe":{"type":"remote","url":"https://example.com"}}}');
     expect(await isOpencodeMcpInstalled()).toBe(false);
+  });
+});
+
+
+describe("additional local AI apps", () => {
+  const clients = [
+    ["antigravity", "/Users/test/.gemini/config/mcp_config.json"],
+    ["cline", "/Users/test/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"],
+    ["kiro", "/Users/test/.kiro/settings/mcp.json"],
+  ] as const;
+
+  it.each(clients)("connects and removes %s without changing unrelated settings", async (id, path) => {
+    const original = JSON.stringify({ theme: "dark", mcpServers: { other: { command: "keep" } } });
+    fsMock.files.set(path, original);
+    await connectAiTool(id);
+    const written = JSON.parse(fsMock.files.get(path)!);
+    expect(written.theme).toBe("dark");
+    expect(written.mcpServers.other).toEqual({ command: "keep" });
+    expect(written.mcpServers.screenpipe).toMatchObject({
+      command: "/app/bun", args: ["x", "screenpipe-mcp@latest"],
+      env: { SCREENPIPE_MCP_CLIENT: id, SCREENPIPE_LOCAL_API_KEY: "sp-test" },
+    });
+    expect(await isLocalJsonMcpInstalled(id)).toBe(true);
+    expect(backupsOf(path).map((p) => fsMock.files.get(p))).toContain(original);
+    expect(skillsMock.installExternalAgentSkills).not.toHaveBeenCalled();
+    await disconnectAiTool(id);
+    expect(JSON.parse(fsMock.files.get(path)!)).toEqual(JSON.parse(original));
+    expect(tauriMock.setAiToolAutoConnectOptOut).toHaveBeenCalledWith(id, true);
+    expect(await isLocalJsonMcpInstalled(id)).toBe(false);
+  });
+
+  it.each(clients)("refuses malformed %s server maps untouched", async (id, path) => {
+    for (const mcpServers of [[], false, "custom", null]) {
+      const original = JSON.stringify({ mcpServers });
+      fsMock.files.set(path, original);
+      expect(await isToolConfigHealthy(id)).toBe(false);
+      await expect(connectAiTool(id)).rejects.toThrow("mcpServers");
+      await expect(disconnectAiTool(id)).rejects.toThrow("mcpServers");
+      expect(fsMock.files.get(path)).toBe(original);
+    }
+  });
+
+  it.each(clients)("does not report disabled or remote %s entries as connected", async (id, path) => {
+    for (const entry of [{ command: "bun", disabled: true }, { url: "https://example.com" }, null, "custom"]) {
+      fsMock.files.set(path, JSON.stringify({ mcpServers: { screenpipe: entry } }));
+      expect(await isLocalJsonMcpInstalled(id)).toBe(false);
+    }
+  });
+
+  it("detects the new apps independently of Gemini CLI and VS Code", async () => {
+    fsMock.files.set("/Users/test/.gemini", "");
+    fsMock.files.set("/Users/test/Library/Application Support/Code/User", "");
+    expect(await detectAiTools()).not.toContain("antigravity");
+    expect(await detectAiTools()).not.toContain("cline");
+    fsMock.files.set("/Users/test/.gemini/antigravity", "");
+    fsMock.files.set("/Users/test/.kiro/settings", "");
+    fsMock.files.set("/Users/test/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev", "");
+    expect(await detectAiTools()).toEqual(expect.arrayContaining(["antigravity", "cline", "kiro"]));
+  });
+
+  it("limits Perplexity detection to installed Mac apps", async () => {
+    expect(await isPerplexityDetected("macos")).toBe(false);
+    fsMock.files.set("/Applications/Perplexity.app", "");
+    expect(await isPerplexityDetected("macos")).toBe(true);
+    expect(await isPerplexityDetected("windows")).toBe(false);
+    fsMock.files.clear();
+    fsMock.files.set("/Users/test/Applications/Perplexity.app", "");
+    expect(await isPerplexityDetected("macos")).toBe(true);
+  });
+
+  it("quotes spaces, apostrophes and shell metacharacters in the Perplexity command", async () => {
+    const { commands } = await import("@/lib/utils/tauri");
+    vi.mocked(commands.bunCheck).mockResolvedValueOnce({ status: "ok", data: { available: true, path: "/app/Louis's tools/bun $(ignored)", version: "test" } });
+    const command = await buildPerplexitySetupCommand();
+    expect(command).toContain("'/app/Louis'\\''s tools/bun $(ignored)'");
+  });
+
+  it("builds a quoted Perplexity command with local credentials without installing it", async () => {
+    const command = await buildPerplexitySetupCommand();
+    expect(command).toContain("'SCREENPIPE_MCP_CLIENT=perplexity'");
+    expect(command).toContain("'SCREENPIPE_LOCAL_API_KEY=sp-test'");
+    expect(command).toContain("'/app/bun' 'x' 'screenpipe-mcp@latest'");
+    expect(tauriMock.setAiToolAutoConnectOptOut).not.toHaveBeenCalled();
+    expect(fsMock.files.size).toBe(0);
   });
 });

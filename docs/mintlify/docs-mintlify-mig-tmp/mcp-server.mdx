@@ -23,11 +23,31 @@ Moving from Granola? Connect both servers to your assistant and use the [copyabl
 | Cursor | Deep link or global MCP config | Usually yes | Project configs can override global configs |
 | Warp | Paste per-server JSON in MCP settings | No, but reconnect if stale | Warp does not use the Claude JSON wrapper |
 | Msty | HTTP MCP server | No | Useful when the client expects HTTP transport |
-| Cline, Continue, Gemini CLI, OpenCode | Stdio MCP | Depends on client | Use `npx -y screenpipe-mcp` |
+| Antigravity | Settings → Connections → AI apps | Restart or reconnect | Uses the current global MCP config |
+| Cline in VS Code | Settings → Connections → AI apps | Refresh MCP servers | Default VS Code profile only |
+| Kiro IDE | Settings → Connections → AI apps | Reconnect if needed | Workspace and agent configs can override the global entry |
+| Perplexity on Mac | Settings → Connections → AI apps → Set up | Follow Perplexity's helper setup | Manual setup, status and removal in Perplexity |
+| Continue, Gemini CLI, OpenCode | Stdio MCP | Depends on client | Use `npx -y screenpipe-mcp` |
 
 <Tip>
 The MCP server talks to the local Screenpipe API. If MCP works but returns empty results, first check `curl http://localhost:3030/health` and `curl "http://localhost:3030/search?limit=1"`.
 </Tip>
+
+## Antigravity, Cline, Kiro, and Perplexity
+
+Open each installed app once, then open **Settings → Connections → AI apps** in Screenpipe.
+
+Antigravity, Cline in the default VS Code profile, and Kiro IDE support Connect and Remove. These integrations use MCP only, preserve other servers and settings, and remember removal so startup does not reconnect them. Their global config paths are:
+
+- Antigravity: `~/.gemini/config/mcp_config.json` ([client documentation](https://antigravity.google/docs/mcp)).
+- Cline: VS Code's user directory → `globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`. Other VS Code profiles, editor forks, and Cline CLI use separate configs; configure those through Cline's MCP settings ([client documentation](https://docs.cline.bot/mcp/mcp-overview)).
+- Kiro IDE: `~/.kiro/settings/mcp.json` ([client documentation](https://kiro.dev/docs/mcp/configuration/)).
+
+Project-level overrides and organization policies still apply. After connecting, restart or refresh the assistant, approve Screenpipe when prompted, and verify a real retrieval below.
+
+For **Perplexity on Mac**, select **Set up**. Install Perplexity's helper from its Connectors settings, add a Simple connector named Screenpipe, and use **Copy setup command**. That command contains your local access key, so paste it only into the connector settings. Wait for Running and enable Screenpipe under Sources. Availability depends on your Perplexity plan. Screenpipe cannot verify or remove that manually managed connection; use Perplexity's Connectors settings. See [Perplexity's setup guide](https://www.perplexity.ai/help-center/en/articles/11502712-local-and-remote-mcps-for-perplexity).
+
+Once retrieval works, try: “Use Screenpipe to summarize today by client and draft my timesheet. Cite the activity you found.”
 
 ## Verify a real retrieval
 
