@@ -32,6 +32,7 @@ import {
   isRunnerMcpInstalled,
   isWindsurfMcpInstalled,
   isVscodeMcpInstalled,
+  isOpencodeMcpInstalled,
 } from "@/lib/ai-tools-mcp";
 import { areExternalAgentSkillsInstalled } from "@/lib/external-agent-skills";
 import {
@@ -115,6 +116,8 @@ async function isToolConnected(id: ConnectAllToolId): Promise<boolean> {
       return isWindsurfMcpInstalled();
     case "vscode":
       return isVscodeMcpInstalled();
+    case "opencode":
+      return isOpencodeMcpInstalled();
   }
 }
 
@@ -137,6 +140,8 @@ function ToolIcon({ id }: { id: ConnectAllToolId }) {
       return <img src="/images/openclaw.png" alt="" className={`${img} rounded`} />;
     case "hermes":
       return <img src="/images/hermes.png" alt="" className={`${img} rounded`} />;
+    case "opencode":
+      return <img src="/images/opencode.svg" alt="" className={`${img} dark:invert`} />;
     case "vscode":
       return <img src="/images/vscode.svg" alt="" className={img} />;
     case "grokbot":

@@ -22,6 +22,7 @@ const libMocks = vi.hoisted(() => ({
   isGeminiMcpInstalled: vi.fn(async () => false),
   isRunnerMcpInstalled: vi.fn(async () => false),
   isWindsurfMcpInstalled: vi.fn(async () => false),
+  isOpencodeMcpInstalled: vi.fn(async () => false),
   isVscodeMcpInstalled: vi.fn(async () => false),
 }));
 
@@ -56,6 +57,7 @@ vi.mock("@/lib/ai-tools-mcp", () => ({
     runner: "Runner",
     windsurf: "Windsurf (Devin Desktop)",
     vscode: "VS Code",
+    opencode: "OpenCode",
   },
   SKILLS_TARGET: {
     claude: "claude",
@@ -85,12 +87,29 @@ describe("AiToolsCard", () => {
       failed: [],
     }));
     libMocks.isClaudeCodeMcpInstalled.mockResolvedValue(false);
+    libMocks.isOpencodeMcpInstalled.mockResolvedValue(false);
     hookMocks.getInstalledMcpVersion.mockResolvedValue(null);
     hookMocks.isCodexMcpInstalled.mockResolvedValue(false);
     skillsMocks.areExternalAgentSkillsInstalled.mockResolvedValue(false);
   });
 
   afterEach(() => cleanup());
+
+  it("connects OpenCode without skills and can remove the confirmed connection", async () => {
+    libMocks.detectAiTools.mockResolvedValue(["opencode"]);
+    libMocks.connectAiToolTargets.mockImplementationOnce(async (targets: string[]) => {
+      libMocks.isOpencodeMcpInstalled.mockResolvedValue(true);
+      return { succeeded: targets, failed: [] };
+    });
+    render(<AiToolsCard />);
+    fireEvent.click(await screen.findByRole("button", { name: /connect all/i }));
+    await waitFor(() => expect(libMocks.connectAiToolTargets).toHaveBeenCalledWith(["opencode"]));
+    expect(await screen.findByText("All 1 connected")).toBeVisible();
+    expect(await screen.findByText("OpenCode")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    await waitFor(() => expect(libMocks.disconnectAiToolTargets).toHaveBeenCalledWith(["opencode"]));
+    expect(skillsMocks.areExternalAgentSkillsInstalled).not.toHaveBeenCalled();
+  });
 
   it("shows VS Code as connected and allows removing its MCP connection", async () => {
     libMocks.detectAiTools.mockResolvedValue(["vscode"]);

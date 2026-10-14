@@ -52,6 +52,7 @@ const CONNECT_ALL_TOOL_IDS = [
   "runner",
   "windsurf",
   "vscode",
+  "opencode",
   "grokbot",
 ] as const;
 export type ConnectAllToolId = (typeof CONNECT_ALL_TOOL_IDS)[number];
@@ -71,6 +72,7 @@ export const CONNECT_ALL_TOOL_NAMES: Record<ConnectAllToolId, string> = {
   // side of the OTA update recognize it.
   windsurf: "Windsurf (Devin Desktop)",
   vscode: "VS Code",
+  opencode: "OpenCode",
 };
 
 // Skills support per tool lives in the disconnect-all component's
@@ -101,6 +103,10 @@ export async function detectAiTools(): Promise<ConnectAllToolId[]> {
     ["runner", async () => exists(await join(home, ".runner"))],
     ["windsurf", async () => exists(await join(home, ".codeium", "windsurf"))],
     ["vscode", async () => exists(await dirname(await getVscodeMcpConfigPath()))],
+    ["opencode", async () =>
+      (await exists(await getOpencodeConfigDir())) ||
+      (await exists(await join(home, ".opencode", "bin", "opencode"))) ||
+      (await exists(await join(home, ".opencode", "bin", "opencode.exe")))],
     // Connect all finishes the local integrations before a cloud request.
     ["grokbot", isGrokBotDetected],
   ];
@@ -672,15 +678,15 @@ export async function getVscodeMcpConfigPath(): Promise<string> {
   return join(await configDir(), "Code", "User", "mcp.json");
 }
 
-function parseVscodeConfig(text: string, path: string): Record<string, unknown> {
+function parseJsoncMcpConfig(text: string, path: string, serverKey: string): Record<string, unknown> {
   const errors: ParseError[] = [];
   const parsed = parse(text, errors, { allowTrailingComma: true, allowEmptyContent: true });
   const root = parsed === undefined ? {} : parsed;
   if (errors.length || !root || typeof root !== "object" || Array.isArray(root)) {
     throw new Error(`${path} is not valid JSON — fix or remove it; screenpipe won't overwrite it`);
   }
-  if ("servers" in root && (!root.servers || typeof root.servers !== "object" || Array.isArray(root.servers))) {
-    throw new Error(`${path}: servers is present but not an object`);
+  if (serverKey in root && (!root[serverKey] || typeof root[serverKey] !== "object" || Array.isArray(root[serverKey]))) {
+    throw new Error(`${path}: ${serverKey} is present but not an object`);
   }
   return root;
 }
@@ -688,7 +694,7 @@ function parseVscodeConfig(text: string, path: string): Record<string, unknown> 
 export async function isVscodeMcpInstalled(): Promise<boolean> {
   try {
     const path = await getVscodeMcpConfigPath();
-    const root = parseVscodeConfig(await readTextFile(path), path);
+    const root = parseJsoncMcpConfig(await readTextFile(path), path, "servers");
     const servers = root.servers as Record<string, { type?: string }> | undefined;
     return Object.entries(servers ?? {}).some(([key, value]) =>
       key.toLowerCase() === "screenpipe" && value?.type === "stdio");
@@ -698,7 +704,7 @@ export async function isVscodeMcpInstalled(): Promise<boolean> {
 async function updateVscodeMcp(mcp?: McpCommand): Promise<void> {
   const path = await getVscodeMcpConfigPath();
   let text = (await readConfigText(path)) ?? "";
-  const root = parseVscodeConfig(text, path);
+  const root = parseJsoncMcpConfig(text, path, "servers");
   const servers = root.servers as Record<string, unknown> | undefined;
   const keys = Object.keys(servers ?? {}).filter((key) => key.toLowerCase() === "screenpipe");
   if (!mcp && !keys.length) return;
@@ -732,6 +738,87 @@ export async function installVscodeMcp(): Promise<McpCommand> {
 
 export async function uninstallVscodeMcp(): Promise<void> {
   await updateVscodeMcp();
+}
+
+// OpenCode uses XDG paths on every OS (including macOS), not configDir().
+// https://opencode.ai/docs/config/ and https://opencode.ai/docs/mcp-servers/
+async function getOpencodeConfigDir(): Promise<string> {
+  const xdg = await commands.getEnv("XDG_CONFIG_HOME");
+  return join(xdg || await join(await homeDir(), ".config"), "opencode");
+}
+
+async function getOpencodeConfigPaths(): Promise<string[]> {
+  const dir = await getOpencodeConfigDir();
+  // Match OpenCode's global writer priority. Lower layers are also removed on
+  // disconnect so an older entry cannot become active again.
+  return Promise.all(["opencode.jsonc", "opencode.json", "config.json"].map(file => join(dir, file)));
+}
+
+export async function getOpencodeMcpConfigPath(): Promise<string> {
+  const paths = await getOpencodeConfigPaths();
+  for (const path of paths) if (await exists(path)) return path;
+  return paths[0];
+}
+
+export async function isOpencodeMcpInstalled(): Promise<boolean> {
+  try {
+    const servers: Record<string, { type?: string; command?: unknown; enabled?: boolean }> = {};
+    for (const path of (await getOpencodeConfigPaths()).reverse()) {
+      const text = await readConfigText(path);
+      if (text === null) continue;
+      const root = parseJsoncMcpConfig(text, path, "mcp");
+      for (const [key, value] of Object.entries(root.mcp ?? {})) {
+        servers[key] = { ...servers[key], ...(value as object) };
+      }
+    }
+    return Object.entries(servers).some(([key, value]) =>
+      key.toLowerCase() === "screenpipe" && value.type === "local" &&
+      Array.isArray(value.command) && value.command.length > 0 && value.enabled !== false);
+  } catch { return false; }
+}
+
+async function updateOpencodeMcp(path: string, mcp?: McpCommand): Promise<void> {
+  let text = (await readConfigText(path)) ?? "";
+  const root = parseJsoncMcpConfig(text, path, "mcp");
+  const servers = root.mcp as Record<string, unknown> | undefined;
+  const keys = Object.keys(servers ?? {}).filter(key => key.toLowerCase() === "screenpipe");
+  if (!mcp && !keys.length) return;
+  const options = { formattingOptions: { insertSpaces: true, tabSize: 2 } };
+  const primary = keys[0] ?? "screenpipe";
+  for (const key of mcp ? keys.slice(1) : keys) {
+    text = applyEdits(text, modify(text, ["mcp", key], undefined, options));
+  }
+  if (mcp) {
+    const previous = servers?.[primary];
+    if (!previous || typeof previous !== "object" || Array.isArray(previous)) {
+      text = applyEdits(text, modify(text, ["mcp", primary], {}, options));
+    }
+    // Remove fields from a previous remote/standard MCP entry that OpenCode's
+    // strict local schema rejects. Keep local user options such as timeout/cwd.
+    for (const key of ["url", "headers", "oauth", "args", "env", "transport"]) {
+      text = applyEdits(text, modify(text, ["mcp", primary, key], undefined, options));
+    }
+    for (const [key, value] of Object.entries({
+      type: "local", command: [mcp.command, ...mcp.args],
+      environment: mcp.env ?? {}, enabled: true,
+    })) {
+      text = applyEdits(text, modify(text, ["mcp", primary, key], value, options));
+    }
+  }
+  await replaceConfig(path, text);
+}
+
+export async function installOpencodeMcp(): Promise<McpCommand> {
+  const path = await getOpencodeMcpConfigPath();
+  const mcp = await buildMcpConfig({ client: "opencode" });
+  const config = await commands.getLocalApiConfig() as { port?: number };
+  if (config?.port) mcp.env = { ...mcp.env, SCREENPIPE_API_URL: `http://localhost:${config.port}` };
+  await updateOpencodeMcp(path, mcp);
+  return mcp;
+}
+
+export async function uninstallOpencodeMcp(): Promise<void> {
+  for (const path of await getOpencodeConfigPaths()) await updateOpencodeMcp(path);
 }
 
 // ─── Windsurf ────────────────────────────────────────────────────────────────
@@ -849,6 +936,7 @@ const INSTALL_MCP: Record<Exclude<ConnectAllToolId, "grokbot">, () => Promise<Mc
   runner: installRunnerMcp,
   windsurf: installWindsurfMcp,
   vscode: installVscodeMcp,
+  opencode: installOpencodeMcp,
 };
 
 const UNINSTALL_MCP: Record<Exclude<ConnectAllToolId, "grokbot">, () => Promise<void>> = {
@@ -862,6 +950,7 @@ const UNINSTALL_MCP: Record<Exclude<ConnectAllToolId, "grokbot">, () => Promise<
   runner: uninstallRunnerMcp,
   windsurf: uninstallWindsurfMcp,
   vscode: uninstallVscodeMcp,
+  opencode: uninstallOpencodeMcp,
 };
 
 async function setAutoConnectOptOut(id: ConnectAllToolId, optOut: boolean): Promise<void> {
@@ -1073,9 +1162,15 @@ export async function isToolConfigHealthy(id: ConnectAllToolId): Promise<boolean
       case "openclaw":
         await readOpenclawConfig();
         return true;
+      case "opencode": {
+        for (const path of await getOpencodeConfigPaths()) {
+          parseJsoncMcpConfig((await readConfigText(path)) ?? "", path, "mcp");
+        }
+        return true;
+      }
       case "vscode": {
         const path = await getVscodeMcpConfigPath();
-        parseVscodeConfig((await readConfigText(path)) ?? "", path);
+        parseJsoncMcpConfig((await readConfigText(path)) ?? "", path, "servers");
         return true;
       }
       case "windsurf":
