@@ -5,12 +5,13 @@
 import type { AuthResult, Env } from '../types';
 import { isFrontierModel } from './cost-tracker';
 import { getHostedAiPlan } from './hosted-ai-policy';
+import { GEMINI_ARGON_MODEL, argonPricing } from '../providers/gemini-argon';
 import { SCREENPIPE_GLM_MODEL } from '../providers/screenpipe-glm';
 export type HostedChatPlan = 'free' | 'basic' | 'business' | 'business_max' | 'business_ultra' | 'super_admin' | 'internal';
 export type HostedChatLane = 'auto' | 'explicit' | 'frontier';
 export type HostedChatRequestLane = Exclude<HostedChatLane, 'frontier'>;
 export type HostedChatWorkload = 'interactive' | 'background';
-export type CloudflareGatewayProvider = 'openai' | 'anthropic' | 'custom-tinfoil' | 'elevenlabs';
+export type CloudflareGatewayProvider = 'openai' | 'anthropic' | 'custom-tinfoil' | 'elevenlabs' | 'google-vertex-ai';
 export type HostedChatLimitScope = 'combined' | 'frontier' | 'unknown';
 
 const SUPER_ADMIN_ACTOR_ID = 'f0d67846f15d207818a4016c5f12edac415d35adf8084792fec508554def5906';
@@ -137,6 +138,7 @@ export function withHostedChatLane(
 
 export function gatewayProviderForModel(model: string): CloudflareGatewayProvider | null {
 	const lower = model.toLowerCase();
+	if (lower === GEMINI_ARGON_MODEL) return 'google-vertex-ai';
 	if (lower === SCREENPIPE_GLM_MODEL) return 'custom-tinfoil';
 	if (lower.includes('claude')) return 'anthropic';
 	if (lower.startsWith('gpt-') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) {
@@ -163,6 +165,7 @@ function localGatewayProviderUrl(baseUrl: string, gatewayId: string, provider: C
  * Resolve a pre-authenticated provider-native Gateway URL from the Workers AI
  * binding. Provider auth headers are explicitly removed so Cloudflare injects
  * the provider's `default` BYOK key instead of receiving a Worker secret.
+ * Vertex instead receives a short-lived OAuth token minted by the Worker.
  */
 export async function getHostedChatGatewayConnection(
 	env: Env,
@@ -183,7 +186,17 @@ export async function getHostedChatGatewayConnection(
 		'cf-aig-collect-log-payload': 'false',
 		'cf-aig-max-attempts': '1',
 	};
-	if (provider !== 'custom-tinfoil') defaultHeaders['cf-aig-byok-alias'] = 'default';
+	if (provider !== 'custom-tinfoil' && provider !== 'google-vertex-ai') defaultHeaders['cf-aig-byok-alias'] = 'default';
+	if (provider === 'google-vertex-ai') {
+		// Argon uses short-lived Vertex credentials. Pin costs until Cloudflare's
+		// catalog catches up, including the scheduled end of launch pricing.
+		const price = argonPricing();
+		defaultHeaders['cf-aig-custom-cost'] = JSON.stringify({
+			per_token_in: price.input / 1_000_000,
+			per_token_out: price.output / 1_000_000,
+			per_cache_read_token: price.input * price.cacheRead / 1_000_000,
+		});
+	}
 	const localGatewayToken = String(env.CLOUDFLARE_AI_GATEWAY_TOKEN ?? '').trim();
 	if (localGatewayToken) {
 		defaultHeaders['cf-aig-authorization'] = localGatewayToken.toLowerCase().startsWith('bearer ')
