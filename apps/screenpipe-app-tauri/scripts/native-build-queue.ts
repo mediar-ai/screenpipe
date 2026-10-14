@@ -204,6 +204,12 @@ function unsignedEnterpriseConfig(): string {
   }));
 }
 
+function upstreamMachineEnterpriseConfig(): string {
+  return JSON.stringify(mergeConfig(JSON.parse(unsignedEnterpriseConfig()), {
+    bundle: { windows: { nsis: { installMode: "perMachine", template: null } } },
+  }));
+}
+
 function sccacheServerIsRunning(port: string): boolean {
   if (process.platform !== "darwin" || !existsSync("/usr/bin/nc")) return true;
   return Bun.spawnSync(["/usr/bin/nc", "-z", "127.0.0.1", port], {
@@ -498,11 +504,15 @@ async function perform(mode: BuildMode, args: string[]): Promise<number> {
     }
     case "enterprise-bundle": {
       const target = "x86_64-pc-windows-msvc";
+      const upstreamTemplate = args.includes("--upstream-template");
+      const bundleArgs = args.filter((arg) => arg !== "--upstream-template");
       return run([
         "bun", "tauri", "bundle", "--target", target,
         "--features", "enterprise-build", "--bundles", "nsis",
-        "--config", unsignedEnterpriseConfig(),
-        ...args,
+        "--config", upstreamTemplate
+          ? upstreamMachineEnterpriseConfig()
+          : unsignedEnterpriseConfig(),
+        ...bundleArgs,
       ], env);
     }
     case "warmup": {
