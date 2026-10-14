@@ -60,7 +60,7 @@ fn report_failure(root: &std::path::Path, stage: &str, error: &str) {
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub(crate) use macos::{initialize, install, owns_launch, pending, reopen};
+pub(crate) use macos::{initialize, install, owns_launch, pending, process_stamp, reopen};
 
 #[cfg(test)]
 mod tests {

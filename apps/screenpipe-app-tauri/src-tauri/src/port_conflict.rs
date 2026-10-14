@@ -127,9 +127,7 @@ where
         }
         #[cfg(unix)]
         {
-            let result = kill_unix_listener(port, LSOF).await;
-            record_reclaim_result(root, port, &result);
-            result?;
+            reclaim_unix_listener(port, LSOF, root).await?;
         }
         #[cfg(windows)]
         reclaim_unhealthy_owner_windows(port).await;
@@ -181,15 +179,21 @@ const LSOF: &str = "lsof";
 
 #[cfg(unix)]
 async fn reclaim_unhealthy_owner_unix(port: u16, root: &std::path::Path) {
-    let result = kill_unix_listener(port, LSOF).await;
-    record_reclaim_result(root, port, &result);
+    let _ = reclaim_unix_listener(port, LSOF, root).await;
 }
 
 #[cfg(unix)]
-fn record_reclaim_result(root: &std::path::Path, port: u16, result: &anyhow::Result<Vec<i32>>) {
+fn record_reclaim_result(
+    root: &std::path::Path,
+    port: u16,
+    signal: &str,
+    result: &anyhow::Result<Vec<i32>>,
+) {
     let detail = match result {
         Ok(pids) if pids.is_empty() => return,
-        Ok(pids) => format!("port={port}; pids={pids:?}; signal=SIGKILL; outcome=termination_sent"),
+        Ok(pids) => {
+            format!("port={port}; pids={pids:?}; signal={signal}; outcome=termination_sent")
+        }
         Err(error) => format!("port={port}; cause={error:#}; outcome=port_not_reclaimed"),
     };
     tracing::info!("port reclaim: {detail}");
@@ -197,7 +201,87 @@ fn record_reclaim_result(root: &std::path::Path, port: u16, result: &anyhow::Res
 }
 
 #[cfg(unix)]
-async fn kill_unix_listener(port: u16, lsof: &str) -> anyhow::Result<Vec<i32>> {
+async fn reclaim_unix_listener(
+    port: u16,
+    lsof: &str,
+    root: &std::path::Path,
+) -> anyhow::Result<()> {
+    let result = async {
+        let pids = unix_listener_pids(port, lsof).await?;
+        let owners: Vec<_> = pids
+            .into_iter()
+            .filter_map(|pid| unix_process_generation(pid).map(|generation| (pid, generation)))
+            .collect();
+        let mut signalled = Vec::new();
+        for (pid, generation) in &owners {
+            if unix_process_generation(*pid).as_ref() == Some(generation)
+                && signal_unix_owner(*pid, port, libc::SIGTERM)?
+            {
+                signalled.push(*pid);
+            }
+        }
+        record_reclaim_result(root, port, "SIGTERM", &Ok(signalled));
+        if owners.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Restore the pre-existing three-second termination grace period.
+        wait_for_port_release(port, std::time::Duration::from_secs(3)).await;
+        // Discovery must be fresh after waiting. Never escalate against a
+        // replacement listener, a reused PID, or an owner that released its port.
+        let current_pids = unix_listener_pids(port, lsof).await?;
+        let mut forced = Vec::new();
+        for (pid, generation) in owners {
+            if current_pids.contains(&pid)
+                && unix_process_generation(pid).as_ref() == Some(&generation)
+                && signal_unix_owner(pid, port, libc::SIGKILL)?
+            {
+                forced.push(pid);
+            }
+        }
+        Ok(forced)
+    }
+    .await;
+    record_reclaim_result(root, port, "SIGKILL", &result);
+    result.map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn unix_process_generation(pid: i32) -> Option<String> {
+    // Reuse the kernel process start stamp used by manual-copy replacement.
+    crate::manual_handoff::process_stamp(pid)
+        .ok()
+        .map(|stamp| format!("{stamp:?}"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn unix_process_generation(pid: i32) -> Option<String> {
+    // /proc stat field 22 is the process start tick. The command field can
+    // contain spaces and parentheses, so begin after its final closing ')'.
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(19)
+        .map(str::to_owned)
+}
+
+#[cfg(unix)]
+fn signal_unix_owner(pid: i32, port: u16, signal: i32) -> anyhow::Result<bool> {
+    use anyhow::Context;
+    // No PATH-dependent external kill command.
+    if unsafe { libc::kill(pid, signal) } == 0 {
+        return Ok(true);
+    }
+    let error = std::io::Error::last_os_error();
+    if error.raw_os_error() == Some(libc::ESRCH) {
+        return Ok(false);
+    }
+    Err(error)
+        .with_context(|| format!("termination failed; signal={signal}; pid={pid}; port={port}"))
+}
+
+#[cfg(unix)]
+async fn unix_listener_pids(port: u16, lsof: &str) -> anyhow::Result<Vec<i32>> {
     use anyhow::{bail, Context};
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(5),
@@ -221,24 +305,14 @@ async fn kill_unix_listener(port: u16, lsof: &str) -> anyhow::Result<Vec<i32>> {
         );
     }
     let my_pid = std::process::id() as i32;
-    let mut killed = Vec::new();
+    let mut pids = Vec::new();
     for line in std::str::from_utf8(&output.stdout)?.lines() {
         let pid: i32 = line.parse().context("invalid listener PID")?;
-        if pid <= 0 || pid == my_pid || killed.contains(&pid) {
-            continue;
+        if pid > 0 && pid != my_pid && !pids.contains(&pid) {
+            pids.push(pid);
         }
-        // Use the syscall directly: a missing `kill` executable must never
-        // silently leave an unresponsive owner holding the startup port.
-        if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
-            let error = std::io::Error::last_os_error();
-            if error.raw_os_error() == Some(libc::ESRCH) {
-                continue;
-            }
-            return Err(error).with_context(|| format!("SIGKILL failed; pid={pid}; port={port}"));
-        }
-        killed.push(pid);
     }
-    Ok(killed)
+    Ok(pids)
 }
 
 #[cfg(windows)]
@@ -306,10 +380,20 @@ mod tests {
             return;
         };
         let root = std::path::PathBuf::from(std::env::var_os("SCREENPIPE_PORT_TEST_ROOT").unwrap());
-        if mode == "owner" {
-            unsafe {
-                libc::signal(libc::SIGTERM, libc::SIG_IGN);
+        if mode != "reclaim" {
+            if mode == "owner" {
+                unsafe {
+                    libc::signal(libc::SIGTERM, libc::SIG_IGN);
+                }
             }
+            let mut terminate = if mode == "release" {
+                Some(
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                        .unwrap(),
+                )
+            } else {
+                None
+            };
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             let ready = root.join("ready");
             std::fs::write(
@@ -318,8 +402,14 @@ mod tests {
             )
             .unwrap();
             std::fs::rename(root.join("pending"), ready).unwrap();
-            std::future::pending::<()>().await;
-            drop(listener);
+            if let Some(terminate) = &mut terminate {
+                terminate.recv().await;
+                drop(listener);
+                std::future::pending::<()>().await;
+            } else {
+                std::future::pending::<()>().await;
+                drop(listener);
+            }
         } else {
             let port: u16 = std::fs::read_to_string(root.join("ready"))
                 .unwrap()
@@ -336,7 +426,24 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[tokio::test]
-    async fn unix_control_port_force_kills_owner_with_empty_path_and_binds() {
+    async fn unix_control_port_escalates_only_for_stubborn_owner() {
+        assert_unix_reclaim("owner", Some(libc::SIGKILL)).await;
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn unix_control_port_uses_normal_termination_first() {
+        assert_unix_reclaim("cooperative", Some(libc::SIGTERM)).await;
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn unix_control_port_does_not_kill_owner_after_it_releases_port() {
+        assert_unix_reclaim("release", None).await;
+    }
+
+    #[cfg(target_os = "macos")]
+    async fn assert_unix_reclaim(mode: &str, expected_signal: Option<i32>) {
         let root = tempfile::tempdir().unwrap();
         let unrelated = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let fixture = || {
@@ -348,7 +455,7 @@ mod tests {
             command
         };
         let mut owner = fixture()
-            .env("SCREENPIPE_PORT_TEST_MODE", "owner")
+            .env("SCREENPIPE_PORT_TEST_MODE", mode)
             .spawn()
             .unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(30), async {
@@ -368,12 +475,25 @@ mod tests {
         assert!(status.success());
         assert!(root.path().join("recovered").exists());
         use std::os::unix::process::ExitStatusExt;
-        assert_eq!(owner.wait().await.unwrap().signal(), Some(libc::SIGKILL));
+        if let Some(signal) = expected_signal {
+            assert_eq!(owner.wait().await.unwrap().signal(), Some(signal));
+        } else {
+            assert!(
+                owner.try_wait().unwrap().is_none(),
+                "released-port owner must survive"
+            );
+            owner.kill().await.unwrap();
+            owner.wait().await.unwrap();
+        }
         assert!(std::net::TcpStream::connect(unrelated.local_addr().unwrap()).is_ok());
         let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[root.path().into()])
             .await
             .unwrap();
-        assert!(report.contains("signal=SIGKILL"));
+        assert!(report.contains("signal=SIGTERM"));
+        assert_eq!(
+            report.contains("signal=SIGKILL"),
+            expected_signal == Some(libc::SIGKILL)
+        );
         assert!(report.contains("outcome=listening"));
     }
 

@@ -21,6 +21,7 @@ use tauri::Manager;
 mod kernel_signature;
 #[path = "signing.rs"]
 mod signing;
+pub(crate) use signing::process_stamp;
 
 const WAIT: Duration = Duration::from_secs(30);
 const EXPECTED_BUILD_ENV: &str = "SCREENPIPE_MANUAL_HANDOFF_BUILD";

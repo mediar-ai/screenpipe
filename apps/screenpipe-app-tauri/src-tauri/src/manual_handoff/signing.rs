@@ -85,7 +85,7 @@ pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-pub(super) fn process_stamp(pid: i32) -> Result<(u32, u64)> {
+pub(crate) fn process_stamp(pid: i32) -> Result<(u32, u64)> {
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let len = unsafe {
         libc::proc_pidinfo(
