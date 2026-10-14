@@ -1,54 +1,88 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
-const originalSubagent = process.env.SCREENPIPE_SUBAGENT;
-
-afterEach(() => {
-  mock.restore();
-  if (originalSubagent === undefined) delete process.env.SCREENPIPE_SUBAGENT;
-  else process.env.SCREENPIPE_SUBAGENT = originalSubagent;
-});
-
-function fakeChild() {
-  const child = new EventEmitter() as EventEmitter & {
-    pid: number;
-    stdout: EventEmitter;
-    stderr: EventEmitter;
-    kill: ReturnType<typeof mock>;
+function harness() {
+  const children: any[] = [];
+  const calls: { command: string; args: string[]; options: any }[] = [];
+  const hooks = new Map<string, Function>();
+  const signals = new Map<string, Function>();
+  const killed: number[] = [];
+  const fakeRequire = Object.assign((name: string) => {
+    if (name === "child_process") return {
+      spawn(command: string, args: string[], options: any) {
+        calls.push({ command, args, options });
+        const child = Object.assign(new EventEmitter(), {
+          pid: children.length + 1,
+          stdout: new EventEmitter(),
+          stderr: new EventEmitter(),
+          kill() {},
+        });
+        children.push(child);
+        return child;
+      },
+    };
+    if (name === "fs") return { existsSync: () => false };
+    if (name === "path") return { join: (...parts: string[]) => parts.join("/") };
+    throw new Error(`Unexpected module: ${name}`);
+  }, { resolve: () => "fixture/pi-main.js" });
+  const source = readFileSync(new URL("./sub-agent.ts", import.meta.url), "utf8");
+  // The installed extension mixes CommonJS registration with an ESM default
+  // export. Evaluate its CommonJS entry in an isolated process/require context;
+  // no real exit handlers, child processes, or credentials enter this test.
+  const code = new Bun.Transpiler({ loader: "ts" }).transformSync(
+    source.replace(/^export default createSubAgentExtension;\r?$/m, ""),
+  );
+  const module = { exports: undefined as any };
+  runInNewContext(code, {
+    module,
+    require: fakeRequire,
+    process: {
+      env: {}, pid: 100, cwd: () => "fixture",
+      on: (event: string, handler: Function) => signals.set(event, handler),
+      kill: (pid: number) => killed.push(pid), exit() {},
+    },
+    setTimeout, clearTimeout,
+  });
+  module.exports({ on: (event: string, handler: Function) => hooks.set(event, handler) });
+  return {
+    calls, children, killed,
+    run: () => hooks.get("tool_call")!({ tool: "bash", input: { command: 'sub-agent run "fixture prompt"' } }),
+    exit: () => signals.get("exit")!(),
   };
-  child.pid = 4242;
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
-  child.kill = mock(() => true);
-  return child;
 }
 
-test("sub-agent hides Bun while preserving piped output and errors", async () => {
-  delete process.env.SCREENPIPE_SUBAGENT;
-  const child = fakeChild();
-  let options: Record<string, unknown> | undefined;
-  const spawn = mock((_command: string, _args: string[], value: Record<string, unknown>) => {
-    options = value;
-    return child;
-  });
-  (globalThis as any).module = { exports: {} };
-  const { spawnSubAgent } = await import(`./sub-agent.ts?test=${Date.now()}`);
-  const pending = spawnSubAgent("inspect safely", spawn, "pi-main.js");
-  expect(options).toMatchObject({
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  child.stdout.emit("data", Buffer.from("useful output\n"));
-  child.emit("close", 0);
-  expect(await pending).toBe("useful output");
+test("background sub-agent hides its window and returns piped stdout", async () => {
+  const h = harness();
+  const pending = h.run();
+  h.children[0].stdout.emit("data", Buffer.from(" useful output\n"));
+  h.children[0].emit("close", 0);
+  const result = await pending;
+  expect(h.calls[0].command).toBe("bun");
+  expect(h.calls[0].options).toMatchObject({ windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  expect(result.content[0].text).toStartWith("useful output\n");
+  expect(result.isError).toBeUndefined();
+  h.exit();
+  expect(h.killed).toEqual([]);
+});
 
-  const failedChild = fakeChild();
-  spawn.mockImplementation(() => failedChild as any);
-  const failed = spawnSubAgent("fail safely", spawn, "pi-main.js");
-  failedChild.stderr.emit("data", Buffer.from("private implementation failed"));
-  failedChild.emit("close", 7);
-  await expect(failed).rejects.toThrow("Sub-agent exited with code 7: private implementation failed");
+test("sub-agent retains stderr and launch failures and removes finished children", async () => {
+  const h = harness();
+  const pending = h.run();
+  h.children[0].stderr.emit("data", Buffer.from("fixture failure"));
+  h.children[0].emit("close", 7);
+  const result = await pending;
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("Sub-agent exited with code 7: fixture failure");
+  const failed = h.run();
+  h.children[1].emit("error", new Error("spawn ENOENT"));
+  const launchResult = await failed;
+  expect(launchResult.isError).toBe(true);
+  expect(launchResult.content[0].text).toContain("spawn ENOENT");
+  h.exit();
+  expect(h.killed).toEqual([]);
 });
