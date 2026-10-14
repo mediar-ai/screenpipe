@@ -86,7 +86,7 @@ export function PipeStoreSubmissionDialog({
             onClick={() => void openUrl(contactHref)}
           >
             <Mail className="h-3.5 w-3.5 mr-1.5" />
-            EMAIL LOUIS
+            EMAIL SUPPORT
           </Button>
         </DialogFooter>
       </DialogContent>
