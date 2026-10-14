@@ -93,6 +93,8 @@ Var CurrentUserDefaultDir
 Var AllUsersDefaultDir
 Var ElevationResult
 Var RawCommandLine
+Var MaintenanceUninstall
+Var MaintenanceKeep
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -309,8 +311,6 @@ Function PageReinstallUpdateSelection
   ${EndIf}
 FunctionEnd
 Function PageLeaveReinstall
-  ${NSD_GetState} $R2 $R1
-
   ; If migrating from Wix, always uninstall
   ${If} $WixMode = 1
     Goto reinst_uninstall
@@ -320,6 +320,21 @@ Function PageLeaveReinstall
   ${If} $UpdateMode = 1
     Goto reinst_done
   ${EndIf}
+
+  ; The passive elevated child has no live radio controls. Preserve the
+  ; interactive parent's explicit uninstall choice across the UAC boundary.
+  ${If} $PassiveMode = 1
+    ${If} $MaintenanceUninstall = 1
+      Goto reinst_uninstall
+    ${EndIf}
+    ${If} $MaintenanceKeep = 1
+      Goto reinst_done
+    ${EndIf}
+  ${EndIf}
+
+  StrCpy $MaintenanceUninstall 0
+  StrCpy $MaintenanceKeep 0
+  ${NSD_GetState} $R2 $R1
 
   ; $R0 holds whether same(0)/upgrading(1)/downgrading(-1) version
   ; $R1 holds the radio buttons state:
@@ -350,6 +365,7 @@ Function PageLeaveReinstall
       ; Existing machine installs can require an administrator-only uninstaller.
       ; Elevate before invoking it instead of waiting for the later location page.
       ${If} $ExistingScope == "all"
+        StrCpy $MaintenanceUninstall 1
         StrCpy $InstallScope "all"
         Call RequireMachinePrivilege
         ${If} $ElevationResult != 0
@@ -395,6 +411,9 @@ Function PageLeaveReinstall
       Abort
     ${EndIf}
   reinst_done:
+    ${If} $UpdateMode != 1
+      StrCpy $MaintenanceKeep 1
+    ${EndIf}
 FunctionEnd
 
 ; 4. Choose install directory and, on demand, install scope.
@@ -651,6 +670,11 @@ FunctionEnd
 Function ElevateMachineInstall
   InitPluginsDir
   ${GetParameters} $2
+  ${If} $MaintenanceUninstall = 1
+    StrCpy $2 "$2 /SPMAINTUNINSTALL"
+  ${ElseIf} $MaintenanceKeep = 1
+    StrCpy $2 "$2 /SPMAINTKEEP"
+  ${EndIf}
   FileOpen $0 "$PLUGINSDIR\screenpipe-elevate-input.txt" w
   FileWriteUTF16LE /BOM $0 '$EXEPATH$\r$\n'
   FileWriteUTF16LE $0 '$2$\r$\n'
@@ -809,6 +833,15 @@ Function .onInit
   ${GetOptions} $CMDLINE "/UPDATE" $UpdateMode
   ${IfNot} ${Errors}
     StrCpy $UpdateMode 1
+  ${EndIf}
+
+  ${GetOptions} $CMDLINE "/SPMAINTUNINSTALL" $MaintenanceUninstall
+  ${IfNot} ${Errors}
+    StrCpy $MaintenanceUninstall 1
+  ${EndIf}
+  ${GetOptions} $CMDLINE "/SPMAINTKEEP" $MaintenanceKeep
+  ${IfNot} ${Errors}
+    StrCpy $MaintenanceKeep 1
   ${EndIf}
 
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
