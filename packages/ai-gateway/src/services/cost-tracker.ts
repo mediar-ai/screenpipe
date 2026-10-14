@@ -73,6 +73,11 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   // Sonnet 5 is $2/$10 introductory pricing through 2026-08-31, then $3/$15.
   // Track at the durable standard rate so cost controls remain conservative.
   'claude-sonnet-5': { input: 3.00, output: 15.00, ...CLAUDE_CACHE },
+  // https://www.anthropic.com/claude-haiku-5-5 (Standard, 5-minute cache writes).
+  'claude-haiku-5-5': {
+    input: 0.10, output: 0.50, ...CLAUDE_CACHE,
+    longContext: { threshold: 100_000, inputMultiplier: 5, outputMultiplier: 5 },
+  },
   'claude-haiku-4-5': { input: 1.00, output: 5.00, ...CLAUDE_CACHE },
   'claude-sonnet-4-5': { input: 3.00, output: 15.00, ...CLAUDE_CACHE },
   'claude-opus-4-5': { input: 15.00, output: 75.00, ...CLAUDE_CACHE },

@@ -9,13 +9,13 @@ import { isHostedAiModelAllowed } from '../services/hosted-ai-policy';
 import { handleModelListing } from '../handlers/models';
 import { gatewayProviderForModel } from '../services/cloudflare-ai-gateway';
 
-describe('GPT-6 Luna Auto default', () => {
-  it('starts every Auto lane on Luna 6 while preserving cross-provider fallback and plan restrictions', () => {
+describe('GPT-6 Luna fallback and explicit selection', () => {
+  it('keeps Luna 6 behind Haiku in every Auto lane while preserving cross-provider fallback and plan restrictions', () => {
     for (const chain of [AUTO_WATERFALL, AUTO_WATERFALL_BACKGROUND, AUTO_WATERFALL_VISION]) {
-      expect(chain).toEqual(['gpt-6-luna', 'claude-sonnet-5', 'gpt-5.4-mini']);
-      expect(efficientModelChain(chain)).toEqual(['gpt-6-luna', 'gpt-5.4-mini']);
+      expect(chain).toEqual(['claude-haiku-5-5', 'gpt-6-luna', 'claude-sonnet-5', 'gpt-5.4-mini']);
+      expect(efficientModelChain(chain)).toEqual(['claude-haiku-5-5', 'gpt-6-luna', 'gpt-5.4-mini']);
     }
-    expect(FREE_PREVIEW_WATERFALL).toEqual(['gpt-6-luna', 'gpt-5.4-mini']);
+    expect(FREE_PREVIEW_WATERFALL).toEqual(['claude-haiku-5-5', 'gpt-6-luna']);
     expect(isHostedAiModelAllowed('gpt-6-luna', 'basic')).toBe(true);
     expect(isHostedAiModelAllowed('gpt-6-luna', 'business')).toBe(true);
     expect(isHostedAiModelAllowed('gpt-6-luna', 'free')).toBe(false);

@@ -64,6 +64,7 @@ const RETIRED_HOSTED_MODEL_IDS = new Set([
  */
 export function resolveModelAlias(model: string): string {
 	const lower = model.toLowerCase();
+	if (lower === 'claude-haiku-5-5') return lower;
 	if (lower === GEMINI_ARGON_MODEL) return GEMINI_ARGON_MODEL;
 	if (isScreenpipeGlmModel(lower)) return model;
 	if (isRetiredHostedModel(lower)) {
