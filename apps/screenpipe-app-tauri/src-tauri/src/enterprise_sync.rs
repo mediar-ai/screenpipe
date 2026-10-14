@@ -1170,6 +1170,7 @@ mod imp {
             "hostname": hostname::get().ok().and_then(|value| value.into_string().ok()),
             "platform": std::env::consts::OS,
             "app_version": env!("CARGO_PKG_VERSION"),
+            "recording_lifecycle": crate::search_only::recording_lifecycle(),
             "recording_status": {
                 "frame_status": "unknown",
                 "audio_status": "unknown",
@@ -1647,7 +1648,10 @@ mod imp {
                     }
                 }
 
-                tokio::time::sleep(next_poll).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(next_poll) => {},
+                    _ = crate::search_only::lifecycle_changed() => {},
+                }
             }
         });
     }
@@ -1924,6 +1928,47 @@ mod imp {
             NATIVE_POLICY_STARTUP_DELAY, RECORDING_DISABLED_BY_ADMIN_CODE,
         };
         use std::collections::HashMap;
+
+        #[tokio::test]
+        async fn search_only_lifecycle_uses_native_enrollment_without_claiming_capture_health() {
+            use axum::{routing::post, Json, Router};
+            use std::sync::Arc;
+            let received = Arc::new(std::sync::Mutex::new(None));
+            let output = received.clone();
+            let router = Router::new().route(
+                "/heartbeat",
+                post(move |Json(body): Json<serde_json::Value>| async move {
+                    *output.lock().unwrap() = Some(body);
+                    Json(serde_json::json!({"ok": true}))
+                }),
+            );
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let url = format!("http://{}/heartbeat", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                axum::Server::from_tcp(listener)
+                    .unwrap()
+                    .serve(router.into_make_service())
+                    .await
+                    .unwrap();
+            });
+            let result = super::send_enrollment_heartbeat(
+                &reqwest::Client::new(),
+                &url,
+                "test-device",
+                &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+            )
+            .await;
+            server.abort();
+            assert!(result.is_ok());
+            let body = received.lock().unwrap().take().unwrap();
+            assert_eq!(body["device_id"], "test-device");
+            assert_eq!(body["recording_status"]["frame_status"], "unknown");
+            assert_eq!(
+                body["recording_lifecycle"],
+                crate::search_only::recording_lifecycle().unwrap()
+            );
+        }
 
         #[tokio::test]
         async fn export_upload_proceeds_during_capture_and_rejects_deleted_data() {
