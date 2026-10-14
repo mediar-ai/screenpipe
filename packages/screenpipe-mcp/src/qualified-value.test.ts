@@ -56,6 +56,7 @@ describe("createMcpQualifiedValueReporter", () => {
     ["gemini", "gemini-cli", "gemini"],
     ["runner", "Runner", "runner"],
     ["vscode", "vscode", "vscode"],
+    ["opencode", "OpenCode", "opencode"],
     ["grokbot", "Grok Bot", "grokbot"],
   ])("recognizes configured %s and its handshake name", (configured, protocol, expected) => {
     expect(resolveMcpClient(configured, "unrecognized-client")).toBe(expected);

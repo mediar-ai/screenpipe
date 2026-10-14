@@ -55,7 +55,7 @@ pub enum AgentCommand {
     Setup {
         /// Which agent to wire up. Omit when using --all.
         #[arg(
-            value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode"],
+            value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode", "opencode"],
             required_unless_present = "all",
             conflicts_with = "all"
         )]
@@ -75,7 +75,7 @@ pub enum AgentCommand {
     /// agent's own config or other skills.
     Remove {
         /// Which agent to unwire.
-        #[arg(value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode"])]
+        #[arg(value_parser = ["openclaw", "hermes", "claude-code", "claude-desktop", "codex", "cursor", "gemini", "runner", "windsurf", "vscode", "opencode"])]
         target: String,
     },
 }
@@ -251,6 +251,9 @@ fn detected_agents_in(home: &Path) -> Vec<DetectedAgent> {
             detected.push(DetectedAgent { target, name });
         }
     }
+    if opencode_detected(home) {
+        detected.push(DetectedAgent { target: "opencode", name: "OpenCode" });
+    }
     if vscode_config(home).parent().is_some_and(Path::is_dir) {
         detected.push(DetectedAgent {
             target: "vscode",
@@ -303,7 +306,7 @@ fn has_screenpipe_mcp(layout: &AgentLayout) -> bool {
         return false;
     };
     match layout.mcp_format {
-        McpFormat::Json | McpFormat::OpenclawJson | McpFormat::VscodeJson => {
+        McpFormat::Json | McpFormat::OpenclawJson | McpFormat::VscodeJson | McpFormat::OpencodeJson => {
             read_mcp_json(&existing, &layout.mcp_format)
                 .ok()
                 .and_then(|root| {
@@ -312,6 +315,10 @@ fn has_screenpipe_mcp(layout: &AgentLayout) -> bool {
                 })
                 .is_some_and(|entry| {
                     !entry.is_null()
+                        && (layout.mcp_format != McpFormat::OpencodeJson
+                            || (entry.get("type").and_then(|v| v.as_str()) == Some("local")
+                                && entry.get("command").and_then(|v| v.as_array()).is_some_and(|v| !v.is_empty())
+                                && entry.get("enabled").and_then(|v| v.as_bool()) != Some(false)))
                         && (!matches!(layout.name, "Runner" | "VS Code")
                             || entry.get("type").and_then(|value| value.as_str()) == Some("stdio"))
                 })
@@ -407,6 +414,7 @@ enum McpFormat {
     Json,
     OpenclawJson,
     VscodeJson,
+    OpencodeJson,
     Yaml,
     Toml,
 }
@@ -468,6 +476,11 @@ fn detected_desktop_agents_in(home: &Path) -> Vec<DesktopDetectedAgent> {
                 skills_target: has_skills.then_some(target),
             });
         }
+    }
+    if opencode_detected(home) {
+        detected.push(DesktopDetectedAgent {
+            id: "opencode", name: "OpenCode", mcp_target: "opencode", skills_target: None,
+        });
     }
     if vscode_config(home).parent().is_some_and(Path::is_dir) {
         detected.push(DesktopDetectedAgent {
@@ -547,7 +560,7 @@ fn desktop_mcp_ready(layout: &AgentLayout, launch: &McpLaunchConfig) -> bool {
         return false;
     };
     match layout.mcp_format {
-        McpFormat::Json | McpFormat::OpenclawJson | McpFormat::VscodeJson => {
+        McpFormat::Json | McpFormat::OpenclawJson | McpFormat::VscodeJson | McpFormat::OpencodeJson => {
             read_mcp_json(&existing, &layout.mcp_format)
                 .ok()
                 .and_then(|root| {
@@ -555,6 +568,12 @@ fn desktop_mcp_ready(layout: &AgentLayout, launch: &McpLaunchConfig) -> bool {
                     servers.get(screenpipe_json_key(servers)?).cloned()
                 })
                 .is_some_and(|entry| {
+                    if layout.mcp_format == McpFormat::OpencodeJson {
+                        return entry.get("type").and_then(|v| v.as_str()) == Some("local")
+                            && entry.get("enabled").and_then(|v| v.as_bool()) == Some(true)
+                            && entry.get("command") == Some(&serde_json::json!(opencode_command(launch)))
+                            && entry.get("environment") == Some(&serde_json::json!(launch.env));
+                    }
                     entry.get("command").and_then(|value| value.as_str())
                         == Some(launch.command.as_str())
                         && entry
@@ -835,6 +854,13 @@ fn layout_in(target: &str, h: &Path) -> Result<AgentLayout> {
             mcp_path: h.join(".runner/mcp.json"),
             mcp_format: McpFormat::Json,
         },
+        "opencode" => AgentLayout {
+            client,
+            name: "OpenCode",
+            skills_dir: None,
+            mcp_path: opencode_config(h),
+            mcp_format: McpFormat::OpencodeJson,
+        },
         "vscode" => AgentLayout {
             client,
             name: "VS Code",
@@ -850,9 +876,40 @@ fn layout_in(target: &str, h: &Path) -> Result<AgentLayout> {
             mcp_format: McpFormat::Json,
         },
         other => anyhow::bail!(
-            "unknown agent target '{other}' (use: openclaw, hermes, claude-code, claude-desktop, codex, cursor, gemini, runner, windsurf, vscode)"
+            "unknown agent target '{other}' (use: openclaw, hermes, claude-code, claude-desktop, codex, cursor, gemini, runner, windsurf, vscode, opencode)"
         ),
     })
+}
+
+// OpenCode follows XDG on every OS, including macOS. Use the real process
+// override only for the real home, keeping fixture/test homes isolated.
+fn opencode_config_dir(home: &Path) -> PathBuf {
+    let xdg = (dirs::home_dir().as_deref() == Some(home))
+        .then(|| std::env::var_os("XDG_CONFIG_HOME"))
+        .flatten()
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    xdg.unwrap_or_else(|| home.join(".config")).join("opencode")
+}
+
+fn opencode_config_paths(home: &Path) -> Vec<PathBuf> {
+    ["opencode.jsonc", "opencode.json", "config.json"]
+        .iter().map(|file| opencode_config_dir(home).join(file)).collect()
+}
+
+fn opencode_config(home: &Path) -> PathBuf {
+    let paths = opencode_config_paths(home);
+    paths.iter().find(|path| path.exists()).cloned().unwrap_or_else(|| paths[0].clone())
+}
+
+fn opencode_detected(home: &Path) -> bool {
+    opencode_config_dir(home).is_dir()
+        || home.join(".opencode/bin/opencode").is_file()
+        || home.join(".opencode/bin/opencode.exe").is_file()
+}
+
+fn opencode_command(launch: &McpLaunchConfig) -> Vec<String> {
+    std::iter::once(launch.command.clone()).chain(launch.args.clone()).collect()
 }
 
 /// Default VS Code user profile; never create workspace configs or infer an
@@ -875,7 +932,7 @@ fn vscode_config(home: &Path) -> PathBuf {
     config_dir.join("Code/User/mcp.json")
 }
 
-fn parse_vscode_config(text: &str) -> Result<jsonc_parser::cst::CstRootNode> {
+fn parse_jsonc_config(text: &str) -> Result<jsonc_parser::cst::CstRootNode> {
     let root = jsonc_parser::cst::CstRootNode::parse(
         text,
         &jsonc_parser::ParseOptions {
@@ -905,6 +962,7 @@ fn mcp_json_servers<'a>(
         McpFormat::OpenclawJson if root.get("mcpServers").is_some() => None,
         McpFormat::OpenclawJson => root.get("mcp")?.get("servers")?.as_object(),
         McpFormat::VscodeJson => root.get("servers")?.as_object(),
+        McpFormat::OpencodeJson => root.get("mcp")?.as_object(),
         _ => root.get("mcpServers")?.as_object(),
     }
 }
@@ -974,8 +1032,8 @@ fn read_mcp_json(text: &str, format: &McpFormat) -> Result<serde_json::Value> {
     if *format == McpFormat::OpenclawJson {
         return json5::from_str(text).context("OpenClaw config is not valid JSON5");
     }
-    if *format == McpFormat::VscodeJson {
-        Ok(parse_vscode_config(text)?
+    if matches!(format, McpFormat::VscodeJson | McpFormat::OpencodeJson) {
+        Ok(parse_jsonc_config(text)?
             .to_serde_value()
             .unwrap_or(serde_json::json!({})))
     } else {
@@ -986,19 +1044,28 @@ fn read_mcp_json(text: &str, format: &McpFormat) -> Result<serde_json::Value> {
 /// VS Code uses `servers`, not `mcpServers`, and accepts JSONC. Edit only the
 /// owned entry so comments, inputs, sandbox rules and other servers survive.
 fn update_vscode_mcp(path: &Path, launch: Option<&McpLaunchConfig>) -> Result<()> {
+    update_jsonc_mcp(path, launch, false)
+}
+
+fn update_opencode_mcp(path: &Path, launch: Option<&McpLaunchConfig>) -> Result<()> {
+    update_jsonc_mcp(path, launch, true)
+}
+
+fn update_jsonc_mcp(path: &Path, launch: Option<&McpLaunchConfig>, opencode: bool) -> Result<()> {
     use jsonc_parser::cst::CstInputValue as Input;
     let existing = read_config_text(path)?;
     if existing.is_none() && launch.is_none() {
         return Ok(());
     }
-    let root = parse_vscode_config(existing.as_deref().unwrap_or("{}"))
+    let root = parse_jsonc_config(existing.as_deref().unwrap_or("{}"))
         .with_context(|| format!("{} is not valid JSON; fix or remove it", path.display()))?;
     let obj = root
         .object_value_or_create()
         .context("config is not a JSON object")?;
+    let server_key = if opencode { "mcp" } else { "servers" };
     let servers = obj
-        .object_value_or_create("servers")
-        .context("servers is present but not an object")?;
+        .object_value_or_create(server_key)
+        .with_context(|| format!("{server_key} is present but not an object"))?;
     let matching: Vec<_> = servers
         .properties()
         .into_iter()
@@ -1018,21 +1085,28 @@ fn update_vscode_mcp(path: &Path, launch: Option<&McpLaunchConfig>) -> Result<()
         for duplicate in matching.into_iter().skip(1) {
             duplicate.remove();
         }
-        for (key, value) in [
-            ("type", Input::from("stdio")),
-            ("command", launch.command.clone().into()),
-            ("args", launch.args.clone().into()),
-            (
-                "env",
-                Input::Object(
-                    launch
-                        .env
-                        .iter()
-                        .map(|(key, value)| (key.clone(), value.clone().into()))
-                        .collect(),
-                ),
-            ),
-        ] {
+        let environment = Input::Object(launch.env.iter()
+            .map(|(key, value)| (key.clone(), value.clone().into())).collect());
+        let fields = if opencode {
+            // OpenCode rejects remote/standard MCP fields on local entries.
+            for key in ["url", "headers", "oauth", "args", "env", "transport"] {
+                if let Some(prop) = entry.get(key) { prop.remove(); }
+            }
+            vec![
+                ("type", Input::from("local")),
+                ("command", opencode_command(launch).into()),
+                ("environment", environment),
+                ("enabled", Input::from(true)),
+            ]
+        } else {
+            vec![
+                ("type", Input::from("stdio")),
+                ("command", launch.command.clone().into()),
+                ("args", launch.args.clone().into()),
+                ("env", environment),
+            ]
+        };
+        for (key, value) in fields {
             if let Some(prop) = entry.get(key) {
                 prop.set_value(value);
             } else {
@@ -1217,6 +1291,9 @@ fn setup(target: &str, api_url: &str) -> Result<()> {
         McpFormat::OpenclawJson => {
             update_openclaw_mcp(&l.mcp_path, Some(&cli_launch_config(remote, api_url)))?;
         }
+        McpFormat::OpencodeJson => {
+            update_opencode_mcp(&l.mcp_path, Some(&cli_launch_config(remote, api_url)))?;
+        }
         McpFormat::VscodeJson => {
             let mut launch = cli_launch_config(remote, api_url);
             launch.server_type = Some("stdio".to_string());
@@ -1320,6 +1397,10 @@ fn remove(target: &str) -> Result<()> {
     match l.mcp_format {
         McpFormat::OpenclawJson => update_openclaw_mcp(&l.mcp_path, None)?,
         McpFormat::VscodeJson => update_vscode_mcp(&l.mcp_path, None)?,
+        McpFormat::OpencodeJson => {
+            let home = dirs::home_dir().context("could not resolve home dir")?;
+            for path in opencode_config_paths(&home) { update_opencode_mcp(&path, None)?; }
+        }
         McpFormat::Json => remove_mcp_json(&l.mcp_path)?,
         McpFormat::Toml => remove_mcp_toml(&l.mcp_path)?,
         McpFormat::Yaml => remove_mcp_yaml(&l.mcp_path)?,
@@ -1534,6 +1615,7 @@ fn merge_mcp_launch(layout: &AgentLayout, launch: &McpLaunchConfig) -> Result<()
     match layout.mcp_format {
         McpFormat::OpenclawJson => update_openclaw_mcp(&layout.mcp_path, Some(launch)),
         McpFormat::VscodeJson => update_vscode_mcp(&layout.mcp_path, Some(launch)),
+        McpFormat::OpencodeJson => update_opencode_mcp(&layout.mcp_path, Some(launch)),
         McpFormat::Json => merge_mcp_json_launch(&layout.mcp_path, launch),
         McpFormat::Yaml => merge_mcp_yaml_launch(&layout.mcp_path, launch),
         McpFormat::Toml => merge_mcp_toml_launch(&layout.mcp_path, launch),
@@ -1834,6 +1916,127 @@ mod tests {
             .is_err());
             assert!(update_openclaw_mcp(&path, None).is_err());
             assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn test_opencode_installer_detection_and_config_priority() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        assert!(!opencode_detected(home));
+        let binary = home.join(".opencode/bin/opencode");
+        std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        std::fs::write(binary, "fixture").unwrap();
+        assert!(detected_agents_in(home).iter().any(|agent| agent.target == "opencode"));
+        let json = home.join(".config/opencode/opencode.json");
+        std::fs::create_dir_all(json.parent().unwrap()).unwrap();
+        std::fs::write(&json, "{}").unwrap();
+        assert_eq!(opencode_config(home), json);
+        let jsonc = json.with_extension("jsonc");
+        std::fs::write(&jsonc, "{} // keep comment").unwrap();
+        assert_eq!(opencode_config(home), jsonc);
+        let layout = layout_in("opencode", home).unwrap();
+        merge_mcp_launch(&layout, &cli_launch_config(false, "http://localhost:3030")).unwrap();
+        assert!(is_agent_setup_in("opencode", home));
+        assert_eq!(std::fs::read_to_string(json).unwrap(), "{}");
+        update_opencode_mcp(&jsonc, None).unwrap();
+        assert!(!is_agent_setup_in("opencode", home));
+    }
+
+    #[test]
+    fn test_opencode_background_jsonc_lifecycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let config = opencode_config(home);
+        let bun = home.join("bundled bun");
+        let mut reconciler = DesktopAgentReconciler::default();
+        let opts = BTreeSet::new();
+        assert_eq!(
+            reconciler
+                .reconcile(home, &bun, Some("test-key"), "http://localhost:3039", &opts)
+                .detected,
+            0
+        );
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(
+            &config,
+            r#"{
+  // keep my servers
+  "mcp": { "existing": { "type": "remote", "url": "https://example.com" }, },
+  "model": "provider/model",
+  "permission": { "edit": "ask" },
+}"#,
+        )
+        .unwrap();
+        let report =
+            reconciler.reconcile(home, &bun, Some("test-key"), "http://localhost:3039", &opts);
+        assert_eq!(report.connected, 1, "{:?}", report.failures);
+        let written = std::fs::read_to_string(&config).unwrap();
+        assert!(written.contains("// keep my servers"));
+        let root = read_mcp_json(&written, &McpFormat::OpencodeJson).unwrap();
+        assert!(root.get("mcpServers").is_none());
+        assert_eq!(root["mcp"]["existing"]["url"], "https://example.com");
+        assert_eq!(root["model"], "provider/model");
+        assert_eq!(root["permission"]["edit"], "ask");
+        let entry = &root["mcp"]["screenpipe"];
+        assert_eq!(entry["type"], "local");
+        assert_eq!(entry["enabled"], true);
+        assert_eq!(entry["command"], serde_json::json!([bun.to_string_lossy(), "x", "screenpipe-mcp@latest"]));
+        assert_eq!(entry["environment"]["SCREENPIPE_LOCAL_API_KEY"], "test-key");
+        assert_eq!(entry["environment"]["SCREENPIPE_API_URL"], "http://localhost:3039");
+        assert_eq!(entry["environment"]["SCREENPIPE_MCP_CLIENT"], "opencode");
+        let report =
+            reconciler.reconcile(home, &bun, Some("test-key"), "http://localhost:3039", &opts);
+        assert_eq!(report.already_connected, 1);
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), written);
+        let restarted = DesktopAgentReconciler::default().reconcile(
+            home,
+            &bun,
+            Some("test-key"),
+            "http://localhost:3039",
+            &opts,
+        );
+        assert_eq!(restarted.already_connected, 1);
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), written);
+        update_opencode_mcp(&config, None).unwrap();
+        let opts = BTreeSet::from(["opencode".to_string()]);
+        assert_eq!(
+            reconciler
+                .reconcile(home, &bun, None, "http://localhost:3030", &opts)
+                .opted_out,
+            1
+        );
+        let disconnected = std::fs::read_to_string(&config).unwrap();
+        assert!(!disconnected.contains("screenpipe"));
+        assert!(disconnected.contains("// keep my servers"));
+        assert_eq!(
+            reconciler
+                .reconcile(home, &bun, None, "http://localhost:3030", &BTreeSet::new())
+                .connected,
+            1
+        );
+    }
+
+    #[test]
+    fn test_opencode_refuses_invalid_configs_without_modifying_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = opencode_config(dir.path());
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        let launch = cli_launch_config(false, "http://localhost:3030");
+        for original in [
+            "[]",
+            "null",
+            r#"{"mcp": []}"#,
+            r#"{"mcp": null}"#,
+            r#"{"mcp": { broken }}"#,
+            r#"{"mcp": {} "inputs": []}"#,
+        ] {
+            std::fs::write(&config, original).unwrap();
+            assert!(
+                update_opencode_mcp(&config, Some(&launch)).is_err(),
+                "{original}"
+            );
+            assert_eq!(std::fs::read_to_string(&config).unwrap(), original);
         }
     }
 

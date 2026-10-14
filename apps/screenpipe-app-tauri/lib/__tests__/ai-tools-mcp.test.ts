@@ -8,6 +8,7 @@
 // fails, and disconnect stays idempotent.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseYaml } from "yaml";
 
 const fsMock = vi.hoisted(() => ({
@@ -104,6 +105,9 @@ vi.mock("@/lib/hooks/use-hardcoded-tiles", () => ({
 vi.mock("@/lib/external-agent-skills", () => skillsMock);
 
 import {
+  installOpencodeMcp,
+  uninstallOpencodeMcp,
+  isOpencodeMcpInstalled,
   installVscodeMcp,
   uninstallVscodeMcp,
   isVscodeMcpInstalled,
@@ -726,5 +730,92 @@ describe("explicit cloud MCP setup without a CLI", () => {
       "custom config location",
     );
     expect(fsMock.files.size).toBe(0);
+  });
+});
+
+
+describe("OpenCode MCP", () => {
+  const dir = "/Users/test/.config/opencode";
+  const path = `${dir}/opencode.jsonc`;
+
+  it("detects OpenCode's global config directory and installer binary", async () => {
+    expect(await detectAiTools()).not.toContain("opencode");
+    fsMock.files.set(dir, "");
+    expect(await detectAiTools()).toContain("opencode");
+    fsMock.files.clear();
+    fsMock.files.set("/Users/test/.opencode/bin/opencode", "");
+    expect(await detectAiTools()).toContain("opencode");
+  });
+
+  it("connects using native command/environment fields and preserves JSONC and other servers", async () => {
+    const original = `{
+      // Keep my model and server settings.
+      "model": "provider/model",
+      "mcp": {
+        "other": { "type": "remote", "url": "https://example.com/mcp" },
+        "Screenpipe": { "type": "local", "command": ["old"], "enabled": false, "timeout": 12000 },
+      },
+    }`;
+    fsMock.files.set(path, original);
+    await connectAiTool("opencode");
+    const text = fsMock.files.get(path)!;
+    const config = parseJsonc(text);
+    expect(text).toContain("// Keep my model and server settings.");
+    expect(config.model).toBe("provider/model");
+    expect(config.mcp.other.url).toBe("https://example.com/mcp");
+    expect(config.mcp.Screenpipe).toEqual({
+      type: "local", command: ["/app/bun", "x", "screenpipe-mcp@latest"],
+      environment: { SCREENPIPE_MCP_CLIENT: "opencode", SCREENPIPE_LOCAL_API_KEY: "sp-test", SCREENPIPE_API_URL: "http://localhost:3030" },
+      enabled: true, timeout: 12000,
+    });
+    expect(await isOpencodeMcpInstalled()).toBe(true);
+    expect(tauriMock.setAiToolAutoConnectOptOut).toHaveBeenCalledWith("opencode", false);
+    expect(skillsMock.installExternalAgentSkills).not.toHaveBeenCalled();
+    expect(Array.from(fsMock.files.values())).toContain(original);
+    await installOpencodeMcp();
+    expect(fsMock.files.get(path)).toBe(text);
+    await disconnectAiTool("opencode");
+    expect(tauriMock.setAiToolAutoConnectOptOut).toHaveBeenCalledWith("opencode", true);
+    expect(parseJsonc(fsMock.files.get(path)!).mcp).toEqual({ other: config.mcp.other });
+    expect(await isOpencodeMcpInstalled()).toBe(false);
+  });
+
+  it("prefers JSONC and removes Screenpipe from all global layers on disconnect", async () => {
+    const entry = { type: "local", command: ["old"] };
+    for (const file of ["config.json", "opencode.json", "opencode.jsonc"]) {
+      fsMock.files.set(`${dir}/${file}`, JSON.stringify({ mcp: { screenpipe: entry, other: entry } }));
+    }
+    await installOpencodeMcp();
+    expect(parseJsonc(fsMock.files.get(path)!).mcp.screenpipe.command[0]).toBe("/app/bun");
+    expect(JSON.parse(fsMock.files.get(`${dir}/opencode.json`)!).mcp.screenpipe.command).toEqual(["old"]);
+    await uninstallOpencodeMcp();
+    for (const file of ["config.json", "opencode.json", "opencode.jsonc"]) {
+      expect(parseJsonc(fsMock.files.get(`${dir}/${file}`)!).mcp).toEqual({ other: entry });
+    }
+  });
+
+  it("honors XDG_CONFIG_HOME instead of macOS Application Support", async () => {
+    tauriMock.getEnv.mockImplementation(async (name?: string) => name === "XDG_CONFIG_HOME" ? "/custom/config" : "");
+    fsMock.files.set("/custom/config/opencode", "");
+    fsMock.files.set("/custom/config/opencode/opencode.json", "{}");
+    expect(await detectAiTools()).toContain("opencode");
+    await installOpencodeMcp();
+    expect(parseJsonc(fsMock.files.get("/custom/config/opencode/opencode.json")!).mcp.screenpipe.enabled).toBe(true);
+    expect(fsMock.files.has(path)).toBe(false);
+  });
+
+  it.each(["{broken", '{"mcp": []}', '{"mcp": null}', '[]'])("refuses invalid config %s without writing", async (text) => {
+    fsMock.files.set(path, text);
+    await expect(installOpencodeMcp()).rejects.toThrow();
+    expect(fsMock.files.get(path)).toBe(text);
+    expect(fsMock.files.size).toBe(1);
+    expect(await isToolConfigHealthy("opencode")).toBe(false);
+  });
+
+  it("does not report a disabled or remote entry as connected", async () => {
+    fsMock.files.set(path, '{"mcp":{"screenpipe":{"type":"local","command":["bun"],"enabled":false}}}');
+    expect(await isOpencodeMcpInstalled()).toBe(false);
+    fsMock.files.set(path, '{"mcp":{"screenpipe":{"type":"remote","url":"https://example.com"}}}');
+    expect(await isOpencodeMcpInstalled()).toBe(false);
   });
 });
