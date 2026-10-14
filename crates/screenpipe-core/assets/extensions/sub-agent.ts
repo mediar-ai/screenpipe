@@ -65,8 +65,11 @@ try {
 
 // ── Sub-agent spawner ────────────────────────────────────────────────────────
 
-async function spawnSubAgent(prompt: string): Promise<string> {
-  const { spawn } = require("child_process");
+export async function spawnSubAgent(
+  prompt: string,
+  spawnProcess = require("child_process").spawn,
+  agentMain = require.resolve("@earendil-works/pi-coding-agent/dist/main.js"),
+): Promise<string> {
   const parentPid = process.pid;
 
   // Inject auth token so sub-agent can call screenpipe API
@@ -76,8 +79,8 @@ async function spawnSubAgent(prompt: string): Promise<string> {
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn("bun", [
-      require.resolve("@earendil-works/pi-coding-agent/dist/main.js"),
+    const child = spawnProcess("bun", [
+      agentMain,
       "--mode", "print",
       "--no-session",
       "--provider", process.env.PI_PROVIDER || "screenpipe",
@@ -86,6 +89,7 @@ async function spawnSubAgent(prompt: string): Promise<string> {
     ], {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
       env: {
         ...process.env,
         SCREENPIPE_SUBAGENT: "1",

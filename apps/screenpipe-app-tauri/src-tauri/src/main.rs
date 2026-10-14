@@ -156,6 +156,8 @@ mod windows_ca_bundle;
 #[cfg(target_os = "windows")]
 mod windows_enterprise_takeover;
 #[cfg(target_os = "windows")]
+mod windows_process_diagnostics;
+#[cfg(target_os = "windows")]
 mod windows_crash_dump;
 #[cfg(target_os = "windows")]
 mod windows_overlay;

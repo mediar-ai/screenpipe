@@ -664,13 +664,13 @@ async fn run_feedback_upload(
     let screenshot = prepare_screenshot(request.screenshot_data_url.as_deref())?;
     let video = prepare_video(request)?;
     let logs = collect_log_text(app).await;
-    let (recording_diagnostics, migration_diagnostics) = tokio::join!(
+    let (recording_diagnostics, migration_diagnostics, process_diagnostics) = tokio::join!(
         collect_recording_diagnostics(app),
         collect_migration_diagnostics(app),
+        collect_process_diagnostics(),
     );
-    let raw_bundle = format!(
-        "{}{}\n\n=== Browser Console Logs ===\n{}\n\n=== Recording Diagnostics ===\n{}\n\n=== Storage Migration Diagnostics ===\n{}",
-        request.chat_history, logs, request.console_log, recording_diagnostics, migration_diagnostics
+    let raw_bundle = assemble_diagnostic_bundle(
+        request, &logs, &recording_diagnostics, &migration_diagnostics, &process_diagnostics,
     );
     let raw_bundle =
         append_localization_diagnostics(raw_bundle, &crate::localization::diagnostics());
@@ -693,6 +693,34 @@ async fn run_feedback_upload(
     )
     .await
 }
+
+fn assemble_diagnostic_bundle(
+    request: &FeedbackUploadRequest,
+    logs: &str,
+    recording_diagnostics: &str,
+    migration_diagnostics: &str,
+    process_diagnostics: &str,
+) -> String {
+    let bundle = format!(
+        "{}{}\n\n=== Browser Console Logs ===\n{}\n\n=== Recording Diagnostics ===\n{}\n\n=== Storage Migration Diagnostics ===\n{}",
+        request.chat_history, logs, request.console_log, recording_diagnostics, migration_diagnostics
+    );
+    #[cfg(target_os = "windows")]
+    return format!("{bundle}\n\n=== Windows Process Diagnostics ===\n{process_diagnostics}");
+    #[cfg(not(target_os = "windows"))]
+    { let _ = process_diagnostics; bundle }
+}
+
+#[cfg(target_os = "windows")]
+async fn collect_process_diagnostics() -> String {
+    match tokio::task::spawn_blocking(crate::windows_process_diagnostics::collect).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => format!(r#"{{"probeErrors":["snapshot task failed: {error}"]}}"#),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn collect_process_diagnostics() -> String { "not applicable".into() }
 
 pub(crate) fn append_localization_diagnostics(bundle: String, diagnostics: &str) -> String {
     format!("{bundle}\n\n=== Localization Diagnostics ===\n{diagnostics}")
@@ -780,6 +808,38 @@ mod tests {
             video_path: None,
             video_ext: None,
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn windows_snapshot_failure_reaches_upload_after_redaction() {
+        let mut request = request();
+        request.chat_history = "contact=popup-canary@example.com password=popup-secret".into();
+        let snapshot = crate::windows_process_diagnostics::collect();
+        assert!(!snapshot.contains("PRIVATE_PROMPT_CANARY"));
+        let process_diagnostics = format!(
+            "{snapshot}\ncollection retry: {{\"probeErrors\":[\"process exited before snapshot\"]}}"
+        );
+        let raw = assemble_diagnostic_bundle(&request, "", "{}", "{}", &process_diagnostics);
+        let redacted = crate::feedback_redact::redact_diagnostics_locally(raw).await.unwrap();
+        assert!(redacted.contains("Windows Process Diagnostics"));
+        assert!(redacted.contains("process exited before snapshot"));
+        assert!(!redacted.contains("popup-canary"));
+        assert!(!redacted.contains("popup-secret"));
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST")).and(path("/api/logs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {
+                "signedUrl": format!("{}/upload/log", server.uri()), "path": "logs/report.log"
+            }}))).mount(&server).await;
+        Mock::given(method("PUT")).and(path("/upload/log"))
+            .and(body_bytes(redacted.as_bytes())).respond_with(ResponseTemplate::new(200))
+            .mount(&server).await;
+        Mock::given(method("POST")).and(path("/api/logs/confirm"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"id": 42}})))
+            .mount(&server).await;
+        upload_report(&Client::new(), &server.uri(), &request, redacted, None, None)
+            .await.unwrap();
     }
 
     #[tokio::test]
