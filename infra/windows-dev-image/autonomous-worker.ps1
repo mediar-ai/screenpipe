@@ -9,6 +9,7 @@ $task = Get-Content (Join-Path $workerRoot 'task.json') -Raw | ConvertFrom-Json
 $resultRoot = Join-Path $workerRoot "results\$($task.taskId)"
 $repository = 'C:\src\screenpipe'
 $videoPath = Join-Path $resultRoot 'acceptance.mp4'
+$clipRoot = Join-Path $resultRoot 'clips'
 $recorderLog = Join-Path $resultRoot 'ffmpeg-recorder.log'
 $transcriptPath = Join-Path $resultRoot 'worker.log'
 $manifestPath = Join-Path $resultRoot 'evidence.json'
@@ -20,7 +21,7 @@ $resultState = 'failed'
 $failure = $null
 $prUrl = $null
 
-New-Item -ItemType Directory -Force -Path $resultRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $resultRoot, $clipRoot | Out-Null
 Start-Transcript -Path $transcriptPath -Force
 
 function Get-ManagedIdentityToken([string] $Resource) {
@@ -173,6 +174,7 @@ Execution contract:
 - Copy the proven runtime scripts from C:\screenpipe-worker into infra/windows-dev-image when they are not already present, then make the image provisioning, dispatcher, canonical skill, and reference agree with the autonomous invariant. Retire contradictory RDP/host-import wording rather than adding parallel rules.
 - Use the immutable image and exact task blob model; do not clone or modify the release builder.
 - Run the narrowest relevant checks, including shell syntax, PowerShell parsing, skill validation, and git diff --check. Do not run raw Cargo for src-tauri.
+- Reviewer evidence is short focused clips, each showing one action and its visible result, never the agent session. Record each clip yourself, starting right before the action and stopping once the result is visible, at most 90 seconds, as $clipRoot\<scenario>.mp4 (letters, digits, '.', '_', '-' only). The outer worker fails delivery if any clip there is longer and never links the whole-session desktop recording, which is a private diagnostic archive. If the change has no visible result, report test output instead of a clip.
 - Do not push or open the PR yourself; leave the intended changes committed and the worktree clean. The outer worker performs deterministic delivery after validation.
 - Finish with a concise summary and exact test results.
 "@
@@ -220,28 +222,41 @@ exit /b %ERRORLEVEL%
   Invoke-Checked 'az.cmd' @('login', '--identity', '--client-id', $task.identityClientId, '--allow-no-subscriptions', '--output', 'none')
   $azErrorPath = Join-Path $resultRoot 'azure-cli.stderr.log'
   $priorErrorPreference = $ErrorActionPreference
-  $ErrorActionPreference = 'Continue'
-  $videoUrlOutput = & az.cmd storage blob generate-sas --account-name $task.storageAccount --container-name $task.storageContainer --name "$($task.blobRoot)/$($task.taskId)/acceptance.mp4" --permissions r --expiry $expiry --https-only --as-user --auth-mode login --full-uri --output tsv 2>$azErrorPath | Out-String
-  $azExitCode = $LASTEXITCODE
-  $ErrorActionPreference = $priorErrorPreference
-  if ($azExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($videoUrlOutput)) {
-    $azFailure = if (Test-Path $azErrorPath) { (Get-Content $azErrorPath -Raw).Trim() } else { '' }
-    throw "read-only evidence URL generation failed with code $azExitCode`: $azFailure"
+  $evidenceLines = @()
+  foreach ($clip in @(Get-ChildItem $clipRoot -Filter '*.mp4' -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
+    if ($clip.Name -notmatch '^[A-Za-z0-9._-]+\.mp4$') { throw "evidence clip name must use only letters, digits, '.', '_' or '-': $($clip.Name)" }
+    $durationOutput = (& ffprobe.exe -v error -show_entries format=duration -of csv=p=0 $clip.FullName | Out-String).Trim()
+    $duration = 0.0
+    if ($LASTEXITCODE -ne 0 -or -not [double]::TryParse($durationOutput, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$duration)) { throw "ffprobe could not read the duration of evidence clip $($clip.Name): $durationOutput" }
+    if ($duration -gt 90) { throw "evidence clip $($clip.Name) is $([Math]::Round($duration)) s; reviewer clips must be 90 s or less" }
+    Send-ResultBlob $clip.FullName "clips/$($clip.Name)" 'video/mp4'
+    $ErrorActionPreference = 'Continue'
+    $clipUrlOutput = & az.cmd storage blob generate-sas --account-name $task.storageAccount --container-name $task.storageContainer --name "$($task.blobRoot)/$($task.taskId)/clips/$($clip.Name)" --permissions r --expiry $expiry --https-only --as-user --auth-mode login --full-uri --output tsv 2>$azErrorPath | Out-String
+    $azExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $priorErrorPreference
+    if ($azExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($clipUrlOutput)) {
+      $azFailure = if (Test-Path $azErrorPath) { (Get-Content $azErrorPath -Raw).Trim() } else { '' }
+      throw "read-only evidence URL generation failed with code $azExitCode`: $azFailure"
+    }
+    $evidenceLines += "- [$($clip.BaseName)]($($clipUrlOutput.Trim())) ($([Math]::Round($duration)) s)"
   }
-  $videoUrl = $videoUrlOutput.Trim()
+  if (-not $evidenceLines) { $evidenceLines = @('- No focused evidence clip was recorded; see the validation results above.') }
   if (-not $recorder -or $recorder.HasExited) { throw 'desktop recorder exited before PR evidence delivery' }
 
   $prBodyPath = Join-Path $resultRoot 'pr-body.md'
   @"
 $($task.prBody)
 
-## Autonomous Windows proof
+## Autonomous Windows evidence
 
-- [Watch/download the VM-owned desktop recording]($videoUrl) (read-only link expires **$expiry**)
+Focused clips, each 90 s or less showing one action and its result (read-only links expire **$expiry**):
+
+$($evidenceLines -join "`n")
+
 - Task: ``$($task.taskId)``
 - Tested commit: ``$testedHead``
 - Tested tree: ``$testedTree``
-- The disposable VM ran Codex, native validation, recording, push, and PR creation without an inbound desktop connection or a host-held process.
+- The disposable VM ran Codex, native validation, push, and PR creation without an inbound desktop connection or a host-held process. Its whole-session desktop recording is a private diagnostic archive, not reviewer evidence.
 "@ | Set-Content -Encoding UTF8 $prBodyPath
   $ghErrorPath = Join-Path $resultRoot 'github-cli.stderr.log'
   $ErrorActionPreference = 'Continue'
