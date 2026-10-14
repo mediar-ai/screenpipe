@@ -44,6 +44,7 @@ pub struct LinkerMetrics {
     pub dropped_paused: u64,
     pub dropped_lagged: u64,
     pub dropped_capture_error: u64,
+    pub dropped_index_pending: u64,
     pub dropped_other: u64,
 }
 
@@ -54,6 +55,7 @@ static DROPPED_DRM: AtomicU64 = AtomicU64::new(0);
 static DROPPED_PAUSED: AtomicU64 = AtomicU64::new(0);
 static DROPPED_LAGGED: AtomicU64 = AtomicU64::new(0);
 static DROPPED_CAPTURE_ERROR: AtomicU64 = AtomicU64::new(0);
+static DROPPED_INDEX_PENDING: AtomicU64 = AtomicU64::new(0);
 static DROPPED_OTHER: AtomicU64 = AtomicU64::new(0);
 
 /// Read a point-in-time snapshot of the linker counters. Process-wide
@@ -67,6 +69,7 @@ pub fn linker_metrics_snapshot() -> LinkerMetrics {
         dropped_paused: DROPPED_PAUSED.load(Ordering::Relaxed),
         dropped_lagged: DROPPED_LAGGED.load(Ordering::Relaxed),
         dropped_capture_error: DROPPED_CAPTURE_ERROR.load(Ordering::Relaxed),
+        dropped_index_pending: DROPPED_INDEX_PENDING.load(Ordering::Relaxed),
         dropped_other: DROPPED_OTHER.load(Ordering::Relaxed),
     }
 }
@@ -77,6 +80,7 @@ fn drop_reason_counter(reason: DropReason) -> &'static AtomicU64 {
         DropReason::Paused => &DROPPED_PAUSED,
         DropReason::Lagged => &DROPPED_LAGGED,
         DropReason::CaptureError => &DROPPED_CAPTURE_ERROR,
+        DropReason::IndexPending => &DROPPED_INDEX_PENDING,
         DropReason::Other => &DROPPED_OTHER,
     }
 }
@@ -229,6 +233,7 @@ pub fn spawn_frame_linker(
                     let dropped_paused = DROPPED_PAUSED.load(Ordering::Relaxed);
                     let dropped_lagged = DROPPED_LAGGED.load(Ordering::Relaxed);
                     let dropped_capture_error = DROPPED_CAPTURE_ERROR.load(Ordering::Relaxed);
+                    let dropped_index_pending = DROPPED_INDEX_PENDING.load(Ordering::Relaxed);
                     let dropped_other = DROPPED_OTHER.load(Ordering::Relaxed);
                     if evicted > 0 {
                         EVICTED_TTL.fetch_add(evicted as u64, Ordering::Relaxed);
@@ -243,6 +248,7 @@ pub fn spawn_frame_linker(
                             dropped_paused,
                             dropped_lagged,
                             dropped_capture_error,
+                            dropped_index_pending,
                             dropped_other,
                             "frame_linker: stale entries expired without pairing — these slipped past every instrumented drop site (DRM/paused/lagged/capture_error); investigate the residual"
                         );
@@ -257,6 +263,7 @@ pub fn spawn_frame_linker(
                             dropped_paused,
                             dropped_lagged,
                             dropped_capture_error,
+                            dropped_index_pending,
                             dropped_other,
                             "frame_linker: tick"
                         );

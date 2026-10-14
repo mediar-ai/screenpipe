@@ -203,8 +203,11 @@ pub struct CaptureContext<'a> {
 /// Result of a paired capture operation.
 #[derive(Debug)]
 pub struct PairedCaptureResult {
-    /// Database frame ID
-    pub frame_id: i64,
+    /// Committed database frame ID. None means the capture is durable locally
+    /// and awaits indexing; it must not be used as an indexed frame.
+    pub frame_id: Option<i64>,
+    /// Stable identity of the durable capture handoff.
+    pub capture_id: String,
     /// Path to the JPEG snapshot on disk
     pub snapshot_path: String,
     /// Accessibility text (if available)
@@ -740,9 +743,9 @@ async fn paired_capture_inner(
         None
     };
 
-    let frame_id = ctx
+    let admission = ctx
         .db
-        .insert_snapshot_frame_with_ocr(
+        .admit_snapshot_frame_with_ocr(
             ctx.device_name,
             ctx.captured_at,
             &snapshot_path_str,
@@ -763,18 +766,12 @@ async fn paired_capture_inner(
                 .flatten(),
         )
         .await?;
+    let frame_id = admission.frame_id;
 
-    // Commit the gate's pending signature (and cache the OCR result for
-    // reuse on pixel-identical captures) only now that the frame is durably
-    // stored, and only when the OCR engine itself didn't fail. An OCR whose
-    // engine call or DB insert failed is never committed — the `?` above
-    // returns before this line — so the next capture of the same content
-    // OCRs again and self-heals (#5060 review: committing at decision time
-    // left transiently-failed content marked indexed, skipping its text
-    // until it changed). Legit-empty OCR results DO commit: texture the
-    // detector boxed but that holds no readable text must stay marked or
-    // it would re-OCR forever.
-    if ocr_gate_escalated && !ocr_engine_failed {
+    // Only indexed captures may seed the OCR cache. Pending captures retain
+    // their original text in the journal without claiming it is searchable.
+    // Failed OCR never seeds it; legitimate empty OCR still does.
+    if frame_id.is_some() && ocr_gate_escalated && !ocr_engine_failed {
         if let (Some(gate), Some((cache_text, cache_json))) = (ocr_gate, ocr_cache_payload.as_ref())
         {
             gate.ocr_indexed(
@@ -787,12 +784,13 @@ async fn paired_capture_inner(
 
     let duration_ms = start.elapsed().as_millis() as u64;
     debug!(
-        "paired_capture: frame_id={}, trigger={}, text_source={:?}, total={duration_ms}ms",
-        frame_id, ctx.capture_trigger, text_source
+        "paired_capture: frame_id={:?}, capture_id={}, trigger={}, text_source={:?}, total={duration_ms}ms",
+        frame_id, admission.capture_id, ctx.capture_trigger, text_source
     );
 
     Ok(PairedCaptureResult {
         frame_id,
+        capture_id: admission.capture_id,
         snapshot_path: snapshot_path_str,
         accessibility_text,
         text_source: text_source.map(String::from),
@@ -1140,6 +1138,23 @@ mod tests {
         Arc::new(DynamicImage::ImageRgb8(RgbImage::new(100, 100)))
     }
 
+    async fn indexed_frame(db: &DatabaseManager, capture: &PairedCaptureResult) -> i64 {
+        if let Some(frame_id) = capture.frame_id {
+            return frame_id;
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if let Some(frame_id) = db.capture_frame_id(&capture.capture_id).await.unwrap() {
+                return frame_id;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "capture was not indexed"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
     #[tokio::test]
     async fn deferred_extraction_persists_pixels_and_recovers_after_reopen() {
         let tmp = TempDir::new().unwrap();
@@ -1179,18 +1194,25 @@ mod tests {
             assert_eq!(frame.accessibility_text, None);
             assert_eq!(frame.text_source, None);
         }
-        assert_ne!(first.frame_id, second.frame_id);
+        assert_ne!(
+            indexed_frame(&db, &first).await,
+            indexed_frame(&db, &second).await
+        );
         db.close().await;
 
         let db = DatabaseManager::new(path.to_str().unwrap(), Default::default())
             .await
             .unwrap();
         for frame in [&first, &second] {
-            let stored = db.get_frame(frame.frame_id).await.unwrap().unwrap();
+            let stored = db
+                .get_frame(indexed_frame(&db, frame).await)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(stored.0, frame.snapshot_path);
             assert!(stored.2);
             assert_eq!(
-                db.get_frame_accessibility_data(frame.frame_id)
+                db.get_frame_accessibility_data(indexed_frame(&db, frame).await)
                     .await
                     .unwrap(),
                 (None, None)
@@ -1217,12 +1239,119 @@ mod tests {
         );
         assert!(std::path::Path::new(&result.snapshot_path).is_file());
         assert_eq!(
-            db.get_frame_accessibility_data(result.frame_id)
+            db.get_frame_accessibility_data(indexed_frame(&db, &result).await)
                 .await
                 .unwrap()
                 .0
                 .as_deref(),
             Some(recovered.text_content.as_str())
+        );
+        db.close().await;
+    }
+
+    #[tokio::test]
+    async fn durable_captures_survive_a_writer_timeout_and_restart_with_original_pixels_and_text() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("capture.sqlite");
+        let db = DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap();
+        let writer = SnapshotWriter::new(tmp.path(), 80, 1920);
+        let hold = db.begin_immediate_with_retry().await.unwrap();
+        let started = tokio::time::Instant::now();
+        let mut captures = Vec::new();
+        let mut latencies = Vec::new();
+        let base = Utc::now();
+
+        for index in 0..12 {
+            let text = format!("Authorized synthetic document capture {index}: approved ledger entry retained during database contention. Its complete timestamp, source attribution and original document text must survive replay without running OCR.");
+            let snapshot = make_snap(vec![AccessibilityTreeNode {
+                role: "AXStaticText".into(),
+                text: text.clone(),
+                on_screen: Some(true),
+                ..Default::default()
+            }]);
+            let image = Arc::new(DynamicImage::ImageRgb8(RgbImage::from_pixel(
+                100,
+                100,
+                image::Rgb([40 + index as u8, 80, 120]),
+            )));
+            let ctx = CaptureContext {
+                db: &db,
+                snapshot_writer: &writer,
+                image,
+                captured_at: base + chrono::Duration::seconds(index * 2),
+                monitor_id: 0,
+                device_name: "synthetic-enterprise-display",
+                app_name: Some("Documents"),
+                window_name: Some("Synthetic ledger"),
+                browser_url: Some("https://example.invalid/ledger"),
+                document_path: Some("/synthetic/ledger"),
+                focused: true,
+                capture_trigger: "typing_pause",
+                use_pii_removal: false,
+                languages: vec![],
+                elements_ref_frame_id: None,
+                screenshot_disabled: false,
+                in_meeting: false,
+                monitor_hosts_focus: true,
+                ax_screenshot_coherent: true,
+                focused_window_bounds: None,
+            };
+            assert!(!a11y_content_is_thin(
+                &snapshot,
+                ctx.window_name,
+                ctx.browser_url
+            ));
+            let admitted_at = tokio::time::Instant::now();
+            let capture = tokio::time::timeout(
+                std::time::Duration::from_secs(1),
+                paired_capture(&ctx, Some(&snapshot), None),
+            )
+            .await
+            .expect("durable admission waited for SQLite")
+            .unwrap();
+            latencies.push(admitted_at.elapsed().as_millis());
+            assert_eq!(capture.frame_id, None);
+            assert_eq!(capture.ocr_duration_ms, None);
+            assert_eq!(capture.captured_at, ctx.captured_at);
+            assert_eq!(capture.accessibility_text.as_deref(), Some(text.as_str()));
+            assert_eq!(image::open(&capture.snapshot_path).unwrap().width(), 100);
+            captures.push((capture, text));
+        }
+        // Outlast the real writer's 30-second acquisition timeout before restart.
+        tokio::time::sleep(std::time::Duration::from_secs(31).saturating_sub(started.elapsed()))
+            .await;
+        assert_eq!(db.pending_capture_count(), captures.len() as u64);
+        drop(hold);
+        db.close().await;
+
+        let db = DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap();
+        let mut ids = std::collections::HashSet::new();
+        for (capture, text) in &captures {
+            let frame_id = indexed_frame(&db, capture).await;
+            assert!(ids.insert(frame_id), "replay duplicated a capture identity");
+            let stored = db.get_frame(frame_id).await.unwrap().unwrap();
+            assert_eq!(stored.0, capture.snapshot_path);
+            assert_eq!(
+                db.get_frame_timestamp(frame_id).await.unwrap(),
+                Some(capture.captured_at)
+            );
+            assert_eq!(
+                capture.browser_url.as_deref(),
+                Some("https://example.invalid/ledger")
+            );
+            let (stored_text, _) = db.get_frame_accessibility_data(frame_id).await.unwrap();
+            assert_eq!(stored_text.as_deref(), Some(text.as_str()));
+            assert_eq!(image::open(&capture.snapshot_path).unwrap().height(), 100);
+        }
+        latencies.sort_unstable();
+        eprintln!(
+            "durable paired capture under blocked writer: samples={}, p95={}ms",
+            latencies.len(),
+            latencies[latencies.len() - 1]
         );
         db.close().await;
     }
@@ -1263,7 +1392,7 @@ mod tests {
 
         let result = paired_capture(&ctx, None, None).await.unwrap();
 
-        assert!(result.frame_id > 0);
+        assert!(result.frame_id.is_some_and(|frame_id| frame_id > 0));
         assert!(result.snapshot_path.ends_with(".jpg"));
         assert_eq!(result.capture_trigger, "click");
         assert!(result.accessibility_text.is_none());
@@ -1303,7 +1432,7 @@ mod tests {
 
         let result = paired_capture(&ctx, None, None).await.unwrap();
 
-        assert!(result.frame_id > 0);
+        assert!(result.frame_id.is_some_and(|frame_id| frame_id > 0));
         assert_eq!(result.snapshot_path, "");
         assert!(result.accessibility_text.is_none());
         assert!(result.text_source.is_none());
@@ -1375,7 +1504,7 @@ mod tests {
         };
         let result = paired_capture(&ctx, Some(&snap), None).await.unwrap();
 
-        assert!(result.frame_id > 0);
+        assert!(result.frame_id.is_some_and(|frame_id| frame_id > 0));
         assert_eq!(result.text_source.as_deref(), Some("accessibility"));
         assert_eq!(
             result.accessibility_text.as_deref(),
@@ -1443,7 +1572,7 @@ mod tests {
         };
         let result = paired_capture(&ctx, Some(&snap), None).await.unwrap();
 
-        assert!(result.frame_id > 0);
+        assert!(result.frame_id.is_some_and(|frame_id| frame_id > 0));
         // Empty string → treated as no text source
         assert!(result.text_source.is_none());
     }
@@ -1618,7 +1747,7 @@ mod tests {
 
         let result = paired_capture(&ctx, Some(&snapshot), None).await.unwrap();
         let (indexed_text, tree_json) = db
-            .get_frame_accessibility_data(result.frame_id)
+            .get_frame_accessibility_data(indexed_frame(&db, &result).await)
             .await
             .unwrap();
 

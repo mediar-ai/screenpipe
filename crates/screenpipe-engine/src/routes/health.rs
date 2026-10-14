@@ -771,13 +771,21 @@ pub struct PipelineHealthInfo {
     pub uptime_secs: f64,
     pub frames_captured: u64,
     pub frames_db_written: u64,
+    /// Captures returned durably before their indexed frame ID was available.
+    #[serde(default)]
+    pub frames_deferred_index: u64,
+    /// Current durable capture records still awaiting indexing completion.
+    #[serde(default)]
+    pub pending_capture_records: u64,
+    #[serde(default)]
+    pub last_durable_capture_ts: u64,
     pub frames_dropped: u64,
     pub frame_drop_rate: f64,
     /// Frames dropped because the capture op timed out (subset of frames_dropped).
     pub frames_dropped_timeout: u64,
     /// Frames dropped because the capture op errored (subset of frames_dropped).
     pub frames_dropped_error: u64,
-    /// Residual loss canary: attempts - written - dedup - dropped. ~0 normally;
+    /// Residual loss after indexed/deferred admissions and expected skips. ~0 normally;
     /// non-zero = a frame-loss path nothing counts. Use frames_dropped_* for the
     /// actionable loss numbers.
     pub silent_loss: u64,
@@ -1195,13 +1203,15 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         (stage, (ts > 0).then_some(ts))
     };
 
-    let last_frame_ts = vision_snap
+    let last_vision_index_ts = vision_snap
         .last_db_write_ts
+        .max(state.db.last_capture_index_ts());
+    let last_frame_ts = last_vision_index_ts
+        .max(vision_snap.last_durable_capture_ts)
         .max(vision_snap.last_capture_attempt_ts)
         .max(vision_snap.last_capture_loop_heartbeat_ts);
-    let last_frame = if vision_snap.last_db_write_ts > 0 {
-        Utc.timestamp_opt(vision_snap.last_db_write_ts as i64, 0)
-            .single()
+    let last_frame = if last_vision_index_ts > 0 {
+        Utc.timestamp_opt(last_vision_index_ts as i64, 0).single()
     } else {
         None
     };
@@ -1317,8 +1327,8 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     };
 
     // Detect DB write stalls: capture loop is alive (heartbeat fresh) but DB
-    // writes have stopped. This indicates pool exhaustion or DB lock contention
-    // — data is being captured but silently lost.
+    // writes have stopped. Pending journal records retain authorized captures
+    // while pool exhaustion or DB contention delays indexing.
     let vision_db_write_stalled = if !state.vision_disabled
         && vision_capture_expected
         && vision_snap.last_capture_attempt_ts > 0
@@ -1329,8 +1339,8 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         // Require at least one successful DB write before flagging a stall.
         // last_db_write_ts == 0 means "never written yet" (pipeline warming up),
         // not "writes stopped" — same fix as audio side.
-        let db_stale = vision_snap.last_db_write_ts > 0
-            && now_ts.saturating_sub(vision_snap.last_db_write_ts) > threshold_secs;
+        let db_stale = last_vision_index_ts > 0
+            && now_ts.saturating_sub(last_vision_index_ts) > threshold_secs;
         let stalled = capture_fresh && db_stale;
 
         // Baseline captured on the transition into a stall so the classifier
@@ -1351,16 +1361,20 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
 
         if stalled {
             let (_, _, ws, wi) = state.db.pool_stats();
-            let cause = classify_vision_stall(
-                vision_snap
-                    .capture_attempts
-                    .saturating_sub(VISION_STALL_BASE_ATTEMPTS.load(Ordering::Relaxed)),
-                vision_snap
-                    .frames_dropped
-                    .saturating_sub(VISION_STALL_BASE_DROPPED.load(Ordering::Relaxed)),
-                vision_snap.avg_db_latency_ms,
-                wi,
-            );
+            let cause = if state.db.pending_capture_count() > 0 {
+                VisionStallCause::DbWritesNotLanding
+            } else {
+                classify_vision_stall(
+                    vision_snap
+                        .capture_attempts
+                        .saturating_sub(VISION_STALL_BASE_ATTEMPTS.load(Ordering::Relaxed)),
+                    vision_snap
+                        .frames_dropped
+                        .saturating_sub(VISION_STALL_BASE_DROPPED.load(Ordering::Relaxed)),
+                    vision_snap.avg_db_latency_ms,
+                    wi,
+                )
+            };
             let _ = ws;
             VISION_STALL_CAUSE.store(cause as u8, Ordering::Relaxed);
 
@@ -1370,39 +1384,13 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
             if now_ts.saturating_sub(prev) >= 60 {
                 LAST_VISION_STALL_LOG.store(now_ts, Ordering::Relaxed);
                 let (rs, ri, ws, wi) = state.db.pool_stats();
-                // last_db_write_ts only advances when a UNIQUE frame is
-                // actually inserted; dedup-skipped captures don't update it.
-                // So a long delta here typically means the screen is static
-                // (idle user, slide deck, video call, IDE waiting) — NOT a
-                // stuck pipeline. Phrase it that way to stop the false-alarm
-                // panic.
-                //
-                // Also surface lifetime counters so when the cause IS a real
-                // pipeline stall, the log alone is enough to pin which stage
-                // failed — without us having to email the user back asking
-                // for `sqlite3` row counts.
-                //
-                // The triage rule: `attempts - persisted - dedup_skips` is the
-                // silent-loss count over the whole session. If that number
-                // climbs while a stall warning is firing, frames are being
-                // captured but lost between attempt and write. If it stays
-                // flat, the stall is just dedup on a static screen.
-                //
-                //   attempts climbing, persisted climbing, dedup ≈ 0
-                //     → healthy active screen
-                //   attempts climbing, persisted ≈ flat, dedup climbing
-                //     → static screen / idle user (false alarm)
-                //   attempts climbing, persisted ≈ flat, dedup flat
-                //     → real silent loss between attempt and writer
-                //   attempts flat too
-                //     → capture itself paused (TCC revoke, display sleep)
-                let silent_loss = vision_snap
-                    .capture_attempts
-                    .saturating_sub(vision_snap.frames_db_written)
-                    .saturating_sub(vision_snap.dedup_skips);
+                // Dedup/corrupt skips advance the progress clock; a stale
+                // index with pending journal records means indexing is behind,
+                // not that locally durable screenshots were lost.
+                let silent_loss = vision_snap.silent_loss;
                 warn!(
                     "health_check: no unique vision frame in {}s (capture heartbeat {}s ago — {}) | lifetime: attempts={}, persisted={}, dedup={}, silent_loss={} | pool: read={}/{} idle, write={}/{} idle | suspected: {}",
-                    now_ts.saturating_sub(vision_snap.last_db_write_ts),
+                    now_ts.saturating_sub(last_vision_index_ts),
                     now_ts.saturating_sub(vision_snap.last_capture_attempt_ts),
                     match cause {
                         VisionStallCause::SilentLoss =>
@@ -1754,7 +1742,7 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
                     current_vision_stall_cause()
                         .unwrap_or(VisionStallCause::DbWritesNotLanding)
                         .detail(
-                            now_ts.saturating_sub(vision_snap.last_db_write_ts),
+                            now_ts.saturating_sub(last_vision_index_ts),
                             vision_snap.silent_loss,
                             screenpipe_screen::monitor::secs_since_capture_backend_fallback(),
                         ),
@@ -1828,6 +1816,9 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
             uptime_secs: vision_snap.uptime_secs,
             frames_captured: vision_snap.frames_captured,
             frames_db_written: vision_snap.frames_db_written,
+            frames_deferred_index: vision_snap.frames_deferred_index,
+            pending_capture_records: state.db.pending_capture_count(),
+            last_durable_capture_ts: vision_snap.last_durable_capture_ts,
             frames_dropped: vision_snap.frames_dropped,
             frame_drop_rate: vision_snap.frame_drop_rate,
             frames_dropped_timeout: vision_snap.frames_dropped_timeout,

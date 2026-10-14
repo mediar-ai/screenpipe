@@ -298,6 +298,7 @@ impl Drop for ImmediateTx {
 pub struct DatabaseManager {
     pub(crate) storage: Option<Arc<crate::storage::HybridStorage>>,
     upload_source_id: tokio::sync::OnceCell<String>,
+    capture_journal: Option<Arc<capture_journal::CaptureJournal>>,
     /// Read-only pool. Used for all SELECT queries.
     /// Separated from writes so read bursts (search, timeline, API) can never
     /// starve the write pipeline. Size depends on DbConfig tier.
@@ -318,7 +319,7 @@ pub struct DatabaseManager {
     /// heavy reads, we guarantee 25+ connections remain available for normal ops.
     heavy_read_semaphore: Arc<Semaphore>,
     /// Write coalescing queue. Hot-path writes are submitted here and
-    /// batched into single transactions every 100ms.
+    /// ready writes are batched into a transaction when the receiver wakes.
     write_queue: crate::write_queue::WriteQueue,
     /// Shared health for the write queue (disk-I/O wedge detection + recovery).
     /// Polled by the app to surface degradation and trigger an engine restart.
@@ -457,9 +458,11 @@ async fn flush_ax_bulk(
 mod accessibility;
 mod activity_ledger;
 mod audio;
+pub(crate) mod capture_journal;
 mod display_layout;
 mod elements;
 mod feedback;
+pub use capture_journal::FrameAdmission;
 mod frames;
 mod maintenance;
 mod meetings;

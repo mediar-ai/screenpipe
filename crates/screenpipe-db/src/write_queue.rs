@@ -614,30 +614,11 @@ pub(crate) enum WriteOp {
         is_duplicate: bool,
     },
     InsertSnapshotFrameWithOcr {
-        device_name: String,
-        timestamp: DateTime<Utc>,
-        snapshot_path: String,
-        app_name: Option<String>,
-        window_name: Option<String>,
-        browser_url: Option<String>,
-        /// Absolute filesystem path of the document the focused window is
-        /// editing, when the platform exposes one (macOS via AXDocument).
-        /// Distinct from `browser_url` — this is for editor file paths.
-        document_path: Option<String>,
-        focused: bool,
-        capture_trigger: Option<String>,
-        accessibility_text: Option<String>,
-        text_source: Option<String>,
-        accessibility_tree_json: Option<String>,
-        content_hash: Option<i64>,
-        simhash: Option<i64>,
-        /// Per-word OCR bounding boxes, stored on the frame (`frames.text_json`).
-        ocr_text_json: Option<String>,
-        /// Pre-computed full_text for FTS indexing
-        full_text: Option<String>,
-        /// When Some, this frame references another frame's elements (dedup).
-        /// The frame row is still inserted but element insertions are skipped.
-        elements_ref_frame_id: Option<i64>,
+        payload: crate::db::capture_journal::SnapshotFramePayload,
+    },
+    AdmitSnapshotFrame {
+        capture_id: String,
+        payload: crate::db::capture_journal::SnapshotFramePayload,
     },
     InsertVideoChunkWithFps {
         file_path: String,
@@ -877,6 +858,11 @@ pub enum SyncTable {
 pub(crate) enum WriteResult {
     /// An inserted row ID (i64). Used by most insert operations.
     Id(i64),
+    FrameAdmission {
+        frame_id: Option<i64>,
+        delete_snapshot: bool,
+        indexed_now: bool,
+    },
     /// For operations that return nothing meaningful.
     #[allow(dead_code)]
     Unit,
@@ -1741,88 +1727,14 @@ async fn execute_single_write(
             Ok(WriteResult::Id(audio_chunk_id))
         }
 
-        WriteOp::InsertSnapshotFrameWithOcr {
-            device_name,
-            timestamp,
-            snapshot_path,
-            app_name,
-            window_name,
-            browser_url,
-            document_path,
-            focused,
-            capture_trigger,
-            accessibility_text,
-            text_source,
-            accessibility_tree_json,
-            content_hash,
-            simhash,
-            ocr_text_json,
-            full_text,
-            elements_ref_frame_id,
-        } => {
-            let id = sqlx::query(
-                r#"INSERT INTO frames (
-                    video_chunk_id, offset_index, timestamp, name,
-                    browser_url, app_name, window_name, focused, device_name,
-                    snapshot_path, capture_trigger, accessibility_text, text_source,
-                    accessibility_tree_json, content_hash, simhash, full_text,
-                    elements_ref_frame_id, document_path, text_json
-                ) VALUES (
-                    NULL, 0, ?1, ?2,
-                    ?3, ?4, ?5, ?6, ?7,
-                    ?8, ?9, ?10, ?11,
-                    ?12, ?13, ?14, ?15,
-                    ?16, ?17, ?18
-                )"#,
-            )
-            .bind(timestamp)
-            .bind(if snapshot_path.is_empty() {
-                None
-            } else {
-                Some(snapshot_path.as_str())
-            })
-            .bind(browser_url.as_deref())
-            .bind(app_name.as_deref())
-            .bind(window_name.as_deref())
-            .bind(focused)
-            .bind(device_name.as_str())
-            .bind(if snapshot_path.is_empty() {
-                None
-            } else {
-                Some(snapshot_path.as_str())
-            })
-            .bind(capture_trigger.as_deref())
-            .bind(accessibility_text.as_deref())
-            .bind(text_source.as_deref())
-            .bind(accessibility_tree_json.as_deref())
-            .bind(content_hash)
-            .bind(simhash)
-            .bind(full_text.as_deref())
-            .bind(elements_ref_frame_id)
-            .bind(document_path.as_deref())
-            .bind(ocr_text_json.as_deref())
-            .execute(&mut **conn)
-            .await?
-            .last_insert_rowid();
-
-            // OCR text/metadata now lives on the frame itself: full_text feeds
-            // frames_fts (search) and text_json holds the per-word bounds. The
-            // ocr_text table was retired in 2026-06. Element rows are still
-            // deferred to a separate transaction by the caller.
-
-            if let Some(ref_id) = elements_ref_frame_id {
-                debug!(
-                    "elements dedup: frame {} references {} (same content_hash)",
-                    id, ref_id
-                );
-            }
-
-            debug!(
-                "write_queue: insert_snapshot_frame: id={}, trigger={:?}",
-                id, capture_trigger
-            );
+        WriteOp::InsertSnapshotFrameWithOcr { payload } => {
+            let id = crate::db::capture_journal::insert_snapshot_payload(conn, payload, 0).await?;
             Ok(WriteResult::Id(id))
         }
+        WriteOp::AdmitSnapshotFrame {
+            capture_id,
+            payload,
+        } => crate::db::capture_journal::execute_admission(conn, capture_id, payload).await,
 
         WriteOp::InsertDeferredElements {
             frame_id,
@@ -1852,7 +1764,7 @@ async fn execute_single_write(
             if let Some(ref text_json) = ocr_text_json {
                 if !text_json.is_empty() {
                     crate::db::DatabaseManager::insert_ocr_elements(conn, *frame_id, text_json)
-                        .await;
+                        .await?;
                 }
             }
             if let Some(ref tree_json) = accessibility_tree_json {
@@ -1860,7 +1772,7 @@ async fn execute_single_write(
                     crate::db::DatabaseManager::insert_accessibility_elements(
                         conn, *frame_id, tree_json,
                     )
-                    .await;
+                    .await?;
                 }
             }
             Ok(WriteResult::Unit)
@@ -2227,7 +2139,7 @@ async fn execute_single_write(
 
                 // OCR elements still go to the unified elements table for rendering.
                 if !window.text_json.is_empty() {
-                    crate::db::DatabaseManager::insert_ocr_elements(
+                    let _ = crate::db::DatabaseManager::insert_ocr_elements(
                         conn,
                         frame_id,
                         &window.text_json,
@@ -3693,23 +3605,25 @@ mod tests {
 
         let result = queue
             .submit(WriteOp::InsertSnapshotFrameWithOcr {
-                device_name: "monitor1".to_string(),
-                timestamp: Utc::now(),
-                snapshot_path: "/tmp/frame.jpg".to_string(),
-                app_name: Some("Firefox".to_string()),
-                window_name: Some("GitHub".to_string()),
-                browser_url: Some("https://github.com".to_string()),
-                document_path: None,
-                focused: true,
-                capture_trigger: Some("click".to_string()),
-                accessibility_text: Some("page content".to_string()),
-                text_source: Some("accessibility".to_string()),
-                accessibility_tree_json: None,
-                content_hash: Some(12345),
-                simhash: Some(67890),
-                ocr_text_json: None,
-                full_text: Some("page content".to_string()),
-                elements_ref_frame_id: None,
+                payload: crate::db::capture_journal::SnapshotFramePayload {
+                    device_name: "monitor1".to_string(),
+                    timestamp: Utc::now(),
+                    snapshot_path: "/tmp/frame.jpg".to_string(),
+                    app_name: Some("Firefox".to_string()),
+                    window_name: Some("GitHub".to_string()),
+                    browser_url: Some("https://github.com".to_string()),
+                    document_path: None,
+                    focused: true,
+                    capture_trigger: Some("click".to_string()),
+                    accessibility_text: Some("page content".to_string()),
+                    text_source: Some("accessibility".to_string()),
+                    accessibility_tree_json: None,
+                    content_hash: Some(12345),
+                    simhash: Some(67890),
+                    ocr_text_json: None,
+                    full_text: Some("page content".to_string()),
+                    elements_ref_frame_id: None,
+                },
             })
             .await
             .unwrap();

@@ -420,9 +420,10 @@ impl DatabaseManager {
                 ..Default::default()
             },
         );
-        let db_manager = DatabaseManager {
+        let mut db_manager = DatabaseManager {
             storage,
             upload_source_id: tokio::sync::OnceCell::new(),
+            capture_journal: None,
             pool: read_pool,
             write_pool,
             write_semaphore,
@@ -583,6 +584,35 @@ impl DatabaseManager {
             return Err(error);
         }
         drop(_checkpoint_guard);
+
+        if background && !is_in_memory && !bootstrap_storage {
+            let journal_setup = async {
+                let mut tx = db_manager.begin_immediate_with_retry().await?;
+                sqlx::query("INSERT OR IGNORE INTO _capture_journal_source(singleton,source_id) VALUES(1,?)")
+                    .bind(uuid::Uuid::new_v4().to_string()).execute(&mut **tx.conn()).await?;
+                let source_id: String = sqlx::query_scalar("SELECT source_id FROM _capture_journal_source WHERE singleton=1")
+                    .fetch_one(&mut **tx.conn()).await?;
+                tx.commit().await?;
+                let root = db_manager.storage.as_ref().map(|storage| storage.root.clone())
+                    .unwrap_or_else(|| database_file.parent().unwrap_or(Path::new(".")).to_path_buf());
+                capture_journal::CaptureJournal::new(root, source_id)
+            }.await;
+            match journal_setup {
+                Ok(journal) => {
+                    if background {
+                        journal.start(
+                            db_manager.write_queue.clone(),
+                            db_manager.close_token.clone(),
+                        );
+                    }
+                    db_manager.capture_journal = Some(journal);
+                }
+                Err(error) => {
+                    db_manager.close().await;
+                    return Err(error);
+                }
+            }
+        }
 
         // Surface persistent-file corruption proactively at boot with a recovery
         // hint, instead of only discovering it later via worker query errors.

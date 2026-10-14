@@ -258,7 +258,8 @@ pub struct PipelineMetrics {
     pub frames_video_written: AtomicU64,
 
     // --- DB stage ---
-    /// Total frames successfully inserted into DB
+    /// Indexed inserts acknowledged directly by the capture loop. Background
+    /// journal replay reports its indexing progress through DatabaseManager.
     pub frames_db_written: AtomicU64,
     /// Frames dropped (OCR done but not written to DB — e.g. tracker miss)
     pub frames_dropped: AtomicU64,
@@ -291,6 +292,10 @@ pub struct PipelineMetrics {
     // --- Timestamps ---
     /// Unix timestamp (secs) of most recent DB write — used by health check to avoid DB queries
     pub last_db_write_ts: AtomicU64,
+    /// Last locally durable capture, including records awaiting indexing.
+    pub last_durable_capture_ts: AtomicU64,
+    /// Captures admitted durably before their frame ID became available.
+    pub frames_deferred_index: AtomicU64,
     /// Unix timestamp (secs) of the most recent capture operation. This proves
     /// capture work is being issued, but unlike the loop heartbeat it may stay
     /// flat during intentional focus-aware idling.
@@ -366,6 +371,8 @@ impl PipelineMetrics {
             video_queue_depth: AtomicU64::new(0),
             pipeline_stall_count: AtomicU64::new(0),
             last_db_write_ts: AtomicU64::new(0),
+            last_durable_capture_ts: AtomicU64::new(0),
+            frames_deferred_index: AtomicU64::new(0),
             last_capture_attempt_ts: AtomicU64::new(0),
             last_capture_loop_heartbeat_ts: AtomicU64::new(0),
             capture_loop_heartbeats: AtomicU64::new(0),
@@ -383,6 +390,20 @@ impl PipelineMetrics {
     /// Record that a frame was captured and sent to queues.
     pub fn record_capture(&self) {
         self.frames_captured.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_durable_capture(&self) {
+        self.record_capture();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        self.last_durable_capture_ts.store(now, Ordering::Relaxed);
+    }
+
+    pub fn record_deferred_index(&self) {
+        self.record_durable_capture();
+        self.frames_deferred_index.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Record that the loop issued a capture operation, even when the DB write
@@ -622,8 +643,8 @@ impl PipelineMetrics {
         let uptime_secs = self.started_at.elapsed().as_secs_f64();
 
         // Loss accounting. Every counted capture attempt resolves to exactly
-        // one of: persisted (frames_db_written), a static-screen dedup
-        // (dedup_skips), or an explicit drop (frames_dropped = timeout+error).
+        // one of: indexed (frames_db_written), durable pending indexing
+        // (frames_deferred_index), dedup, corruption, or an explicit drop.
         // `silent_loss` is therefore the RESIDUAL — attempts we can't attribute
         // to any of those. It should sit at ~0; a growing residual means a
         // frame-loss path exists that nothing counts (a regression canary, not
@@ -641,8 +662,10 @@ impl PipelineMetrics {
         // a dedup), so it must be subtracted here too — otherwise every skipped
         // black/green frame would inflate `silent_loss` and falsely trip the
         // leak canary.
+        let frames_deferred_index = self.frames_deferred_index.load(Ordering::Relaxed);
         let silent_loss = capture_attempts
             .saturating_sub(frames_db_written)
+            .saturating_sub(frames_deferred_index)
             .saturating_sub(dedup_skips)
             .saturating_sub(frames_corrupt)
             .saturating_sub(frames_dropped);
@@ -719,7 +742,7 @@ impl PipelineMetrics {
             // write, so it never surfaced loss. See `silent_loss_rate` for the
             // broader attempts-based view that also catches trigger starvation.
             frame_drop_rate: {
-                let terminal = frames_dropped + frames_db_written;
+                let terminal = frames_dropped + frames_db_written + frames_deferred_index;
                 if terminal > 0 {
                     frames_dropped as f64 / terminal as f64
                 } else {
@@ -743,6 +766,8 @@ impl PipelineMetrics {
             video_queue_depth: self.video_queue_depth.load(Ordering::Relaxed),
             pipeline_stall_count: self.pipeline_stall_count.load(Ordering::Relaxed),
             last_db_write_ts: self.last_db_write_ts.load(Ordering::Relaxed),
+            last_durable_capture_ts: self.last_durable_capture_ts.load(Ordering::Relaxed),
+            frames_deferred_index,
             last_capture_attempt_ts: self.last_capture_attempt_ts.load(Ordering::Relaxed),
             last_capture_loop_heartbeat_ts: self
                 .last_capture_loop_heartbeat_ts
@@ -790,7 +815,8 @@ pub struct MetricsSnapshot {
     pub frames_dropped_timeout: u64,
     /// Frames dropped because the capture op errored (subset of frames_dropped).
     pub frames_dropped_error: u64,
-    /// Residual loss canary: attempts - written - dedup_skips - frames_dropped.
+    /// Residual loss canary: attempts minus indexed/deferred admissions,
+    /// dedup/corrupt skips, and explicit drops.
     /// ~0 in steady state (every attempt is accounted for); a growing value
     /// means a frame-loss path exists that nothing counts. For the actionable
     /// loss numbers use frames_dropped_timeout/error.
@@ -808,6 +834,10 @@ pub struct MetricsSnapshot {
     pub pipeline_stall_count: u64,
     /// Unix timestamp (secs) of most recent DB write (0 = none yet)
     pub last_db_write_ts: u64,
+    /// Most recent local durable admission, independent of SQLite progress.
+    pub last_durable_capture_ts: u64,
+    /// Total durable admissions returned before indexing completed.
+    pub frames_deferred_index: u64,
     /// Unix timestamp (secs) of most recent capture attempt (0 = none yet)
     pub last_capture_attempt_ts: u64,
     /// Unix timestamp (secs) of the most recent capture-loop iteration. This
@@ -831,6 +861,21 @@ pub struct MetricsSnapshot {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn durable_pending_capture_is_not_an_indexed_write_or_silent_loss() {
+        let metrics = PipelineMetrics::new();
+        metrics.record_capture_attempt();
+        metrics.record_deferred_index();
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.frames_captured, 1);
+        assert_eq!(snapshot.frames_deferred_index, 1);
+        assert_eq!(snapshot.frames_db_written, 0);
+        assert_eq!(snapshot.last_db_write_ts, 0);
+        assert!(snapshot.last_durable_capture_ts > 0);
+        assert_eq!(snapshot.silent_loss, 0);
+        assert_eq!(snapshot.frame_drop_rate, 0.0);
+    }
 
     /// #5808: the capture loop's effective screenshot state has to survive the
     /// trip to /health, or health falls back to blaming OS permission.

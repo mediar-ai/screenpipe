@@ -98,6 +98,8 @@ pub enum DropReason {
     /// etc.). Triggers that drained alongside the failing capture have
     /// no frame to point at.
     CaptureError,
+    /// The screenshot and metadata are durable but its indexed ID is pending.
+    IndexPending,
     /// Any other deterministic skip not yet enumerated.
     Other,
 }

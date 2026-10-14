@@ -964,10 +964,27 @@ fn record_persisted_capture(
     monitor: &screenpipe_screen::PipelineMetrics,
     duration: Duration,
 ) {
-    aggregate.record_capture();
+    aggregate.record_durable_capture();
     aggregate.record_db_write(duration);
-    monitor.record_capture();
+    monitor.record_durable_capture();
     monitor.record_db_write(duration);
+}
+
+fn record_capture_admission(
+    aggregate: &screenpipe_screen::PipelineMetrics,
+    monitor: &screenpipe_screen::PipelineMetrics,
+    result: &PairedCaptureResult,
+) {
+    if result.frame_id.is_some() {
+        record_persisted_capture(
+            aggregate,
+            monitor,
+            Duration::from_millis(result.duration_ms),
+        );
+    } else {
+        aggregate.record_deferred_index();
+        monitor.record_deferred_index();
+    }
 }
 
 /// Record the mutually exclusive live OCR cache outcomes carried by a
@@ -1227,25 +1244,26 @@ pub(crate) async fn event_driven_capture_loop(
                     let _ = comparer.compare(&output.image);
                 }
                 if let Some(ref result) = output.result {
-                    last_content_hash = result.content_hash;
-                    last_frame_id = Some(result.frame_id);
-                    last_db_write = Instant::now();
-                    // Update elements cache for this device (first frame = anchor)
-                    if let Some(hash) = result.content_hash {
-                        last_elements_cache.insert(device_name.clone(), (result.frame_id, hash));
+                    if let Some(frame_id) = result.frame_id {
+                        last_content_hash = result.content_hash;
+                        last_frame_id = Some(frame_id);
+                        last_db_write = Instant::now();
+                        if let Some(hash) = result.content_hash {
+                            last_elements_cache.insert(device_name.clone(), (frame_id, hash));
+                        }
+                    } else {
+                        last_content_hash = None;
+                        last_frame_id = None;
+                        last_elements_cache.remove(&device_name);
                     }
-                    record_persisted_capture(
-                        &vision_metrics,
-                        &monitor_liveness,
-                        Duration::from_millis(result.duration_ms),
-                    );
+                    record_capture_admission(&vision_metrics, &monitor_liveness, result);
                     record_ocr_result_metrics(&vision_metrics, result);
                     if let Some(ref cache) = hot_frame_cache {
                         push_to_hot_cache(cache, result, &device_name, &CaptureTrigger::Manual)
                             .await;
                     }
                     info!(
-                        "startup capture for monitor {}: frame_id={}, dur={}ms",
+                        "startup capture for monitor {}: frame_id={:?}, dur={}ms",
                         monitor_id, result.frame_id, result.duration_ms
                     );
                 } else if let Some(kind) = output.corrupt {
@@ -2169,25 +2187,25 @@ pub(crate) async fn event_driven_capture_loop(
                             if focus_controller.hosts_focus_for_monitor(&monitor) {
                                 recording_detail.observe_capture(capture_started.elapsed());
                             }
-                            // Full capture — update hash, metrics, cache
-                            last_content_hash = result.content_hash;
-                            last_frame_id = Some(result.frame_id);
-                            last_db_write = Instant::now();
-
-                            // Update elements cache: only when we inserted new elements
-                            // (not when we referenced another frame's elements)
-                            if !output.elements_deduped {
-                                if let Some(hash) = result.content_hash {
-                                    last_elements_cache
-                                        .insert(device_name.clone(), (result.frame_id, hash));
+                            if let Some(frame_id) = result.frame_id {
+                                last_content_hash = result.content_hash;
+                                last_frame_id = Some(frame_id);
+                                last_db_write = Instant::now();
+                                if !output.elements_deduped {
+                                    if let Some(hash) = result.content_hash {
+                                        last_elements_cache
+                                            .insert(device_name.clone(), (frame_id, hash));
+                                    }
                                 }
+                            } else {
+                                // Pending data is durable, but cannot anchor indexed-frame
+                                // dedup, element references, or trigger associations yet.
+                                last_content_hash = None;
+                                last_frame_id = None;
+                                last_elements_cache.remove(&device_name);
                             }
 
-                            record_persisted_capture(
-                                &vision_metrics,
-                                &monitor_liveness,
-                                Duration::from_millis(result.duration_ms),
-                            );
+                            record_capture_admission(&vision_metrics, &monitor_liveness, result);
                             record_ocr_result_metrics(&vision_metrics, result);
                             // OCR-gate telemetry (#5054/#5060): decision counters
                             // (skip / crop_ocr — the fast-path ratio) plus the
@@ -2215,22 +2233,30 @@ pub(crate) async fn event_driven_capture_loop(
                             // triggers (Idle, VisualChange, startup Manual)
                             // have nothing to pair.
                             if !correlation_ids.is_empty() {
-                                if let Some(ref linker) = linker_tx {
+                                if let (Some(ref linker), Some(frame_id)) =
+                                    (&linker_tx, result.frame_id)
+                                {
                                     let _ = linker.try_send(
                                         crate::frame_linker_actor::LinkerMessage::FrameCaptured(
                                             crate::frame_linker::FrameCaptured {
-                                                frame_id: result.frame_id,
+                                                frame_id,
                                                 correlation_ids: std::mem::take(
                                                     &mut correlation_ids,
                                                 ),
                                             },
                                         ),
                                     );
+                                } else {
+                                    report_triggers_dropped(
+                                        linker_tx.as_ref(),
+                                        std::mem::take(&mut correlation_ids),
+                                        crate::frame_linker::DropReason::IndexPending,
+                                    );
                                 }
                             }
 
                             debug!(
-                                "event capture: trigger={}, frame_id={}, text_source={:?}, dur={}ms, elements_deduped={}, monitor={}",
+                                "event capture: trigger={}, frame_id={:?}, text_source={:?}, dur={}ms, elements_deduped={}, monitor={}",
                                 trigger.as_str(),
                                 result.frame_id,
                                 result.text_source,
@@ -2429,8 +2455,11 @@ async fn push_to_hot_cache(
     device_name: &str,
     trigger: &CaptureTrigger,
 ) {
+    let Some(frame_id) = result.frame_id else {
+        return;
+    };
     let hot = HotFrame {
-        frame_id: result.frame_id,
+        frame_id,
         timestamp: result.captured_at,
         device_name: device_name.into(),
         app_name: result.app_name.as_deref().unwrap_or("").into(),
@@ -3791,11 +3820,11 @@ async fn do_capture(
     } else {
         paired_capture(&ctx, tree_snapshot.as_ref(), Some(ocr_gate)).await?
     };
-    if let Some(sender) = params.semantic_tx {
+    if let (Some(sender), Some(frame_id)) = (params.semantic_tx, result.frame_id) {
         match tree_snapshot {
             Some(snapshot) if ax_screenshot_coherent => {
                 let _ = sender.submit(SemanticProjectionJob::from_capture(
-                    result.frame_id,
+                    frame_id,
                     result.captured_at,
                     result.app_name.clone(),
                     result.browser_url.clone(),
@@ -3804,10 +3833,10 @@ async fn do_capture(
                 ));
             }
             Some(_) => {
-                sender.record_capture_gap(result.frame_id, SemanticCaptureGap::FocusIncoherent);
+                sender.record_capture_gap(frame_id, SemanticCaptureGap::FocusIncoherent);
             }
             None => {
-                sender.record_capture_gap(result.frame_id, SemanticCaptureGap::TreeMissing);
+                sender.record_capture_gap(frame_id, SemanticCaptureGap::TreeMissing);
             }
         }
     }
@@ -4205,7 +4234,8 @@ mod tests {
         ocr_was_empty: bool,
     ) -> PairedCaptureResult {
         PairedCaptureResult {
-            frame_id: 1,
+            frame_id: Some(1),
+            capture_id: "test-capture".to_string(),
             snapshot_path: String::new(),
             accessibility_text: None,
             text_source: None,
@@ -4221,6 +4251,23 @@ mod tests {
             window_name: None,
             browser_url: None,
             content_hash: None,
+        }
+    }
+
+    #[test]
+    fn pending_index_admission_advances_durable_progress_without_a_db_write() {
+        let aggregate = screenpipe_screen::PipelineMetrics::new();
+        let monitor = screenpipe_screen::PipelineMetrics::new();
+        let mut result = ocr_metrics_result(false, None, false);
+        result.frame_id = None;
+        record_capture_admission(&aggregate, &monitor, &result);
+        for metrics in [&aggregate, &monitor] {
+            let snapshot = metrics.snapshot();
+            assert_eq!(snapshot.frames_captured, 1);
+            assert_eq!(snapshot.frames_deferred_index, 1);
+            assert_eq!(snapshot.frames_db_written, 0);
+            assert_eq!(snapshot.last_db_write_ts, 0);
+            assert!(snapshot.last_durable_capture_ts > 0);
         }
     }
 

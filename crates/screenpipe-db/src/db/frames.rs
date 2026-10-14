@@ -247,22 +247,21 @@ impl DatabaseManager {
     /// Hierarchical levels (Tesseract: 1-5) still go through per-row `RETURNING id`
     /// because each row's id may become the parent of a later row.
     ///
-    /// Errors are logged and swallowed so that the primary OCR insert path is never
-    /// blocked by a failure in the new elements table.
+    /// Return write errors so durable admission can retry the complete capture.
     pub(crate) async fn insert_ocr_elements(
         tx: &mut sqlx::pool::PoolConnection<Sqlite>,
         frame_id: i64,
         text_json: &str,
-    ) {
+    ) -> Result<(), sqlx::Error> {
         let blocks: Vec<OcrTextBlock> = match serde_json::from_str(text_json) {
             Ok(b) => b,
             Err(e) => {
                 debug!("elements: skipping OCR parse for frame {}: {}", frame_id, e);
-                return;
+                return Ok(());
             }
         };
         if blocks.is_empty() {
-            return;
+            return Ok(());
         }
 
         // 12 params per row × 80 rows = 960 params, well below SQLite's
@@ -316,7 +315,7 @@ impl DatabaseManager {
                             "elements: OCR bulk insert failed for frame {}: {}",
                             frame_id, e
                         );
-                        return;
+                        return Err(e);
                     }
                     buf.clear();
                 }
@@ -331,7 +330,7 @@ impl DatabaseManager {
                         "elements: OCR bulk insert failed for frame {}: {}",
                         frame_id, e
                     );
-                    return;
+                    return Err(e);
                 }
                 buf.clear();
             }
@@ -416,7 +415,7 @@ impl DatabaseManager {
                 }
                 Err(e) => {
                     debug!("elements: OCR insert failed for frame {}: {}", frame_id, e);
-                    return;
+                    return Err(e);
                 }
             }
         }
@@ -428,8 +427,10 @@ impl DatabaseManager {
                     "elements: OCR bulk insert failed for frame {}: {}",
                     frame_id, e
                 );
+                return Err(e);
             }
         }
+        Ok(())
     }
 
     /// Insert accessibility tree nodes from `tree_json` (serialized
@@ -444,12 +445,12 @@ impl DatabaseManager {
     /// writes onto a single connection — nothing else can consume ids
     /// between the reservation read and the batch insert below.
     ///
-    /// Errors are logged and swallowed.
+    /// Return write errors so durable admission can retry the complete capture.
     pub(crate) async fn insert_accessibility_elements(
         tx: &mut sqlx::pool::PoolConnection<Sqlite>,
         frame_id: i64,
         tree_json: &str,
-    ) {
+    ) -> Result<(), sqlx::Error> {
         // AccessibilityTreeNode: { role, text, depth, bounds?, on_screen?, automation props... }
         #[derive(serde::Deserialize, serde::Serialize)]
         struct AxNode {
@@ -509,11 +510,11 @@ impl DatabaseManager {
             Ok(n) => n,
             Err(e) => {
                 debug!("elements: skipping AX parse for frame {}: {}", frame_id, e);
-                return;
+                return Ok(());
             }
         };
         if nodes.is_empty() {
-            return;
+            return Ok(());
         }
 
         // Reserve a contiguous id block up front instead of RETURNING id
@@ -534,7 +535,7 @@ impl DatabaseManager {
                     "elements: AX id reservation failed for frame {}: {}",
                     frame_id, e
                 );
-                return;
+                return Err(e);
             }
         };
 
@@ -678,9 +679,10 @@ impl DatabaseManager {
                     "elements: AX bulk insert failed for frame {}: {}",
                     frame_id, e
                 );
-                return;
+                return Err(e);
             }
         }
+        Ok(())
     }
 
     /// Insert a snapshot frame AND optional OCR text positions in a single transaction.
@@ -714,7 +716,144 @@ impl DatabaseManager {
     ) -> Result<i64, sqlx::Error> {
         use crate::write_queue::{WriteOp, WriteResult};
 
-        // Compute full_text before submitting to queue (pure computation, no DB)
+        let payload = Self::snapshot_frame_payload(
+            device_name,
+            timestamp,
+            snapshot_path,
+            app_name,
+            window_name,
+            browser_url,
+            document_path,
+            focused,
+            capture_trigger,
+            accessibility_text,
+            text_source,
+            accessibility_tree_json,
+            content_hash,
+            simhash,
+            ocr_data,
+            elements_ref_frame_id,
+        );
+        let ocr_json_for_elements = payload
+            .ocr_text_json
+            .clone()
+            .filter(|_| elements_ref_frame_id.is_none());
+        let a11y_json_for_elements = payload
+            .accessibility_tree_json
+            .clone()
+            .filter(|_| elements_ref_frame_id.is_none());
+        let result = self
+            .write_queue
+            .submit(WriteOp::InsertSnapshotFrameWithOcr { payload })
+            .await?;
+        let frame_id = match result {
+            WriteResult::Id(id) => id,
+            _ => unreachable!(),
+        };
+        let has_elements = ocr_json_for_elements
+            .as_ref()
+            .is_some_and(|j| !j.is_empty())
+            || a11y_json_for_elements
+                .as_ref()
+                .is_some_and(|j| !j.is_empty());
+        if has_elements {
+            let queue = self.write_queue.clone();
+            let expected_generation = self.storage.as_ref().map(|_| 1);
+            tokio::spawn(async move {
+                let _ = queue
+                    .submit(WriteOp::InsertDeferredElements {
+                        frame_id,
+                        expected_generation,
+                        ocr_text_json: ocr_json_for_elements,
+                        accessibility_tree_json: a11y_json_for_elements,
+                    })
+                    .await;
+            });
+        }
+        Ok(frame_id)
+    }
+
+    /// Persist the capture handoff before waiting at most 250ms for indexing.
+    /// Capture callers supply the already privacy-filtered metadata and durable JPEG.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn admit_snapshot_frame_with_ocr(
+        &self,
+        device_name: &str,
+        timestamp: DateTime<Utc>,
+        snapshot_path: &str,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        browser_url: Option<&str>,
+        document_path: Option<&str>,
+        focused: bool,
+        capture_trigger: Option<&str>,
+        accessibility_text: Option<&str>,
+        text_source: Option<&str>,
+        accessibility_tree_json: Option<&str>,
+        content_hash: Option<i64>,
+        simhash: Option<i64>,
+        ocr_data: Option<(&str, &str, &str)>,
+        elements_ref_frame_id: Option<i64>,
+    ) -> Result<super::FrameAdmission, sqlx::Error> {
+        let payload = Self::snapshot_frame_payload(
+            device_name,
+            timestamp,
+            snapshot_path,
+            app_name,
+            window_name,
+            browser_url,
+            document_path,
+            focused,
+            capture_trigger,
+            accessibility_text,
+            text_source,
+            accessibility_tree_json,
+            content_hash,
+            simhash,
+            ocr_data,
+            elements_ref_frame_id,
+        );
+        if let Some(journal) = &self.capture_journal {
+            return journal.admit(payload).await;
+        }
+        // In-memory databases have no durable filesystem namespace. Fixtures
+        // retain their indexed-only semantics instead of claiming durability.
+        let capture_id = uuid::Uuid::new_v4().to_string();
+        let result = self
+            .write_queue
+            .submit(crate::write_queue::WriteOp::AdmitSnapshotFrame {
+                capture_id: capture_id.clone(),
+                payload,
+            })
+            .await?;
+        let crate::write_queue::WriteResult::FrameAdmission { frame_id, .. } = result else {
+            unreachable!()
+        };
+        Ok(super::FrameAdmission {
+            frame_id,
+            capture_id,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn snapshot_frame_payload(
+        device_name: &str,
+        timestamp: DateTime<Utc>,
+        snapshot_path: &str,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        browser_url: Option<&str>,
+        document_path: Option<&str>,
+        focused: bool,
+        capture_trigger: Option<&str>,
+        accessibility_text: Option<&str>,
+        text_source: Option<&str>,
+        accessibility_tree_json: Option<&str>,
+        content_hash: Option<i64>,
+        simhash: Option<i64>,
+        ocr_data: Option<(&str, &str, &str)>,
+        elements_ref_frame_id: Option<i64>,
+    ) -> super::capture_journal::SnapshotFramePayload {
         let ocr_text_str = ocr_data.map(|(text, _, _)| text);
         let full_text = match text_source {
             Some("hybrid") => {
@@ -736,73 +875,25 @@ impl DatabaseManager {
                 .or_else(|| ocr_text_str.filter(|t| !t.is_empty()).map(String::from)),
         };
 
-        // Capture element data before moving into the frame write op
-        let ocr_json_for_elements = if elements_ref_frame_id.is_none() {
-            ocr_data.map(|(_, j, _)| j.to_string())
-        } else {
-            None
-        };
-        let a11y_json_for_elements = if elements_ref_frame_id.is_none() {
-            accessibility_tree_json.map(String::from)
-        } else {
-            None
-        };
-
-        let result = self
-            .write_queue
-            .submit(WriteOp::InsertSnapshotFrameWithOcr {
-                device_name: device_name.to_string(),
-                timestamp,
-                snapshot_path: snapshot_path.to_string(),
-                app_name: app_name.map(String::from),
-                window_name: window_name.map(String::from),
-                browser_url: browser_url.map(String::from),
-                document_path: document_path.map(String::from),
-                focused,
-                capture_trigger: capture_trigger.map(String::from),
-                accessibility_text: accessibility_text.map(String::from),
-                text_source: text_source.map(String::from),
-                accessibility_tree_json: accessibility_tree_json.map(String::from),
-                content_hash,
-                simhash,
-                ocr_text_json: ocr_data.map(|(_, j, _)| j.to_string()),
-                full_text,
-                elements_ref_frame_id,
-            })
-            .await?;
-
-        let frame_id = match result {
-            WriteResult::Id(id) => id,
-            _ => unreachable!(),
-        };
-
-        // Submit element inserts as a separate write op so they don't hold
-        // the write lock during the frame transaction. Elements are supplementary
-        // data — the frame is usable for search immediately after the first commit.
-        let has_elements = ocr_json_for_elements
-            .as_ref()
-            .is_some_and(|j| !j.is_empty())
-            || a11y_json_for_elements
-                .as_ref()
-                .is_some_and(|j| !j.is_empty());
-        if has_elements {
-            // Fire-and-forget: spawn so we don't block the capture loop waiting
-            // for element insertion. Errors are logged inside insert_*_elements.
-            let queue = self.write_queue.clone();
-            let expected_generation = self.storage.as_ref().map(|_| 1);
-            tokio::spawn(async move {
-                let _ = queue
-                    .submit(WriteOp::InsertDeferredElements {
-                        frame_id,
-                        expected_generation,
-                        ocr_text_json: ocr_json_for_elements,
-                        accessibility_tree_json: a11y_json_for_elements,
-                    })
-                    .await;
-            });
+        super::capture_journal::SnapshotFramePayload {
+            device_name: device_name.to_string(),
+            timestamp,
+            snapshot_path: snapshot_path.to_string(),
+            app_name: app_name.map(String::from),
+            window_name: window_name.map(String::from),
+            browser_url: browser_url.map(String::from),
+            document_path: document_path.map(String::from),
+            focused,
+            capture_trigger: capture_trigger.map(String::from),
+            accessibility_text: accessibility_text.map(String::from),
+            text_source: text_source.map(String::from),
+            accessibility_tree_json: accessibility_tree_json.map(String::from),
+            content_hash,
+            simhash,
+            ocr_text_json: ocr_data.map(|(_, j, _)| j.to_string()),
+            full_text,
+            elements_ref_frame_id,
         }
-
-        Ok(frame_id)
     }
 
     /// Get the next frame offset for a device.
@@ -1100,7 +1191,7 @@ impl DatabaseManager {
 
                 // OCR elements still go to the unified elements table for rendering.
                 if !window.text.is_empty() && !window.text_json.is_empty() {
-                    Self::insert_ocr_elements(tx.conn(), frame_id, &window.text_json).await;
+                    let _ = Self::insert_ocr_elements(tx.conn(), frame_id, &window.text_json).await;
                 }
 
                 frame_results.push((frame_id, idx));

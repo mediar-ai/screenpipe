@@ -163,10 +163,10 @@ async fn element_batches(
                 let start = Instant::now();
                 let mut tx = db.begin_immediate_with_retry().await?;
                 if let Some(json) = &payload.text_json {
-                    DatabaseManager::insert_ocr_elements(tx.conn(), id, json).await;
+                    DatabaseManager::insert_ocr_elements(tx.conn(), id, json).await?;
                 }
                 if let Some(json) = &payload.accessibility_tree_json {
-                    DatabaseManager::insert_accessibility_elements(tx.conn(), id, json).await;
+                    DatabaseManager::insert_accessibility_elements(tx.conn(), id, json).await?;
                 }
                 tx.commit().await?;
                 times.push(start.elapsed().as_secs_f64() * 1000.0);

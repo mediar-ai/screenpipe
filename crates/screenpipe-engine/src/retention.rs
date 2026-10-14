@@ -369,6 +369,21 @@ fn spawn_retention_loop(
                 }
             };
 
+            // Pending captures are not represented by SQL's oldest timestamp,
+            // and replay can otherwise land behind an already-advanced watermark.
+            let pending_mode = match mode {
+                RetentionMode::All => "all",
+                RetentionMode::Media => "media",
+                RetentionMode::Lean => "lean",
+            };
+            if let Err(error) = db
+                .retain_pending_screen_captures(cutoff, pending_mode)
+                .await
+            {
+                warn!("retention: pending screen cleanup deferred: {error}");
+                continue;
+            }
+
             if watermark_mode != Some(mode) {
                 watermark = None;
                 watermark_mode = Some(mode);
