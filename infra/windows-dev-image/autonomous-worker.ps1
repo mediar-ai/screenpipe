@@ -174,7 +174,7 @@ Execution contract:
 - Copy the proven runtime scripts from C:\screenpipe-worker into infra/windows-dev-image when they are not already present, then make the image provisioning, dispatcher, canonical skill, and reference agree with the autonomous invariant. Retire contradictory RDP/host-import wording rather than adding parallel rules.
 - Use the immutable image and exact task blob model; do not clone or modify the release builder.
 - Run the narrowest relevant checks, including shell syntax, PowerShell parsing, skill validation, and git diff --check. Do not run raw Cargo for src-tauri.
-- Reviewer evidence is short focused clips, each showing one action and its visible result, never the agent session. Record each clip yourself, starting right before the action and stopping once the result is visible, at most 90 seconds, as $clipRoot\<scenario>.mp4 (letters, digits, '.', '_', '-' only). The outer worker fails delivery if any clip there is longer and never links the whole-session desktop recording, which is a private diagnostic archive. If the change has no visible result, report test output instead of a clip.
+- Reviewer evidence is short focused clips, each showing one action and its visible result, never the agent session. Record each clip yourself, starting right before the action and stopping once the result is visible, at most 90 seconds, as $clipRoot\<scenario>.mp4 (letters, digits, '.', '_', '-' only). The outer worker fails delivery if any clip there is longer and never links the whole-session desktop recording, which is a private diagnostic archive.
 - Do not push or open the PR yourself; leave the intended changes committed and the worktree clean. The outer worker performs deterministic delivery after validation.
 - Finish with a concise summary and exact test results.
 "@
@@ -228,7 +228,7 @@ exit /b %ERRORLEVEL%
     $durationOutput = (& ffprobe.exe -v error -show_entries format=duration -of csv=p=0 $clip.FullName | Out-String).Trim()
     $duration = 0.0
     if ($LASTEXITCODE -ne 0 -or -not [double]::TryParse($durationOutput, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$duration)) { throw "ffprobe could not read the duration of evidence clip $($clip.Name): $durationOutput" }
-    if ($duration -gt 90) { throw "evidence clip $($clip.Name) is $([Math]::Round($duration)) s; reviewer clips must be 90 s or less" }
+    if (-not ($duration -le 90)) { throw "evidence clip $($clip.Name) is $([Math]::Ceiling($duration)) s; reviewer clips must be 90 s or less" }
     Send-ResultBlob $clip.FullName "clips/$($clip.Name)" 'video/mp4'
     $ErrorActionPreference = 'Continue'
     $clipUrlOutput = & az.cmd storage blob generate-sas --account-name $task.storageAccount --container-name $task.storageContainer --name "$($task.blobRoot)/$($task.taskId)/clips/$($clip.Name)" --permissions r --expiry $expiry --https-only --as-user --auth-mode login --full-uri --output tsv 2>$azErrorPath | Out-String
@@ -238,9 +238,9 @@ exit /b %ERRORLEVEL%
       $azFailure = if (Test-Path $azErrorPath) { (Get-Content $azErrorPath -Raw).Trim() } else { '' }
       throw "read-only evidence URL generation failed with code $azExitCode`: $azFailure"
     }
-    $evidenceLines += "- [$($clip.BaseName)]($($clipUrlOutput.Trim())) ($([Math]::Round($duration)) s)"
+    $evidenceLines += "- [$($clip.BaseName)]($($clipUrlOutput.Trim())) ($([Math]::Ceiling($duration)) s)"
   }
-  if (-not $evidenceLines) { $evidenceLines = @('- No focused evidence clip was recorded; see the validation results above.') }
+  if (-not $evidenceLines) { throw "no focused evidence clip in $clipRoot; autonomous visual tasks require one" }
   if (-not $recorder -or $recorder.HasExited) { throw 'desktop recorder exited before PR evidence delivery' }
 
   $prBodyPath = Join-Path $resultRoot 'pr-body.md'

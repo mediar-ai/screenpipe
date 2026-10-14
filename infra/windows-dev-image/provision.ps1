@@ -52,7 +52,7 @@ $chocolateyPackages = @(
 )
 $chocolateyCommands = @(
   'git.exe', 'git-lfs.exe', '7z.exe', 'jq.exe', 'cmake.exe', 'ninja.exe',
-  'pwsh.exe', 'clang.exe', 'ffmpeg.exe', 'gh.exe', 'az.cmd'
+  'pwsh.exe', 'clang.exe', 'ffmpeg.exe', 'ffprobe.exe', 'gh.exe', 'az.cmd'
 )
 for ($attempt = 1; $attempt -le 5; $attempt++) {
   & choco.exe install @chocolateyPackages --no-progress
