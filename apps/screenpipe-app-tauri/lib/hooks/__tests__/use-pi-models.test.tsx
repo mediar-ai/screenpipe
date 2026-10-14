@@ -42,6 +42,20 @@ describe("usePiModels", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
+  it("discovers Argon and preserves its limits and account lock without a client allowlist", async () => {
+    settingsState = { settings: { user: { token: "synthetic" } }, isSettingsLoaded: true };
+    vi.mocked(fetch).mockImplementation(() => response([{
+      id: "gemini-4-argon", name: "Gemini 4 Argon", context_window: 1048576,
+      max_output_tokens: 32768, locked: true, cost_tier: "high",
+    }]));
+    const { result } = renderHook(() => usePiModels());
+    await waitFor(() => expect(result.current.piModels).toHaveLength(1));
+    expect(result.current.piModels[0]).toMatchObject({
+      id: "gemini-4-argon", name: "Gemini 4 Argon", context_window: 1048576,
+      max_output_tokens: 32768, locked: true, cost_tier: "high",
+    });
+  });
+
   it("does not fetch before settings hydration", () => {
     renderHook(() => usePiModels());
     expect(fetch).not.toHaveBeenCalled();
