@@ -88,6 +88,10 @@ Var ScopeAllRadio
 Var ScopeAdminLabel
 Var InstallDirControl
 Var MachineElevation
+Var IncomingInstallDir
+Var CurrentUserDefaultDir
+Var AllUsersDefaultDir
+Var ElevationResult
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -478,45 +482,47 @@ FunctionEnd
 Function SetCurrentUserScope
   StrCpy $InstallScope "current"
   SetShellVarContext current
+  StrCpy $CurrentUserDefaultDir "$LOCALAPPDATA\${PRODUCTNAME}"
 FunctionEnd
 
 Function SetAllUsersScope
   StrCpy $InstallScope "all"
   SetShellVarContext all
+  ${If} ${RunningX64}
+    StrCpy $AllUsersDefaultDir "$PROGRAMFILES64\${PRODUCTNAME}"
+  ${Else}
+    StrCpy $AllUsersDefaultDir "$PROGRAMFILES\${PRODUCTNAME}"
+  ${EndIf}
 FunctionEnd
 
 Function DetectExistingInstall
   StrCpy $ExistingScope ""
   StrCpy $ExistingInstallDir ""
+  ReadRegStr $0 HKCU "${MANUPRODUCTKEY}" ""
+  ReadRegStr $1 HKLM "${MANUPRODUCTKEY}" ""
   ReadRegStr $2 HKCU "${UNINSTKEY}" "UninstallString"
   ReadRegStr $3 HKLM "${UNINSTKEY}" "UninstallString"
   ${If} $2 != ""
-  ${AndIf} $3 != ""
-    MessageBox MB_OK|MB_ICONSTOP "Screenpipe is registered for both the current user and all users. Remove one installation before continuing." /SD IDOK
-    SetErrorLevel 2
-    Quit
-  ${EndIf}
-  ReadRegStr $0 HKCU "${MANUPRODUCTKEY}" ""
-  ${If} $0 != ""
+  ${AndIf} $0 != ""
   ${AndIf} ${FileExists} "$0\uninstall.exe"
     StrCpy $ExistingScope "current"
     StrCpy $ExistingInstallDir $0
   ${EndIf}
-  ReadRegStr $1 HKLM "${MANUPRODUCTKEY}" ""
-  ${If} $1 != ""
+  ${If} $3 != ""
+  ${AndIf} $1 != ""
   ${AndIf} ${FileExists} "$1\uninstall.exe"
+    ${If} $ExistingInstallDir != ""
+      MessageBox MB_OK|MB_ICONSTOP "Screenpipe has active current-user and all-users installations. Uninstall the copy you no longer want, then run setup again." /SD IDOK
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
     StrCpy $ExistingScope "all"
     StrCpy $ExistingInstallDir $1
   ${EndIf}
-  ${If} $2 != ""
-  ${AndIf} $ExistingScope != "current"
-    MessageBox MB_OK|MB_ICONSTOP "The current-user Screenpipe registration does not point to a valid installation. Remove the stale registration before continuing." /SD IDOK
-    SetErrorLevel 2
-    Quit
-  ${EndIf}
-  ${If} $3 != ""
-  ${AndIf} $ExistingScope != "all"
-    MessageBox MB_OK|MB_ICONSTOP "The all-users Screenpipe registration does not point to a valid installation. Remove the stale registration before continuing." /SD IDOK
+  ${If} $IncomingInstallDir != ""
+  ${AndIf} $ExistingInstallDir != ""
+  ${AndIf} $IncomingInstallDir != $ExistingInstallDir
+    MessageBox MB_OK|MB_ICONSTOP "Screenpipe is already installed at $ExistingInstallDir, but setup was asked to update $IncomingInstallDir. Uninstall the existing copy before choosing a different location." /SD IDOK
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -551,22 +557,22 @@ Function ToggleScopeControls
 FunctionEnd
 
 Function SelectCurrentUserScope
+  StrCpy $0 $INSTDIR
   Call SetCurrentUserScope
   ${If} $ExistingScope == ""
-    StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"
-    ${NSD_SetText} $InstallDirControl $INSTDIR
+  ${AndIf} $0 == $AllUsersDefaultDir
+    StrCpy $INSTDIR $CurrentUserDefaultDir
+    ${NSD_SetText} $InstallDirControl "$INSTDIR"
   ${EndIf}
 FunctionEnd
 
 Function SelectAllUsersScope
+  StrCpy $0 $INSTDIR
   Call SetAllUsersScope
   ${If} $ExistingScope == ""
-    ${If} ${RunningX64}
-      StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
-    ${Else}
-      StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
-    ${EndIf}
-    ${NSD_SetText} $InstallDirControl $INSTDIR
+  ${AndIf} $0 == $CurrentUserDefaultDir
+    StrCpy $INSTDIR $AllUsersDefaultDir
+    ${NSD_SetText} $InstallDirControl "$INSTDIR"
   ${EndIf}
 FunctionEnd
 
@@ -623,23 +629,34 @@ FunctionEnd
 Function ElevateMachineInstall
   InitPluginsDir
   ${GetParameters} $2
-  System::Call 'Kernel32::SetEnvironmentVariable(t "SCREENPIPE_INSTALLER_EXE", t "$EXEPATH")'
-  System::Call 'Kernel32::SetEnvironmentVariable(t "SCREENPIPE_INSTALLER_ARGS", t "$2")'
-  System::Call 'Kernel32::SetEnvironmentVariable(t "SCREENPIPE_INSTALLER_DIR", t "$INSTDIR")'
+  FileOpen $0 "$PLUGINSDIR\screenpipe-elevate-input.txt" w
+  FileWriteUTF16LE /BOM $0 '$EXEPATH$\r$\n'
+  FileWriteUTF16LE $0 '$2$\r$\n'
+  FileWriteUTF16LE $0 '$INSTDIR$\r$\n'
+  FileClose $0
   FileOpen $0 "$PLUGINSDIR\screenpipe-elevate.ps1" w
   FileWriteUTF16LE /BOM $0 '$$ErrorActionPreference = "Stop"$\r$\n'
-  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$env:SCREENPIPE_INSTALLER_EXE -Verb RunAs -ArgumentList ($$env:SCREENPIPE_INSTALLER_ARGS + " /SPALLUSERS /P") -Wait -PassThru; exit $$p.ExitCode } catch { if ($$_.Exception.NativeErrorCode) { exit $$_.Exception.NativeErrorCode }; exit 1223 }$\r$\n'
+  FileWriteUTF16LE $0 '$$i = Get-Content -LiteralPath "$PLUGINSDIR\screenpipe-elevate-input.txt" -Encoding Unicode$\r$\n'
+  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS /P /D=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch [System.ComponentModel.Win32Exception] { exit $$_.Exception.NativeErrorCode } catch { exit 2 }$\r$\n'
   FileClose $0
-  nsExec::ExecToStack /TIMEOUT=3600000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate.ps1"'
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate.ps1"'
   Pop $0
   Pop $1
+  StrCpy $ElevationResult $0
   ${If} $0 == 0
     SetErrorLevel 0
     Quit
   ${EndIf}
   ${If} $ExistingInstallDir != ""
-    MessageBox MB_OK|MB_ICONSTOP "Administrator approval is required to update the existing all-users installation. Screenpipe was not changed." /SD IDOK
-    SetErrorLevel 1223
+    CreateDirectory "$PROFILE\.screenpipe"
+    FileOpen $1 "$PROFILE\.screenpipe\update-install.log" a
+    FileWrite $1 'installer_elevation_failed: result=$ElevationResult scope=all recovery=original_app_relaunched$\r$\n'
+    FileClose $1
+    ${If} ${FileExists} "$ExistingInstallDir\${MAINBINARYNAME}.exe"
+      nsis_tauri_utils::RunAsUser "$ExistingInstallDir\${MAINBINARYNAME}.exe" ""
+    ${EndIf}
+    MessageBox MB_OK|MB_ICONSTOP "Administrator approval was not completed (Windows result $ElevationResult). The existing Screenpipe app has been reopened." /SD IDOK
+    SetErrorLevel $ElevationResult
     Quit
   ${EndIf}
   MessageBox MB_OK|MB_ICONINFORMATION "Administrator approval was not completed. You can continue with 'Just for me' or try again." /SD IDOK
@@ -650,6 +667,29 @@ FunctionEnd
 
 Function PageLeaveInstallLocation
   ${NSD_GetText} $InstallDirControl $INSTDIR
+  ${If} $INSTDIR == ""
+    MessageBox MB_OK|MB_ICONSTOP "Choose an install folder." /SD IDOK
+    Abort
+  ${EndIf}
+  ${GetRoot} "$INSTDIR" $0
+  ${If} $0 == ""
+    MessageBox MB_OK|MB_ICONSTOP "Enter a complete Windows path, such as C:\Apps\Screenpipe." /SD IDOK
+    Abort
+  ${EndIf}
+  ${If} $InstallScope == "current"
+    ClearErrors
+    CreateDirectory "$INSTDIR"
+    ${If} ${Errors}
+      MessageBox MB_OK|MB_ICONSTOP "Setup cannot create or write to $INSTDIR. Choose another folder." /SD IDOK
+      Abort
+    ${EndIf}
+    GetTempFileName $0 "$INSTDIR"
+    ${If} ${Errors}
+      MessageBox MB_OK|MB_ICONSTOP "Setup cannot write to $INSTDIR. Choose another folder." /SD IDOK
+      Abort
+    ${EndIf}
+    Delete "$0"
+  ${EndIf}
   ${If} $ExistingScope != ""
   ${AndIf} $InstallScope != $ExistingScope
     MessageBox MB_OK|MB_ICONSTOP "Changing install scope requires removing the existing Screenpipe installation first. Your recordings and settings are not removed." /SD IDOK
@@ -660,17 +700,24 @@ Function PageLeaveInstallLocation
     MessageBox MB_OK|MB_ICONSTOP "Changing the directory of an existing Screenpipe installation requires removing it first. Your recordings and settings are not removed." /SD IDOK
     Abort
   ${EndIf}
-  ${If} $InstallScope == "all"
-    UserInfo::GetAccountType
-    Pop $0
-    ${If} $0 != "Admin"
-      Call ElevateMachineInstall
-    ${EndIf}
+FunctionEnd
+
+Function RequireMachinePrivilege
+  ${If} $InstallScope != "all"
+    Return
+  ${EndIf}
+  System::Call 'shell32::IsUserAnAdmin()i.r0'
+  ${If} $0 != 1
+    Call ElevateMachineInstall
   ${EndIf}
 FunctionEnd
 !endif
 
 Function .onInit
+  StrCpy $IncomingInstallDir ""
+  ${If} $INSTDIR != "${PLACEHOLDER_INSTALL_DIR}"
+    StrCpy $IncomingInstallDir $INSTDIR
+  ${EndIf}
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
     StrCpy $PassiveMode 1
@@ -694,26 +741,14 @@ Function .onInit
 
   !if "${INSTALLMODE}" == "both"
     Call DetectExistingInstall
-    ${If} $ExistingInstallDir != ""
+    ${If} $IncomingInstallDir != ""
+      StrCpy $INSTDIR $IncomingInstallDir
+    ${ElseIf} $ExistingInstallDir != ""
       StrCpy $INSTDIR $ExistingInstallDir
     ${EndIf}
     ${GetOptions} $CMDLINE "/SPALLUSERS" $MachineElevation
     ${IfNot} ${Errors}
       Call SetAllUsersScope
-      ReadEnvStr $0 "SCREENPIPE_INSTALLER_DIR"
-      ${If} $0 != ""
-        StrCpy $INSTDIR $0
-      ${EndIf}
-    ${EndIf}
-    ${If} $InstallScope == "all"
-      UserInfo::GetAccountType
-      Pop $0
-      ${If} $0 != "Admin"
-        ${If} $ExistingInstallDir != ""
-          StrCpy $INSTDIR $ExistingInstallDir
-          Call ElevateMachineInstall
-        ${EndIf}
-      ${EndIf}
     ${EndIf}
   !endif
 
@@ -755,6 +790,12 @@ FunctionEnd
 
 
 Section EarlyChecks
+  !if "${INSTALLMODE}" == "both"
+    ; This section runs for interactive, passive, and silent installs. No
+    ; machine registration or Program Files write is reachable without a real
+    ; administrative token.
+    Call RequireMachinePrivilege
+  !endif
   ; Abort silent installer if downgrades is disabled
   !if "${ALLOWDOWNGRADES}" == "false"
   ${If} ${Silent}
@@ -987,13 +1028,18 @@ FunctionEnd
 Function un.ElevateMachineUninstall
   InitPluginsDir
   ${un.GetParameters} $2
-  System::Call 'Kernel32::SetEnvironmentVariable(t "SCREENPIPE_UNINSTALLER_EXE", t "$EXEPATH")'
-  System::Call 'Kernel32::SetEnvironmentVariable(t "SCREENPIPE_UNINSTALLER_ARGS", t "$2")'
+  FileOpen $0 "$PLUGINSDIR\screenpipe-elevate-uninstall-input.txt" w
+  FileWriteUTF16LE /BOM $0 '$EXEPATH$\r$\n'
+  FileWriteUTF16LE $0 '$2$\r$\n'
+  FileWriteUTF16LE $0 '$INSTDIR$\r$\n'
+  FileClose $0
   FileOpen $0 "$PLUGINSDIR\screenpipe-elevate-uninstall.ps1" w
   FileWriteUTF16LE /BOM $0 '$$ErrorActionPreference = "Stop"$\r$\n'
-  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$env:SCREENPIPE_UNINSTALLER_EXE -Verb RunAs -ArgumentList ($$env:SCREENPIPE_UNINSTALLER_ARGS + " /SPALLUSERS") -Wait -PassThru; exit $$p.ExitCode } catch { if ($$_.Exception.NativeErrorCode) { exit $$_.Exception.NativeErrorCode }; exit 1223 }$\r$\n'
+  FileWriteUTF16LE $0 '$$i = Get-Content -LiteralPath "$PLUGINSDIR\screenpipe-elevate-uninstall-input.txt" -Encoding Unicode$\r$\n'
+  ; NSIS requires _?= to be the final uninstaller argument and it must not be quoted.
+  FileWriteUTF16LE $0 'try { $$p = Start-Process -FilePath $$i[0] -Verb RunAs -ArgumentList ($$i[1] + " /SPALLUSERS _?=" + $$i[2]) -Wait -PassThru; exit $$p.ExitCode } catch [System.ComponentModel.Win32Exception] { exit $$_.Exception.NativeErrorCode } catch { exit 2 }$\r$\n'
   FileClose $0
-  nsExec::ExecToStack /TIMEOUT=3600000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate-uninstall.ps1"'
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$PLUGINSDIR\screenpipe-elevate-uninstall.ps1"'
   Pop $0
   Pop $1
   SetErrorLevel $0
@@ -1008,13 +1054,10 @@ Function un.onInit
     ReadRegStr $0 HKLM "${MANUPRODUCTKEY}" ""
     ${If} $0 == $INSTDIR
       SetShellVarContext all
-      UserInfo::GetAccountType
-      Pop $1
-      ${If} $1 != "Admin"
-        ${un.GetOptions} $CMDLINE "/SPALLUSERS" $2
-        ${If} ${Errors}
-          Call un.ElevateMachineUninstall
-        ${EndIf}
+      System::Call 'shell32::IsUserAnAdmin()i.r1'
+      ${If} $1 != 1
+        ; /SPALLUSERS selects scope; it is never proof of privilege.
+        Call un.ElevateMachineUninstall
       ${EndIf}
     ${Else}
       SetShellVarContext current

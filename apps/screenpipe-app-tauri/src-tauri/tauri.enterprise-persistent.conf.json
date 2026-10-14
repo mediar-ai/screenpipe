@@ -22,6 +22,7 @@
       "signCommand": null,
       "nsis": {
         "installMode": "perMachine",
+        "template": null,
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp",
         "installerIcon": "icons/icon.ico",
