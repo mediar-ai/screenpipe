@@ -31,11 +31,21 @@ the new installer with the target user's limited interactive token, verifies
 the target hive/path, and only then launches it. A process launch proves only
 launch—not resumed recording.
 
+The registered machine directory and canonical uninstaller must be owned by
+Windows administrators and not writable by ordinary users. A signed
+uninstaller must use the same approved publisher certificate as the new
+installer. The script refuses an insecure/custom legacy directory rather than
+executing its contents elevated. The new signed file must also identify itself
+as the ordinary `screenpipe enterprise` product.
+
 Durable status and the trusted staged installer remain under
 `%ProgramData%\ScreenpipeMigration\<target-sid>`. If removal succeeded but the
 target signed out or setup failed, sign the target in and rerun the identical
-command. Give that target's `result.json` to Screenpipe support when requested;
-it contains migration state and technical causes, not user content or secrets.
+command (same target, destination, installer hash, and signer). Give that
+target's `result.json` to Screenpipe support when requested; it contains
+migration state and technical causes, not user content or secrets. This
+administrator-owned file is not automatically included in the app support
+bundle, so copy it explicitly when support requests it.
 
 For disposable-image validation, build real NSIS payload fixtures with the
 existing `windows-enterprise-installer.integration.ps1 -CompileOnly` flow and
