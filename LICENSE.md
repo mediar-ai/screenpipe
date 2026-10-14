@@ -46,7 +46,7 @@ machines) require a commercial agreement with the Licensor.
 
 Any Commercial Use of the Licensed Work requires a separate paid commercial
 license from the Licensor. This applies regardless of company size,
-headcount, revenue, or funding. Contact louis@screenpi.pe or visit
+headcount, revenue, or funding. Contact sales@screenpi.pe or visit
 https://screenpi.pe/commercial-license.
 
 ## 5. Prohibited Without a Commercial License

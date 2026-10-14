@@ -422,6 +422,6 @@ Built by screenpipe (Negentropy Labs, Inc.). Founded 2024. Based in San Francisc
 
 - Founder: Louis Beaumont (@louis030195)
 - Twitter: @screenpipe
-- Email: louis@screenpi.pe
+- Email: support@screenpi.pe
 
 </details>

@@ -397,6 +397,6 @@ screenpipe в первую очередь использует дерево до
 
 - Основатель: Louis Beaumont (@louis030195)
 - Twitter: @screenpipe
-- Электронная почта: louis@screenpi.pe
+- Электронная почта: support@screenpi.pe
 
 </details>
