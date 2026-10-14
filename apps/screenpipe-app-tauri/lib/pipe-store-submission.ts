@@ -24,7 +24,7 @@ export function buildPipeStoreSubmissionMailto({
     : `Screenpipe Store ${action}`;
 
   const body = [
-    "Hi Louis,",
+    "Hi Screenpipe team,",
     "",
     kind === "update"
       ? "I'd like to submit an update to a scheduled task in the Screenpipe Store."
