@@ -573,6 +573,41 @@ private func testMeetingJoinNotification() {
     }
 }
 
+private func testMeetingProviderIcons() {
+    let cases: [(String, MeetingJoinProvider)] = [
+        ("https://meet.google.com/abc-defg-hij", .googleMeet),
+        ("https://MEET.GOOGLE.COM./abc-defg-hij", .googleMeet),
+        ("https://us02web.zoom.us/j/123", .zoom),
+        ("zoommtg://zoom.us/join?confno=123", .zoom),
+        ("https://company.zoom.com/j/123", .zoom),
+        ("https://agency.zoomgov.com/j/123", .zoom),
+        ("https://teams.microsoft.com/l/meetup-join/example", .teams),
+        ("https://teams.live.com/meet/123", .teams),
+        ("https://teams.cloud.microsoft/meet/123", .teams),
+        ("https://company.webex.com/meet/example", .webex),
+        ("https://unknown.example/meet", .other),
+        ("https://zoom.us.example.org/j/123", .other),
+        ("https://notzoom.us/j/123", .other),
+        ("https://zoom.us@evil.example/j/123", .other),
+        ("https://evil.example/?url=https://meet.google.com/abc", .other),
+        ("file://meet.google.com/abc", .other),
+        ("not a URL", .other),
+        ("", .other),
+    ]
+    for (url, provider) in cases {
+        expect(MeetingJoinProvider.from(url: url) == provider, "wrong provider for \(url)")
+    }
+    for provider in MeetingJoinProvider.allCases where provider != .other {
+        expect(provider.image?.isValid == true, "missing embedded icon for \(provider)")
+    }
+    let json = """
+    {"id":"icon","title":"test","actions":[{"label":"Rejoindre","type":"meeting_join","url":"https://meet.google.com/abc"},{"label":"+ HD","type":"api","url":"/capture/hd/start"}]}
+    """
+    let parsed = OverlayNotification.parse(json)!
+    expect(parsed.actions[0].meetingProvider == .googleMeet, "join action needs the provider icon")
+    expect(parsed.actions[1].meetingProvider == nil, "HD action must not get a meeting icon")
+}
+
 @main
 struct ShortcutReminderTests {
     static func main() {
@@ -592,6 +627,7 @@ struct ShortcutReminderTests {
         testTieBreaksToCurrent()
         testAttachmentStacking()
         testAttachmentStaysOnScreen()
+        testMeetingProviderIcons()
         testMeetingJoinNotification()
         testWireContract()
         testShortcutGlyphs()
