@@ -286,7 +286,10 @@ jobs:
               install -d -m 700 -o smoke-user -g smoke-user /tmp/screenpipe-runtime
               cd /smoke
               chmod +x screenpipe.AppImage
-              ./screenpipe.AppImage --appimage-extract >/dev/null
+              # The runtime extracts directories with mode 0700, regardless of
+              # packaged modes. Extract as the user that will launch the app.
+              su smoke-user -c "cd /smoke && ./screenpipe.AppImage --appimage-extract" >/dev/null
+              su smoke-user -c "test -x /smoke/squashfs-root/AppRun"
 
               desktop=""
               for candidate in squashfs-root/usr/share/applications/*.desktop; do
@@ -449,7 +452,10 @@ jobs:
               install -d -m 700 -o smoke-user -g smoke-user /tmp/screenpipe-runtime
               cd /smoke
               chmod +x screenpipe.AppImage
-              ./screenpipe.AppImage --appimage-extract >/dev/null
+              # The runtime extracts directories with mode 0700, regardless of
+              # packaged modes. Extract as the user that will launch the app.
+              su smoke-user -c "cd /smoke && ./screenpipe.AppImage --appimage-extract" >/dev/null
+              su smoke-user -c "test -x /smoke/squashfs-root/AppRun"
 
               # The Ubuntu-built PipeWire client must use its matching config,
               # context modules, and SPA support plugins instead of Arch ones.

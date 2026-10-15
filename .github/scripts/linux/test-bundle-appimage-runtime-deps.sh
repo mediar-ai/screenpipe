@@ -16,8 +16,6 @@ OUTPUT="${TEST_ROOT}/apprun-output"
 WRAPPED_MARKER="${TEST_ROOT}/wrapped-ran"
 mkdir -p "${APPDIR}/usr/bin" "${APPDIR}/usr/share/applications" \
   "${APPDIR}/apprun-hooks"
-# Reproduce the private root directory emitted by the current bundler.
-chmod 0700 "${APPDIR}"
 
 cat > "${APPDIR}/AppRun" <<'APPRUN'
 #!/bin/sh
@@ -77,7 +75,6 @@ chmod 0755 "${APPDIR}/AppRun" "${APPDIR}/AppRun.wrapped" \
 wrapped_before="$(sha256sum "${APPDIR}/AppRun.wrapped")"
 hook_before="$(sha256sum "${APPDIR}/apprun-hooks/linuxdeploy-existing-hook.sh")"
 "${BUNDLER}" "${APPDIR}"
-[ "$(stat -c %a "${APPDIR}")" = 755 ]
 
 client="${APPDIR}/usr/lib/libpipewire-0.3.so.0"
 test -e "${APPDIR}/usr/lib/libgfortran.so.5"

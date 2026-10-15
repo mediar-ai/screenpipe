@@ -11,9 +11,6 @@ PIPEWIRE_MODULE_DIR="${LIBDIR}/pipewire-0.3"
 PIPEWIRE_CONFIG="${APPDIR}/usr/share/pipewire/client.conf"
 
 mkdir -p "${LIBDIR}"
-# linuxdeploy can leave the AppDir root at 0700. Preserve normal-user
-# traversal when a root-owned AppImage is extracted for installation or CI.
-chmod 0755 "${APPDIR}"
 
 for launcher in "${APPDIR}/AppRun" "${APPDIR}/AppRun.wrapped"; do
   [ -e "${launcher}" ] || continue
