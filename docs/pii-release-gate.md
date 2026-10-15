@@ -2,8 +2,8 @@
 
 Draft implementation, not a complete product privacy guarantee.
 
-<!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
-<!-- doc-verified: 3872ad7c22434539c7167f65676e538560fec620 -->
+<!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-redact/src/image/worker.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
+<!-- doc-verified: 4891123c43f0d0e23605499f249dd023b65a9265 -->
 
 Capture persists through the existing writer. Background detectors process a source revision under a desired policy, then publish the sanitized replacement and its receipt in one transaction. A read adapter exposes only current receipts. Text and image completion are independent. Optional regex filtering and legacy timestamps cannot certify required model processing.
 
@@ -25,7 +25,7 @@ Hybrid payload replacements retain their generation checks. Storage-only sealing
 
 ## Bounded background processing
 
-The work queue is indexed by surface and availability deadline. A completed discovery cursor avoids scanning certified history on every idle poll. Legacy history and policy changes are discovered in pages of 128 IDs using the existing coordinated writer. Each selection examines at most 256 due candidates. Image maturity scheduling advances at most 256 young/future records, and a bounded oldest fallback avoids treating fresh screenshots as an empty queue while mature work is waiting. Source deletion retains a revision tombstone, including while protection is disabled, so reusing an ID cannot accept stale work.
+The work queue is indexed by surface and availability deadline. A completed discovery cursor avoids scanning certified history on every idle poll. Legacy history and policy changes are discovered in pages of 128 IDs using the existing coordinated writer. Each selection examines at most 256 due candidates. Image maturity scheduling advances at most 256 young/future records, and a bounded oldest fallback avoids treating fresh screenshots as an empty queue while mature work is waiting. Undecodable image timestamps defer that record without blocking valid work; other database errors still propagate. Source deletion retains a revision tombstone, including while protection is disabled, so reusing an ID cannot accept stale work.
 
 Text scheduling rotates across seven streams and alternates recent and oldest work. A record with multiple fields resumes between slices; no partial record becomes visible. The target duration is checked between model calls, so one inference, JSON parse or large field is not preemptible. Failed attempts count toward CPU cooldown. Images release the shared CPU lane before idle or retry sleeps. Ready events retain only the current event per record; completion sequences still advance monotonically.
 
@@ -39,7 +39,11 @@ Protected responses expose `x-screenpipe-privacy-completeness: unknown` and `/pr
 
 For each modality, let capture rate be λ, sustained governed processing rate be μ, and pending backlog be B. Over Δt seconds, `B_next = max(0, B + (λ - μ) Δt)`. Catch-up time is `B / (μ - λ)` only when μ > λ. A detector outage lasting D needs μ ≥ λ(1 + D/R) to recover within R seconds while capture continues. Text and image rates need separate measurement. The 60-second image maturity delay and normal sync polling add freshness delay even with an empty processing backlog.
 
-Local debug-build measurements on synthetic fixtures: idle queue p95 at 20,000 certified records fell from 12.512 ms for the prior source join to 0.448 ms for the indexed queue. Protected insertion p95 was 0.456 ms in that run; there was no paired protection-off measurement. A 12-record test using the installed v50 ONNX text model loaded in 1.284 s and processed the records in 4.072 s with the worker governor enabled (2.95 records/s). These are stage measurements on one machine, not sustained capacity, recall, end-to-end capture overhead or image throughput guarantees. The ignored benchmark tests are manual and add no CI jobs.
+Release-profile measurements now cover 41 scale cases, real CPU text/image models, concurrent capture insertion, mixed workers, fields through 1 MiB and repeat load runs. At 100,000 history frames, median capture-insertion p95 was 0.651 ms with the gate absent and 1.463 ms with ready receipts; aggressive discovery reached 7.855 ms. These timings cover the database batch path, excluding screen acquisition, OCR and encoding. The scale fixture uses an eight-byte policy identity; a separate 512-byte probe at one million frames used 2,812 MiB of DB storage versus 665 MiB with eight bytes and reached 17.9 seconds search p95. Each identity cell has one run; storage omits historical completion events and OCR-element receipts.
+
+Remaining limits are material: a broad ready search at one million frames took 1.289 s p95; a sparse ready history took 520 ms for the latest page. All three distinct-content six-frame/second runs retained text backlog after a two-minute drain deadline. A single 1 MiB model call took 569 seconds, well beyond the cooperative 250 ms slice target. The mixed text/image process peaked at 1,340 MiB. The short image-worker runs include startup and preceding inference load; they are not steady-state image capacity.
+
+The [benchmark report](benchmarks/pii-release-gate/RESULTS.md) contains raw samples, run ranges, CPU/storage measurements, identity-length sensitivity, capacity equations and exact scope. These are synthetic measurements on an M5 Max with 128 GiB RAM, not ordinary-device guarantees or detector-recall evidence. No CI jobs were added.
 
 ## Validation
 
@@ -51,7 +55,7 @@ The regression suite uses synthetic private text and generated screenshot pixels
 - Meetings, speakers, semantic actors, outputs, feedback and executions have no release worker in this draft. Their protected views stay empty. Parsed, activity and feedback enterprise uploads are held. This is a functional limitation, not a transient processing delay.
 - Historical administrative replay is rejected in protected mode until pending work can be tracked within the exact requested range. Regular sync supports late completion; replay must not report success while relevant records remain pending.
 - The gate covers the selected local API and enterprise upload paths. Native model consumers that read the raw database, direct filesystem access, browser tools, other sync services, support logs and cloud history require separate boundary review. An agent with unrestricted filesystem access can bypass an HTTP gate.
-- Representative sustained-load tests still need capture-writer contention during discovery/maturity transactions, query p95, memory, real image throughput, large-field inference, power/thermal behavior and policy-upgrade catch-up. The bounded queue and small local benchmarks do not establish zero overhead or production readiness.
+- Measured broad/sparse read latency, distinct-content overload and indivisible large-field inference remain rollout blockers. Candidate/receipt selection, compact policy keys and resumable model windows need improvement. Power/thermal behavior, ordinary low-memory hardware, accelerated providers, policy-upgrade catch-up and packaged desktop latency remain unmeasured. The current CPU cooldown is not a hard ceiling for long calls.
 - A remote detector upgrade must preserve or advance its policy identity. Local version constants cannot independently attest an unversioned remote deployment. Image receipts also rely on capture-owned files not being rewritten outside the database lifecycle.
 
 The branch should remain draft until these rollout limits have a reviewed resolution.

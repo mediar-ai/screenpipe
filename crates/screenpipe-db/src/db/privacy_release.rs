@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS _privacy_policy(id INTEGER PRIMARY KEY CHECK(id=1),id
 INSERT OR IGNORE INTO _privacy_policy VALUES(1,'',0,0,0,0);
 CREATE TABLE IF NOT EXISTS _privacy_release(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,policy TEXT,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER,PRIMARY KEY(kind,id));
 CREATE TABLE IF NOT EXISTS _privacy_ready(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,policy TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS _privacy_certified ON _privacy_release(kind,policy,id);
 CREATE INDEX IF NOT EXISTS _privacy_pending ON _privacy_release(kind,retry_at) WHERE policy IS NULL;
 CREATE INDEX IF NOT EXISTS _privacy_ready_stream ON _privacy_ready(kind,sequence);
 CREATE INDEX IF NOT EXISTS _privacy_ready_record ON _privacy_ready(kind,id);
@@ -143,6 +144,7 @@ impl DatabaseManager {
             .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         sqlx::query("UPDATE _privacy_policy SET identity=?,text_required=?,image_required=?,epoch=epoch+1,revocation=revocation+1 WHERE identity!=? OR text_required!=? OR image_required!=?")
             .bind(&policy.identity).bind(policy.text).bind(policy.images).bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
+        let mut schema_changed = false;
         for surface in SURFACES {
             let physical = if surface.table == "elements"
                 && self.storage.as_ref().is_some_and(|s| s.has_bulk())
@@ -172,14 +174,18 @@ impl DatabaseManager {
             {
                 continue;
             }
-            let changed = surface
-                .columns
+            // Image eligibility depends on capture time as well as its paths.
+            // Correcting a clock-skewed timestamp must reset its queued deadline.
+            let mut watched = surface.columns.to_vec();
+            if surface.kind == "image" {
+                watched.push("timestamp");
+            }
+            let changed = watched
                 .iter()
                 .map(|c| format!("NEW.\"{c}\" IS NOT OLD.\"{c}\""))
                 .collect::<Vec<_>>()
                 .join(" OR ");
-            let names = surface
-                .columns
+            let names = watched
                 .iter()
                 .map(|c| format!("\"{c}\""))
                 .collect::<Vec<_>>()
@@ -218,13 +224,27 @@ impl DatabaseManager {
                 } else {
                     format!("INSERT INTO _privacy_release(kind,id,revision) VALUES('{kind}',CAST({id} AS TEXT),1) ON CONFLICT(kind,id) DO UPDATE SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL;")
                 };
-                let sql = format!("DROP TRIGGER IF EXISTS privacy_{kind}_{event}; CREATE TRIGGER privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
+                let create = format!("CREATE TRIGGER privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
                   UPDATE _privacy_policy SET epoch=epoch+1,revocation=revocation+1 WHERE EXISTS(SELECT 1 FROM _privacy_release WHERE kind='{kind}' AND id=CAST({id} AS TEXT) AND policy IS NOT NULL);
                   {mutation}
-                  END;");
-                sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+                  END");
+                let existing: Option<String> = sqlx::query_scalar(
+                    "SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?",
+                )
+                .bind(format!("privacy_{kind}_{event}"))
+                .fetch_optional(&mut **tx.conn())
+                .await?;
+                // Policy changes only update policy data. Recreating unchanged
+                // triggers invalidates cached FTS/write statements in other
+                // pooled connections and adds needless schema-lock work.
+                if existing.as_deref() != Some(create.as_str()) {
+                    schema_changed = true;
+                    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                        "DROP TRIGGER IF EXISTS privacy_{kind}_{event}; {create};"
+                    )))
                     .execute(&mut **tx.conn())
                     .await?;
+                }
             }
         }
         if self.storage.is_some() {
@@ -234,6 +254,20 @@ impl DatabaseManager {
             END;").execute(&mut **tx.conn()).await?;
         }
         tx.commit().await?;
+        if schema_changed {
+            // As with storage trigger migrations, connections opened before
+            // the schema change need a schema read before their first DML.
+            // Configuration owns startup admission, before API/capture workers.
+            let _writer = self.coordinated_writer().lock().await?;
+            let mut writers = Vec::new();
+            for _ in 0..self.write_pool.size() {
+                let mut conn = self.write_pool.acquire().await?;
+                sqlx::query("SELECT name FROM main.sqlite_schema LIMIT 1")
+                    .fetch_optional(&mut *conn)
+                    .await?;
+                writers.push(conn);
+            }
+        }
         if policy.text {
             self.set_frame_privacy_policy(&crate::storage::PrivacyPolicy {
                 identity: policy.identity.clone(),
@@ -393,18 +427,19 @@ impl DatabaseManager {
         // Move at most one bounded page out of the runnable queue per poll.
         // This also handles skewed/future timestamps without busy-looping or
         // making every empty poll scan all pending young screenshots.
-        let rows: Vec<(i64, i64)> = sqlx::query_as("WITH candidates AS MATERIALIZED (SELECT sequence,id FROM _privacy_work WHERE kind='image' AND available_at<=unixepoch() ORDER BY available_at,sequence LIMIT 256) SELECT w.sequence,COALESCE(unixepoch(s.timestamp)+?,unixepoch()+3600) FROM candidates w CROSS JOIN frames s ON s.id=w.id WHERE unixepoch(s.timestamp) IS NULL OR unixepoch(s.timestamp)+?>unixepoch()")
+        let rows: Vec<(i64, i64, i64)> = sqlx::query_as("WITH candidates AS MATERIALIZED (SELECT sequence,id FROM _privacy_work WHERE kind='image' AND available_at<=unixepoch() ORDER BY available_at,sequence LIMIT 256) SELECT w.sequence,COALESCE(unixepoch(s.timestamp)+?,unixepoch()+3600),r.revision FROM candidates w CROSS JOIN frames s ON s.id=w.id CROSS JOIN _privacy_release r ON r.kind='image' AND r.id=w.id WHERE unixepoch(s.timestamp) IS NULL OR unixepoch(s.timestamp)+?>unixepoch()")
             .bind(min_age).bind(min_age).fetch_all(&self.pool).await?;
         if rows.is_empty() {
             return Ok(());
         }
         let mut tx = self.begin_immediate_with_retry().await?;
-        for (sequence, deadline) in rows {
+        for (sequence, deadline, revision) in rows {
             sqlx::query(
-                "UPDATE _privacy_work SET available_at=MAX(available_at,?) WHERE sequence=?",
+                "UPDATE _privacy_work SET available_at=MAX(available_at,?) WHERE sequence=? AND EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=_privacy_work.kind AND r.id=_privacy_work.id AND r.revision=?)",
             )
             .bind(deadline)
             .bind(sequence)
+            .bind(revision)
             .execute(&mut **tx.conn())
             .await?;
         }
@@ -617,10 +652,13 @@ impl DatabaseManager {
                 .await?;
             let projection=columns.iter().map(|column| {
                 if surface.table=="frames" && matches!(column.as_str(),"name"|"snapshot_path"|"video_chunk_id") {
-                    format!("CASE WHEN (SELECT image_required=0 FROM _privacy_policy WHERE id=1) OR EXISTS(SELECT 1 FROM _privacy_release r JOIN _privacy_policy p ON p.identity=r.policy WHERE r.kind='image' AND r.id=CAST(s.id AS TEXT)) THEN s.\"{column}\" END AS \"{column}\"")
+                    format!("CASE WHEN gate.image_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='image' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)) THEN s.\"{column}\" END AS \"{column}\"")
                 } else {format!("s.\"{column}\"")}
             }).collect::<Vec<_>>().join(",");
-            views.push(format!("DROP VIEW IF EXISTS temp.{t}; CREATE TEMP VIEW {t} AS SELECT {projection} FROM main.{source} s WHERE (SELECT text_required=0 FROM _privacy_policy WHERE id=1) OR EXISTS(SELECT 1 FROM _privacy_release r JOIN _privacy_policy p ON p.identity=r.policy WHERE r.kind='{kind}' AND r.id=CAST(s.id AS TEXT));",t=surface.table,kind=surface.kind));
+            // Check the singleton policy and indexed existence of any certified
+            // row before traversing capture history. An entirely pending backlog
+            // must return empty without one receipt lookup per captured row.
+            views.push(format!("DROP VIEW IF EXISTS temp.{t}; CREATE TEMP VIEW {t} AS SELECT {projection} FROM _privacy_policy gate CROSS JOIN main.{source} s WHERE gate.id=1 AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind='{kind}' AND r.policy=gate.identity)) AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='{kind}' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)));",t=surface.table,kind=surface.kind));
         }
         // These derivatives do not yet carry source-bound receipts. Empty
         // views prevent alternate joins from bypassing captured-text gates.

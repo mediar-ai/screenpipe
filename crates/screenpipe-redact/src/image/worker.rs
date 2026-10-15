@@ -400,7 +400,17 @@ impl ImageWorker {
             .await?
         {
             let id: i64 = job.id.parse()?;
-            let timestamp = db.get_frame_timestamp(id).await?;
+            let timestamp = match db.get_frame_timestamp(id).await {
+                Ok(timestamp) => timestamp,
+                // A legacy/malformed value can pass SQLite's age predicate
+                // but fail DateTime decoding. Hold that row for retry without
+                // preventing valid screenshots behind it from progressing.
+                Err(sqlx::Error::ColumnDecode { .. }) => {
+                    db.defer_release(&job).await?;
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
             if timestamp
                 .is_none_or(|at| (chrono::Utc::now() - at).num_seconds() < self.cfg.min_age_seconds)
             {
@@ -558,6 +568,65 @@ mod tests {
             next.is_ok(),
             "idle image worker held the shared lane during polling"
         );
+    }
+
+    #[tokio::test]
+    async fn malformed_image_timestamp_does_not_starve_valid_work() {
+        let root = tempfile::tempdir().unwrap();
+        let db = Arc::new(
+            screenpipe_db::DatabaseManager::new(
+                root.path().join("db.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "test:image-timestamp".into(),
+            text: false,
+            images: true,
+        })
+        .await
+        .unwrap();
+        let bad = root.path().join("bad.png");
+        let good = root.path().join("good.png");
+        white_test_image(&bad);
+        white_test_image(&good);
+        for (id, timestamp, path) in [(1, "2020-01-01", &bad), (2, "2020-01-01T00:00:00Z", &good)] {
+            let mut tx = db.begin_immediate_with_retry().await.unwrap();
+            sqlx::query("INSERT INTO frames(id,timestamp,name) VALUES(?,?,?)")
+                .bind(id)
+                .bind(timestamp)
+                .bind(path.to_str().unwrap())
+                .execute(&mut **tx.conn())
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        }
+        let worker = ImageWorker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            Arc::new(StubRedactor),
+            ImageWorkerConfig::default(),
+        )
+        .with_release_storage(db.clone());
+        worker.release_oldest.store(true, Ordering::SeqCst);
+        assert!(worker.process_release_image(&db).await.unwrap().is_some());
+        assert!(!db.release_ready("image", "1").await.unwrap());
+        assert!(db.release_ready("image", "2").await.unwrap());
+        let attempts: i64 = sqlx::query_scalar(
+            "SELECT attempts FROM _privacy_release WHERE kind='image' AND id='1'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(attempts, 1);
+        db.execute_raw_sql_write("UPDATE frames SET timestamp='2020-01-01T00:00:00Z' WHERE id=1")
+            .await
+            .unwrap();
+        assert!(worker.process_release_image(&db).await.unwrap().is_some());
+        assert!(db.release_ready("image", "1").await.unwrap());
+        db.close().await;
     }
 
     /// Stub redactor — flags one region per frame.

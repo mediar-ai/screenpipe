@@ -9130,6 +9130,7 @@ dependencies = [
  "hex",
  "hmac 0.12.1",
  "image",
+ "libc",
  "moka",
  "ndarray 0.17.2",
  "once_cell",

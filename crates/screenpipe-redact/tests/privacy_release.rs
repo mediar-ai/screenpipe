@@ -708,3 +708,223 @@ async fn legacy_revision_zero_can_only_be_published_once() {
     assert!(!db.publish_image_release(&image).await.unwrap());
     db.close().await;
 }
+
+#[tokio::test]
+async fn correcting_future_image_timestamp_restores_eligibility() {
+    let (_root, db) = database().await;
+    db.execute_raw_sql_write(
+        "INSERT INTO frames(id,timestamp,name) VALUES(1,'2099-01-01','synthetic.png')",
+    )
+    .await
+    .unwrap();
+    assert!(db
+        .release_pending_aged("image", 1, 60)
+        .await
+        .unwrap()
+        .is_empty());
+    db.execute_raw_sql_write("UPDATE frames SET timestamp='2020-01-01' WHERE id=1")
+        .await
+        .unwrap();
+    let jobs = db.release_pending_aged("image", 1, 60).await.unwrap();
+    assert_eq!(
+        jobs.len(),
+        1,
+        "corrected timestamp must not retain the 2099 deadline"
+    );
+    assert_eq!(jobs[0].id, "1");
+    db.close().await;
+}
+
+#[tokio::test]
+async fn publication_write_failure_rolls_back_receipt_and_source() {
+    let (_root, db) = database().await;
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2020-01-01','SYNTHETIC_SECRET'); CREATE TRIGGER inject_publication_failure BEFORE INSERT ON _privacy_ready BEGIN SELECT RAISE(ABORT,'synthetic publication failure'); END;").await.unwrap();
+    let job = db.release_pending("frames", 1).await.unwrap().remove(0);
+    let mut clean = job.values.clone();
+    clean.insert("full_text".into(), Some("[PRIVATE]".into()));
+    assert!(db.publish_release(&job, &clean).await.is_err());
+    assert!(!db.release_ready("frames", "1").await.unwrap());
+    let raw: String = sqlx::query_scalar("SELECT full_text FROM frames WHERE id=1")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(raw, "SYNTHETIC_SECRET");
+    db.execute_raw_sql_write("DROP TRIGGER inject_publication_failure; INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2020-01-01','next capture')").await.unwrap();
+    assert!(db.publish_release(&job, &clean).await.unwrap());
+    assert_eq!(db.ready_changes(0, 10).await.unwrap().len(), 1);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn randomized_revision_policy_delete_reinsert_sequences_never_release_stale_text() {
+    for seed in [1u64, 7, 42, 20261014] {
+        let (_root, db) = database().await;
+        let protected = db.protected_reads().await.unwrap();
+        let mut rng = seed;
+        let mut jobs = Vec::new();
+        let mut version = 0;
+        for step in 0..500 {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            let id = 1 + rng % 24;
+            match (rng >> 8) % 6 {
+                0 | 1 => {
+                    db.execute_raw_sql_write(&format!("INSERT INTO frames(id,timestamp,full_text) VALUES({id},'2020-01-01','SYNTHETIC_SECRET_{step}') ON CONFLICT(id) DO UPDATE SET full_text=excluded.full_text")).await.unwrap();
+                }
+                2 => {
+                    db.execute_raw_sql_write(&format!("DELETE FROM frames WHERE id={id}"))
+                        .await
+                        .unwrap_or_else(|e| panic!("seed={seed} step={step} id={id}: {e}"));
+                }
+                3 => {
+                    jobs.extend(db.release_pending("frames", 24).await.unwrap());
+                }
+                4 if !jobs.is_empty() => {
+                    let job = jobs.swap_remove((rng as usize) % jobs.len());
+                    let current = db.release_job_current(&job).await.unwrap();
+                    let mut clean = job.values.clone();
+                    clean.insert("full_text".into(), Some("[PRIVATE]".into()));
+                    assert_eq!(
+                        db.publish_release(&job, &clean).await.unwrap(),
+                        current,
+                        "seed={seed},step={step}"
+                    );
+                    if current {
+                        assert!(
+                            !db.publish_release(&job, &clean).await.unwrap(),
+                            "duplicate completion"
+                        );
+                    }
+                }
+                5 => {
+                    version += 1;
+                    db.configure_release(&ReleasePolicy {
+                        identity: format!("random:{version}"),
+                        text: true,
+                        images: true,
+                    })
+                    .await
+                    .unwrap();
+                }
+                _ => {}
+            }
+            let leaked: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM frames WHERE full_text LIKE '%SYNTHETIC_SECRET%'",
+            )
+            .fetch_one(&protected.pool)
+            .await
+            .unwrap();
+            assert_eq!(leaked, 0, "seed={seed},step={step}");
+        }
+        protected.close().await;
+        db.close().await;
+    }
+}
+
+#[tokio::test]
+async fn partial_multifield_work_survives_close_reopen_sqlite_and_hybrid() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize};
+    for hybrid in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let open = || async {
+            Arc::new(if hybrid {
+                DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+                    .await
+                    .unwrap()
+            } else {
+                DatabaseManager::new(
+                    root.path().join("db.sqlite").to_str().unwrap(),
+                    Default::default(),
+                )
+                .await
+                .unwrap()
+            })
+        };
+        let db = open().await;
+        db.configure_release(&ReleasePolicy {
+            identity: "restart:v1".into(),
+            text: true,
+            images: false,
+        })
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,text_json) VALUES(1,'2020-01-01','SYNTHETIC_SECRET','[\"SYNTHETIC_SECRET\",\"another private field\"]')").await.unwrap();
+        let detector = Arc::new(CountingDetector {
+            calls: Arc::new(AtomicUsize::new(0)),
+            fail: Arc::new(AtomicBool::new(false)),
+            delay: std::time::Duration::from_millis(3),
+        });
+        let worker = screenpipe_redact::worker::Worker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            detector.clone(),
+            screenpipe_redact::worker::WorkerConfig {
+                target_batch_duration: std::time::Duration::from_millis(1),
+                resource_governor: None,
+                ..Default::default()
+            },
+        )
+        .with_frame_storage(db.clone());
+        assert_eq!(worker.process_release_batch(1).await.unwrap(), 0);
+        assert!(!db.release_ready("frames", "1").await.unwrap());
+        db.execute_raw_sql_write(
+            "INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2020-01-01','SYNTHETIC_SECRET')",
+        )
+        .await
+        .unwrap();
+        drop(worker);
+        db.close().await;
+        drop(db);
+        // Normal open discovers the persisted hybrid descriptor; new_hybrid
+        // is only the initial opt-in for an empty root.
+        let db = Arc::new(
+            DatabaseManager::new(
+                root.path().join("db.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        let protected = db.protected_reads().await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM frames")
+                .fetch_one(&protected.pool)
+                .await
+                .unwrap(),
+            0
+        );
+        let worker = screenpipe_redact::worker::Worker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            detector,
+            screenpipe_redact::worker::WorkerConfig {
+                resource_governor: None,
+                ..Default::default()
+            },
+        )
+        .with_frame_storage(db.clone());
+        for _ in 0..20 {
+            worker.process_release_batch(8).await.unwrap();
+        }
+        assert_eq!(db.ready_changes(0, 10).await.unwrap().len(), 2);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM frames WHERE full_text LIKE '%SYNTHETIC_SECRET%'"
+            )
+            .fetch_one(&protected.pool)
+            .await
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM frames")
+                .fetch_one(&protected.pool)
+                .await
+                .unwrap(),
+            2
+        );
+        protected.close().await;
+        db.close().await;
+    }
+}
