@@ -4058,6 +4058,41 @@ pub(crate) fn notification_belongs_to_overlay(notification_type: Option<&str>) -
     matches!(notification_type, Some("meeting"))
 }
 
+/// Join cards share a compact landscape surface on every platform.
+fn notification_is_meeting_join(payload: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(payload)
+        .ok()
+        .and_then(|value| value.get("actions").and_then(|v| v.as_array()).cloned())
+        .is_some_and(|actions| {
+            actions.iter().any(|action| {
+                action.get("type").and_then(|v| v.as_str()) == Some("meeting_join")
+                    && action
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|url| !url.is_empty())
+            })
+        })
+}
+
+#[cfg(test)]
+mod meeting_join_notification_tests {
+    use super::notification_is_meeting_join;
+
+    #[test]
+    fn meeting_join_uses_typed_action_instead_of_localized_copy() {
+        assert!(notification_is_meeting_join(
+            r#"{"actions":[{"type":"meeting_join","label":"Rejoindre","url":"https://meet.google.com/example"}]}"#
+        ));
+        assert!(!notification_is_meeting_join(
+            r#"{"actions":[{"type":"api","label":"join and take notes"}]}"#
+        ));
+        assert!(!notification_is_meeting_join("invalid"));
+        assert!(!notification_is_meeting_join(
+            r#"{"actions":[{"type":"meeting_join","url":""}]}"#
+        ));
+    }
+}
+
 /// What actually happened to an alert we tried to surface.
 ///
 /// `show_notification_panel` returned `Ok(())` whether it drew the panel or
@@ -4159,10 +4194,14 @@ pub(crate) async fn deliver_notification_panel(
     // The pill speaks up for its own alerts wherever it is native. Windows has
     // no native standalone panel, so only the overlay branch applies and
     // anything the pill refuses falls through to the webview panel below.
+    let meeting_join = notification_is_meeting_join(&payload);
     #[cfg(target_os = "windows")]
     {
         native_actions::install_shortcut_action_callback(&app_handle);
-        if notification_belongs_to_overlay(notification_type.as_deref())
+        // Use the shared web card for joins; the Win32 pill only supports a
+        // compact row and cannot render the provider/split-control layout.
+        if !meeting_join
+            && notification_belongs_to_overlay(notification_type.as_deref())
             && native_shortcut_reminder::show_notification(&payload)
         {
             info!("meeting notification rendered from the shortcut overlay");
@@ -4189,7 +4228,7 @@ pub(crate) async fn deliver_notification_panel(
             return Ok(NotificationDelivery::ShownOnOverlay);
         }
 
-        if native_notification::is_available() {
+        if !meeting_join && native_notification::is_available() {
             info!("Using native SwiftUI notification panel");
             if native_notification::show(&payload) {
                 // Emit event so the main window can save notification history + PostHog analytics
@@ -4201,8 +4240,11 @@ pub(crate) async fn deliver_notification_panel(
         }
     }
 
-    let window_width = 340.0;
-    let window_height = 380.0;
+    let (window_width, window_height) = if meeting_join {
+        (460.0, 124.0)
+    } else {
+        (340.0, 380.0)
+    };
 
     // Position at top-right of the screen where the cursor is
     let (x, y) = {
@@ -4255,6 +4297,9 @@ pub(crate) async fn deliver_notification_panel(
     // If window exists, reposition to current screen and show
     if let Some(window) = app_handle.get_webview_window(label) {
         info!("notification-panel window exists, repositioning and showing");
+        window
+            .set_size(tauri::LogicalSize::new(window_width, window_height))
+            .map_err(|e| e.to_string())?;
         let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
         let _ = app_handle.emit_to(label, "notification-panel-update", &payload);
 

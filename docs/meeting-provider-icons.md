@@ -6,7 +6,7 @@ The native shortcut notification embeds 48 px PNGs in `MeetingJoinProvider` in
 `apps/screenpipe-app-tauri/src-tauri/swift/shortcut_reminder.swift`. They display
 at 18 points, use the actual join URL to select a service, and require no runtime
 network request or installed meeting app. Unknown services use an SF Symbols
-video icon. The original action label and destination remain unchanged.
+video icon. The original action label and destination remain unchanged. The shared Windows/Linux card uses the same PNGs from `apps/screenpipe-app-tauri/public/images/meeting-providers/`, with the same hostname matching and generic video fallback.
 
 Sources:
 
