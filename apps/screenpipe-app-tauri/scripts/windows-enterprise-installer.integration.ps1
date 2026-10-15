@@ -78,7 +78,10 @@ static class ProofPayload {
 }
 "@
   [IO.File]::WriteAllText($source, $code, [Text.UTF8Encoding]::new($false))
-  $csc = Join-Path ([Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) "csc.exe"
+  $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+  if (-not (Test-Path -LiteralPath $csc)) {
+    $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe"
+  }
   & $csc /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /out:$output $source
   if ($LASTEXITCODE -or -not (Test-Path $output)) { throw "proof payload $Label compilation failed" }
   return $output
@@ -165,29 +168,78 @@ if ($registeredA.DisplayVersion -ne "91.0.0" -or $registeredA.InstallLocation.Tr
   throw "A registry scope/version/path mismatch"
 }
 $hashA = (Get-FileHash (Join-Path $installDir "screenpipe-app.exe") -Algorithm SHA256).Hash
+$machineVersion = $registeredA.DisplayVersion
+$machineLocation = $registeredA.InstallLocation
+$renamedUserShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Renamed Screenpipe fixture.lnk"
+$startupKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+if ($Matrix -ne "current") {
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $shell.CreateShortcut($renamedUserShortcut)
+  $shortcut.TargetPath = Join-Path $installDir "screenpipe-app.exe"
+  $shortcut.Save()
+  New-Item $startupKey -Force | Out-Null
+  Set-ItemProperty $startupKey -Name "screenpipe enterprise" -Value ('"' + (Join-Path $installDir "screenpipe-app.exe") + '" --autostart')
+}
 
 # Matches Tauri's normal update mode; /D is final by NSIS contract.
 # Existing scope and destination must be detected without /D or /SPALLUSERS.
 Invoke-Installer $installerB @("/S", "/P", "/UPDATE")
+$migratedInstallDir = if ($Matrix -ne "current") {
+  Join-Path $localAppData "screenpipe enterprise"
+} else {
+  $installDir
+}
+$registryRoot = if ($Matrix -ne "current") { "HKCU:" } else { $registryRoot }
+$uninstallKey = "$registryRoot\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise"
 $registeredB = Get-ItemProperty $uninstallKey
-$hashB = (Get-FileHash (Join-Path $installDir "screenpipe-app.exe") -Algorithm SHA256).Hash
+$hashB = (Get-FileHash (Join-Path $migratedInstallDir "screenpipe-app.exe") -Algorithm SHA256).Hash
 if ($registeredB.DisplayVersion -ne "92.0.0" -or $hashA -eq $hashB) {
   throw "B did not replace A with distinct version and bytes"
 }
 if (-not (Test-Path -LiteralPath $sentinel)) { throw "actual app-data sentinel was removed" }
-if (Test-Path "$otherRegistryRoot\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise") {
+if ($Matrix -ne "current") {
+  $machineRegistration = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise"
+  if ($machineRegistration.DisplayVersion -ne $machineVersion -or
+      $machineRegistration.InstallLocation -ne $machineLocation -or
+      -not (Test-Path (Join-Path $installDir "screenpipe-app.exe"))) {
+    throw "migration modified the legacy machine installation"
+  }
+  $migratedExecutable = Join-Path $migratedInstallDir "screenpipe-app.exe"
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcutTarget = $shell.CreateShortcut($renamedUserShortcut).TargetPath
+  if ($shortcutTarget -ne $migratedExecutable) {
+    throw "migration did not retarget the existing renamed user shortcut: $shortcutTarget"
+  }
+  $screenpipeLinks = Get-ChildItem ([Environment]::GetFolderPath("Desktop")) -Filter *.lnk | Where-Object {
+    $shell.CreateShortcut($_.FullName).TargetPath -eq $migratedExecutable
+  }
+  if ($screenpipeLinks.Count -ne 1) { throw "migration created duplicate user desktop shortcuts" }
+  $expectedStartup = '"' + $migratedExecutable + '" --autostart'
+  $actualStartup = (Get-ItemProperty $startupKey).'screenpipe enterprise'
+  if ($actualStartup -ne $expectedStartup) {
+    throw "migration startup value mismatch: $actualStartup"
+  }
+} elseif (Test-Path "$otherRegistryRoot\Software\Microsoft\Windows\CurrentVersion\Uninstall\screenpipe enterprise") {
   throw "$Matrix fixture created a duplicate registration in the other scope"
 }
 
-$uninstaller = Join-Path $installDir "uninstall.exe"
+$uninstaller = Join-Path $migratedInstallDir "uninstall.exe"
 $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait -PassThru
 if ($uninstall.ExitCode) { throw "uninstaller exited $($uninstall.ExitCode)" }
 for ($i = 0; $i -lt 100 -and (Test-Path -LiteralPath $uninstaller); $i++) { Start-Sleep -Milliseconds 100 }
 if (Test-Path -LiteralPath $uninstaller) { throw "spawned NSIS uninstaller child did not complete" }
 if (-not (Test-Path -LiteralPath $sentinel)) { throw "uninstall removed actual app-data sentinel" }
 
+if ($Matrix -ne "current") {
+  $legacyUninstaller = Join-Path $installDir "uninstall.exe"
+  $legacyUninstall = Start-Process -FilePath $legacyUninstaller -ArgumentList "/S" -Wait -PassThru
+  if ($legacyUninstall.ExitCode) { throw "legacy uninstaller exited $($legacyUninstall.ExitCode)" }
+  Remove-Item $renamedUserShortcut -Force -ErrorAction SilentlyContinue
+  Remove-ItemProperty $startupKey -Name "screenpipe enterprise" -ErrorAction SilentlyContinue
+}
+
 [pscustomobject]@{
-  InstallPath = $installDir
+  InstallPath = $migratedInstallDir
   Version = $registeredB.DisplayVersion
   HashA = $hashA
   HashB = $hashB
