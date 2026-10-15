@@ -608,6 +608,26 @@ private func testMeetingProviderIcons() {
     expect(parsed.actions[1].meetingProvider == nil, "HD action must not get a meeting icon")
 }
 
+private func testJoinScreenDetailChoice() {
+    let json = """
+    {"id":"choice","title":"meeting starting","actions":[{"id":"join-meeting","label":"join and take notes","type":"meeting_join","url":"https://meet.google.com/example","primary":true},{"id":"record-hd","action":"record-hd","label":"+ HD","type":"api","url":"/capture/hd/start","method":"POST","body":{"boundTo":"prewarm_pending"}}]}
+    """
+    let notification = OverlayNotification.parse(json)!
+    let join = notification.actions[0]
+    expect(notification.screenDetailAction != nil, "HD eligibility must expose the option")
+    expect(notification.joining(join, captureScreenDetail: false) == join, "ordinary Join must not enable screen detail")
+    let combined = notification.joining(join, captureScreenDetail: true)
+    let payload = try! JSONSerialization.jsonObject(with: Data(combined.payload.utf8)) as! [String: Any]
+    expect(payload["type"] as? String == "meeting_join", "selected option must still join")
+    expect(payload["url"] as? String == "https://meet.google.com/example", "combined Join lost the call URL")
+    expect((payload["screen_detail"] as? [String: Any])?["boundTo"] as? String == "prewarm_pending", "combined Join lost capture scope")
+    expect(combined.meetingProvider == .googleMeet, "combined Join lost its icon")
+    let withoutHD = OverlayNotification.parse(json.replacingOccurrences(of: "/capture/hd/start", with: "/unrelated"))!
+    expect(withoutHD.screenDetailAction == nil, "unrelated API action must not become a capture setting")
+    expect(withoutHD.joining(withoutHD.actions[0], captureScreenDetail: true) == withoutHD.actions[0], "capture cannot be added without the offered HD action")
+    expect(notification.joining(notification.actions[1], captureScreenDetail: true) == notification.actions[1], "non-join actions must stay unchanged")
+}
+
 @main
 struct ShortcutReminderTests {
     static func main() {
@@ -627,6 +647,7 @@ struct ShortcutReminderTests {
         testTieBreaksToCurrent()
         testAttachmentStacking()
         testAttachmentStaysOnScreen()
+        testJoinScreenDetailChoice()
         testMeetingProviderIcons()
         testMeetingJoinNotification()
         testWireContract()
