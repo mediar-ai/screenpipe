@@ -1049,6 +1049,30 @@
       "notes": "Meeting streaming config/controller logic, speaker embedding state, cross-device dedupe simulations, and overlap cleanup coverage."
     },
     {
+      "id": "audio-min-speech-ratio-gate",
+      "label": "Disabled-audio speech ratio gate",
+      "crate": "screenpipe-audio",
+      "files": [
+        "tests/vad_min_speech_ratio_gate_test.rs"
+      ],
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "layers": [
+        "audio",
+        "transcription"
+      ],
+      "flows": [
+        "audio-record-transcribe"
+      ],
+      "criticality": "high",
+      "confidence": "partial",
+      "kind": "integration",
+      "notes": "Synthetic VAD input verifies that a minimum speech ratio of one rejects even a fully spoken chunk and emits no segments. Does not exercise physical devices or live model inference."
+    },
+    {
       "id": "audio-pipeline-benchmarks",
       "label": "Audio pipeline benchmark and quality probes",
       "crate": "screenpipe-audio",
