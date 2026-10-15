@@ -232,8 +232,24 @@ struct OverlayNotification: Equatable {
         actions.first { $0.screenDetailBody != nil }
     }
 
-    /// One dispatch joins the call and, only when selected, starts screen detail
-    /// first. Toggling the option itself never sends an action or dismisses.
+    /// Both visible meeting buttons join in one click. The screen-detail variant
+    /// replaces the standalone capture action while preserving its eligibility.
+    var displayActions: [OverlayNotificationAction] {
+        guard isMeetingJoin, let detailAction = screenDetailAction,
+              let join = actions.first(where: { $0.meetingProvider != nil })
+        else { return actions }
+        let combined = joining(join, captureScreenDetail: true)
+        return actions.map { action in
+            guard action.id == detailAction.id else { return action }
+            return OverlayNotificationAction(
+                id: action.id, label: uiText("join with screen detail"), primary: false,
+                payload: combined.payload, meetingProvider: combined.meetingProvider,
+                screenDetailBody: nil
+            )
+        }
+    }
+
+    /// Compose capture and joining into one dispatch, with capture starting first.
     func joining(_ action: OverlayNotificationAction, captureScreenDetail: Bool) -> OverlayNotificationAction {
         guard captureScreenDetail, action.meetingProvider != nil,
               let body = screenDetailAction?.screenDetailBody,
@@ -1648,26 +1664,6 @@ private struct DockStatusCell<Content: View>: View {
     }
 }
 
-/// SwiftUI-drawn checkbox keeps contrast and focus visible on the dark card.
-@available(macOS 13.0, *)
-private struct ScreenDetailToggleStyle: ToggleStyle {
-    let scale: CGFloat
-
-    func makeBody(configuration: Configuration) -> some View {
-        Button(action: { configuration.isOn.toggle() }) {
-            HStack(alignment: .top, spacing: 6 * scale) {
-                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 14 * scale, weight: .medium))
-                    .foregroundColor(.white.opacity(configuration.isOn ? 0.95 : 0.65))
-                configuration.label
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(uiText(configuration.isOn ? "On" : "Off"))
-    }
-}
-
 /// Notification rendered as an extension of the pill. Deliberately shaped like
 /// the pill's other surfaces (transcript preview, disclosure) rather than the
 /// standalone notification panel, so it reads as the overlay speaking up.
@@ -1678,14 +1674,13 @@ private struct OverlayNotificationView: View {
     let scale: CGFloat
     let onAction: (OverlayNotificationAction) -> Void
     let onDismiss: () -> Void
-    @State var captureScreenDetail = false
 
     private func s(_ value: CGFloat) -> CGFloat { value * scale }
 
     /// Ordered so the primary action lands closest to the right edge, where the
     /// pointer already is after reading the title.
     private var orderedActions: [OverlayNotificationAction] {
-        notification.actions.sorted { !$0.primary && $1.primary }
+        notification.displayActions.sorted { !$0.primary && $1.primary }
     }
 
     var body: some View {
@@ -1726,22 +1721,6 @@ private struct OverlayNotificationView: View {
                 dismissButton
             }
             HStack(spacing: s(8)) {
-                if notification.screenDetailAction != nil {
-                    Toggle(isOn: $captureScreenDetail) {
-                        VStack(alignment: .leading, spacing: s(2)) {
-                            Text(uiText("Capture screen detail"))
-                                .font(Brand.swiftUIMonoFont(size: 10 * scale, weight: .medium))
-                                .foregroundColor(.white.opacity(0.9))
-                            Text(uiText("Smoother replay, more storage"))
-                                .font(Brand.swiftUIMonoFont(size: 8 * scale))
-                                .foregroundColor(.white.opacity(0.60))
-                        }
-                    }
-                    .toggleStyle(ScreenDetailToggleStyle(scale: scale))
-                    .help(uiText("Capture your screen more frequently during this meeting. Starts when you click Join."))
-                    .accessibilityLabel(uiText("Capture screen detail when joining"))
-                    .fixedSize()
-                }
                 Spacer(minLength: 0)
                 actionButtons
             }
@@ -1776,10 +1755,8 @@ private struct OverlayNotificationView: View {
     }
 
     private var actionButtons: some View {
-        ForEach(orderedActions.filter { !notification.isMeetingJoin || $0.screenDetailBody == nil }) { action in
-            Button(action: {
-                onAction(notification.joining(action, captureScreenDetail: captureScreenDetail))
-            }) {
+        ForEach(orderedActions) { action in
+            Button(action: { onAction(action) }) {
                 HStack(spacing: s(7)) {
                     if let provider = action.meetingProvider {
                         if let image = provider.image {
@@ -1788,6 +1765,8 @@ private struct OverlayNotificationView: View {
                                 .interpolation(.high)
                                 .scaledToFit()
                                 .frame(width: s(18), height: s(18))
+                                .background(action.primary ? Color.clear : Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: s(3)))
                                 .accessibilityHidden(true)
                         } else {
                             Image(systemName: "video.fill")
@@ -1797,11 +1776,11 @@ private struct OverlayNotificationView: View {
                         }
                     }
                     Text(action.label)
-                        .font(Brand.swiftUIMonoFont(size: (notification.isMeetingJoin ? 13 : 9) * scale, weight: .medium))
+                        .font(Brand.swiftUIMonoFont(size: (notification.isMeetingJoin ? 12 : 9) * scale, weight: .medium))
                         .lineLimit(1)
                 }
                     .foregroundColor(action.primary ? .black : .white.opacity(0.88))
-                    .padding(.horizontal, s(notification.isMeetingJoin ? 12 : 8))
+                    .padding(.horizontal, s(notification.isMeetingJoin ? 10 : 8))
                     .frame(height: s(notification.isMeetingJoin ? 34 : 22))
                     .background(
                         action.primary
@@ -1812,6 +1791,9 @@ private struct OverlayNotificationView: View {
                     .contentShape(RoundedRectangle(cornerRadius: s(6)))
             }
             .buttonStyle(.plain)
+            .help(notification.isMeetingJoin && action.id == notification.screenDetailAction?.id
+                ? uiText("Join and take notes with more frequent screen capture for smoother replay. Uses more storage.")
+                : action.label)
             .fixedSize()
         }
     }
@@ -3445,7 +3427,6 @@ class ShortcutReminderController: NSObject, NSWindowDelegate {
             },
             onDismiss: { [weak self] in self?.dismissOverlayNotification() }
         )
-        .id(notification.id) // A new meeting must not inherit a previous opt-in.
         if let hosting = notificationHostingView {
             hosting.rootView = AnyView(view)
         } else {

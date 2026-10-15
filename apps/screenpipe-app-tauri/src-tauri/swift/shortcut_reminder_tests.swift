@@ -614,6 +614,14 @@ private func testJoinScreenDetailChoice() {
     """
     let notification = OverlayNotification.parse(json)!
     let join = notification.actions[0]
+    let displayed = notification.displayActions
+    expect(displayed.count == 2, "meeting must expose two one-click join choices")
+    expect(displayed[0] == join, "ordinary Join must remain unchanged")
+    expect(displayed[1].label == "join with screen detail", "capture choice must explicitly say it joins")
+    expect(displayed[1].meetingProvider == .googleMeet, "both join choices must show the service icon")
+    let detailPayload = try! JSONSerialization.jsonObject(with: Data(displayed[1].payload.utf8)) as! [String: Any]
+    expect(detailPayload["type"] as? String == "meeting_join", "screen-detail button must join directly")
+    expect((detailPayload["screen_detail"] as? [String: Any])?["boundTo"] as? String == "prewarm_pending", "screen-detail button must include capture in its single dispatch")
     expect(notification.screenDetailAction != nil, "HD eligibility must expose the option")
     expect(notification.joining(join, captureScreenDetail: false) == join, "ordinary Join must not enable screen detail")
     let combined = notification.joining(join, captureScreenDetail: true)
@@ -624,6 +632,7 @@ private func testJoinScreenDetailChoice() {
     expect(combined.meetingProvider == .googleMeet, "combined Join lost its icon")
     let withoutHD = OverlayNotification.parse(json.replacingOccurrences(of: "/capture/hd/start", with: "/unrelated"))!
     expect(withoutHD.screenDetailAction == nil, "unrelated API action must not become a capture setting")
+    expect(withoutHD.displayActions == withoutHD.actions, "ineligible notifications must keep their actions")
     expect(withoutHD.joining(withoutHD.actions[0], captureScreenDetail: true) == withoutHD.actions[0], "capture cannot be added without the offered HD action")
     expect(notification.joining(notification.actions[1], captureScreenDetail: true) == notification.actions[1], "non-join actions must stay unchanged")
 }
