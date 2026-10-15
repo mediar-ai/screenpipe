@@ -10721,7 +10721,10 @@ mod tests {
 
             assert!(!dir.path().join("meeting-summary/pipe.md").exists());
             assert!(manager.get_pipe("meeting-summary").await.is_none());
-            assert_eq!(std::fs::read(dir.path().join(TOMBSTONES_FILE)).unwrap(), before);
+            assert_eq!(
+                std::fs::read(dir.path().join(TOMBSTONES_FILE)).unwrap(),
+                before
+            );
 
             // A later explicit install is still allowed to restore the task.
             assert!(install_bundled_pipe(dir.path(), "meeting-summary").unwrap());
@@ -10745,7 +10748,10 @@ mod tests {
         restarted.install_builtin_pipes().unwrap();
         restarted.load_pipes().await.unwrap();
         for &(name, _) in BUNDLED_BUILTIN_PIPES {
-            assert!(!restarted.get_pipe(name).await.unwrap().config.enabled, "{name}");
+            assert!(
+                !restarted.get_pipe(name).await.unwrap().config.enabled,
+                "{name}"
+            );
         }
     }
 
