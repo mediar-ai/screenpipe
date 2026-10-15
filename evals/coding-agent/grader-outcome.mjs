@@ -45,6 +45,13 @@ export function classifyGraderError(grader) {
         /^Caused by: Error: Failed to load url [^\n]+Does the file exist\?\s*$/m.test(stderr) &&
         !/^AssertionError(?: \[[^\]]+\])?:/m.test(stderr)) ||
        /^Error: Cannot find module ['"][^\n]+['"] imported from ['"][^\n]+['"]\.\s*$/m.test(stderr))) return "vitest_collection_error";
+  // Esbuild/Vite can reject source syntax before a Vitest suite collects.
+  // Require the final non-failure summary and both compiler diagnostics;
+  // executed assertion failures and quoted diagnostics must remain failures.
+  if (collectionSummary && noAssertion && /^\s*Test Files\s+\d+ failed/m.test(stdout) &&
+      /Failed Suites [1-9]/.test(stderr) &&
+      /^Error: Transform failed with [1-9]\d* errors?:\s*$/m.test(stderr) &&
+      /^.+:\d+:\d+: ERROR: .+/m.test(stderr)) return "vitest_transform_error";
   // A beforeAll build failure can register tests but skip every affected test.
   // Passing neighboring suites do not turn a compile failure into an assertion.
   // Preserve executed failures and assertion headers, including quoted diagnostics.

@@ -6441,6 +6441,48 @@
         ],
         "command": "cd screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-settings-falsy.config.mjs"
       }
+    },
+    {
+      "id": "app-browser-native-consent-navigation",
+      "name": "Show native browser session consent without losing ownership safeguards",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "0cf9a64a5d7684b00c318154b249400bc007fd38"
+      },
+      "base_ref": "a71e821de98615c9bafde1574298cb592b664634",
+      "oracle_ref": "0cf9a64a5d7684b00c318154b249400bc007fd38",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "privacy",
+        "browser",
+        "react"
+      ],
+      "prompt": "The browser sidebar can stay on a loading view when native navigation pauses for permission to use a browser login. Fix the existing consent flow so a valid session-access request for the current chat and navigation presents the explicit Use browser session and Continue logged out choices. Accept native snake_case navigation_id and the existing camelCase navigationId event format, for both the default browser and user-created tabs. Pause loading while permission is pending and hide the native user tab so it cannot cover the choices. Do not resolve the request or change cookie-access/settings state before the user chooses. Each explicit choice must resolve the original request once with the selected boolean, set cookie access to that choice (mark denial when declined), update browserCookieAccessGranted, and dismiss the prompt. Preserve rejection of stale or absent navigation IDs and foreign or absent owners, with no prompt or permission/settings effects. The hidden checks mount the actual component with synthetic native events, persistence and presentation ports. Native webview geometry and cookie extraction are outside this case. Keep the existing ownership protections and add or update relevant tests.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 120,
+        "fixtures": [
+          {
+            "local_path": "graders/browser-consent.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/components/.eval-browser-consent.test.tsx"
+          },
+          {
+            "local_path": "graders/browser-consent.bootstrap.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-browser-consent-bootstrap.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node .eval-browser-consent-bootstrap.mjs"
+      },
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/browser-sidebar.tsx"
+      ],
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ]
     }
   ]
 }

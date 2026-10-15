@@ -1,0 +1,19 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+// Hidden grading setup: synthetic external ports, actual component/event/ownership sources.
+import {mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {spawnSync} from 'node:child_process';
+const root=process.cwd(),ports=join(root,'.eval-browser-consent-ports'),config=join(root,'.eval-browser-consent.config.mjs');
+const mocked=['@/lib/chat-storage','@/lib/browser-state-cache','@/lib/hooks/use-settings','@/lib/utils/tauri','@/lib/api','@/components/file-preview-sidebar','@/components/right-panel-tab-strip','@/lib/i18n/provider','@/components/chat/chat-panel-home','@/components/ui/button','@tauri-apps/api/event','@tauri-apps/api/dpi','@tauri-apps/api/menu','@tauri-apps/api/window','@tauri-apps/plugin-opener','@tauri-apps/plugin-os','gt-react'];
+const alias={};
+try{
+ mkdirSync(ports,{recursive:true});
+ for(const [index,name]of mocked.entries()){const file=join(ports,String(index)+'.ts');writeFileSync(file,'export {};');alias[name]=file}
+ alias['@']=root;
+ const options={resolve:{alias},esbuild:{jsx:'automatic'},css:{postcss:{plugins:[]}},test:{environment:'jsdom',include:['components/.eval-browser-consent.test.tsx'],pool:'forks',poolOptions:{forks:{singleFork:true}}}};
+ writeFileSync(config,"import {defineConfig} from 'vitest/config';export default defineConfig("+JSON.stringify(options)+");");
+ const child=spawnSync(process.execPath,['node_modules/vitest/vitest.mjs','run','--config',config],{cwd:root,encoding:'utf8',timeout:60000,maxBuffer:8*1024*1024});
+ process.stdout.write(child.stdout??'');process.stderr.write(child.stderr??'');
+ if(child.error||child.signal){console.error('Grader setup error: '+(child.error?.message??child.signal));process.exitCode=2}else process.exitCode=child.status??2;
+}finally{rmSync(ports,{recursive:true,force:true});rmSync(config,{force:true})}
