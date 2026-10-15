@@ -1,5 +1,15 @@
 # Coding-agent regression evals
 
+`app-recording-status-authority` mounts the actual recording popover with
+synthetic device, settings and callback inputs. Fourteen outcomes distinguish
+empty or stale status from capture authority, preserve global/device actions,
+and require status retry without capture mutation. The parent fails four and
+preserves ten; the historical fix and current component pass fourteen.
+Run `bun test evals/coding-agent/calibrate-recording-status-authority.test.js`
+for equivalent, unused-fix, retry, routing, rollback and setup-error controls.
+Fixtures and dependency links appear only at grading. This does not execute
+Home wiring, native recording, enforced isolation or model trials.
+
 `ai-gateway-vertex-stream-fallback` executes the public streaming provider with
 synthetic authentication and transport. Twelve outcomes cover reasoning-only
 finish, terminal marker, EOF, split Unicode, CRLF and empty deltas, while
