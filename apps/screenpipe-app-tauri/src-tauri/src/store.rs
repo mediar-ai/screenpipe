@@ -5680,11 +5680,7 @@ mod tests {
             });
             let settings: SettingsStore = serde_json::from_value(data)
                 .unwrap_or_else(|e| panic!("credits {credits} broke settings: {e}"));
-            assert_eq!(
-                settings.user.credits.map(|c| c.amount),
-                expected,
-                "credits {credits}"
-            );
+            assert_eq!(settings.user.credits.map(|c| c.amount), expected, "credits {credits}");
             assert_eq!(settings.user.email.as_deref(), Some("a@b.c"));
         }
 
