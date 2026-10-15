@@ -5,7 +5,6 @@ import { exportGuideHtml } from "./guide-images";
 import { SourceSopScreenshot } from "./source-sop-screenshot";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
-  ArrowLeft,
   ArrowDown,
   ArrowUp,
   BookOpen,
@@ -22,6 +21,7 @@ import {
 import type { WorkflowMap } from "./model";
 import type { WorkflowsPlatform } from "./platform";
 import {
+  guideMarkdown,
   guideWithBlockIds,
   guideScreenshot,
   guideStepIncludesImage,
@@ -33,6 +33,7 @@ import {
 import { WorkflowRichText } from "./rich-text";
 import { InlineText } from "./inline-text";
 import { DocumentBlockEditor, type DocumentBlock } from "./document-block-editor";
+import { DocumentActions, DocumentToolbar, type LibraryShareDocument } from "./document-actions";
 import { SopDocument } from "./sop-document";
 import { GuideAssistant } from "./guide-assistant";
 import { GuideSourceReview } from "./guide-source-review";
@@ -48,10 +49,14 @@ export function WorkflowGuide({
   backLabel = "Back to workflow",
   sourceMissing = false,
   loadScreenshot,
+  onShareDocument,
+  downloadDocument,
 }: {
   workflow: WorkflowMap;
   platform: NonNullable<WorkflowsPlatform["guides"]>;
   close: () => void;
+  onShareDocument?: (document: LibraryShareDocument) => void;
+  downloadDocument?: (content: string, filename: string) => Promise<boolean>;
   backLabel?: string;
   sourceMissing?: boolean;
   loadScreenshot?: WorkflowsPlatform["loadWorkflowScreenshot"];
@@ -227,17 +232,7 @@ export function WorkflowGuide({
       <span role="status" className={styles.srOnly}>
         {announcement}
       </span>
-      <header className={styles.toolbar}>
-        <button
-          onClick={() => {
-            close();
-          }}
-        >
-          <ArrowLeft size={16} />
-          {backLabel}
-        </button>
-        <div>
-          <span role="status" className={styles.saveStatus} title={saved}>
+      <DocumentToolbar backLabel={backLabel} onBack={close} status={<span role="status" className={styles.saveStatus} title={saved}>
             {saved.startsWith("Could not") ? (
               saved
             ) : (
@@ -260,7 +255,7 @@ export function WorkflowGuide({
                 </span>
               </>
             )}
-          </span>
+          </span>}>
           {draft && saved.startsWith("Could not") && (
             <button
               onClick={() =>
@@ -272,6 +267,7 @@ export function WorkflowGuide({
           )}
           {draft && (
             <>
+              <DocumentActions document={{ kind: "sop", title: draft.title, markdown: guideMarkdown(draft) }} onShare={onShareDocument} download={downloadDocument} />
               {platform.video && <GuideVideoPanel container={videoContainer} onOpenChange={setVideoOpen} ref={videoHandle} guide={draft} workflow={workflow} platform={platform.video} loadScreenshot={platform.loadScreenshot} loadSourceScreenshot={platform.loadSourceScreenshot} save={persist} onVideoMode={setVideoMode} onLayoutChange={videoLayout => update({ ...latest.current!, videoLayout })} assistantBusy={videoBusy} onCreate={platform.video.edit ? () => {
                 if (videoRequested.current) return;
                 videoRequested.current = true;
@@ -311,8 +307,7 @@ export function WorkflowGuide({
               </button>
             </>
           )}
-        </div>
-      </header>
+      </DocumentToolbar>
       <div ref={setVideoContainer} />
       {!busy && !error && (
         <GuideAssistant
