@@ -153,7 +153,10 @@ fn background_bun_path() -> Option<PathBuf> {
     crate::pi::find_bun_executable().map(PathBuf::from)
 }
 
-async fn wait_for_background_api_key(api_auth_enabled: bool) -> Option<String> {
+async fn wait_for_background_api_key(
+    api_auth_enabled: bool,
+    resolved_api_key: impl Fn() -> Option<String>,
+) -> Option<String> {
     if !api_auth_enabled {
         return None;
     }
@@ -165,7 +168,7 @@ async fn wait_for_background_api_key(api_auth_enabled: bool) -> Option<String> {
     // clock deadline: slow keychain prompts or first-run database recovery must
     // not permanently miss setup merely because onboarding completed meanwhile.
     loop {
-        if let Some(key) = crate::store::resolved_api_auth_key() {
+        if let Some(key) = resolved_api_key() {
             return Some(key);
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -175,11 +178,9 @@ async fn wait_for_background_api_key(api_auth_enabled: bool) -> Option<String> {
 /// Repair detected AI tools at startup, then watch for later installs. Successful
 /// targets are cached for this session; an explicit Settings disconnect still
 /// wins. Filesystem work stays off the async/UI threads.
-pub fn connect_detected_ai_tools_in_background(
-    _app: tauri::AppHandle,
-    api_auth_enabled: bool,
-    api_port: u16,
-) {
+pub fn connect_detected_ai_tools_in_background(config: &screenpipe_engine::RecordingConfig) {
+    let api_auth_enabled = config.api_auth;
+    let api_port = config.port;
     let Some(home) = background_ai_tools_home() else {
         info!("AI tool background setup skipped: no home directory");
         return;
@@ -191,7 +192,8 @@ pub fn connect_detected_ai_tools_in_background(
     // Grok Bot requires explicit credential access from Connections.
     // Keep ordinary local MCP/skill configuration automatic.
     tauri::async_runtime::spawn(async move {
-        let api_key = wait_for_background_api_key(api_auth_enabled).await;
+        let api_key =
+            wait_for_background_api_key(api_auth_enabled, crate::store::resolved_api_auth_key).await;
         connect_detected_ai_tools_in(
             home,
             bun_path,
@@ -1813,6 +1815,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ai_tool_setup_waits_for_effective_lan_auth_key() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let settings = screenpipe_config::RecordingSettings {
+            api_auth: false,
+            listen_on_lan: true,
+            ..Default::default()
+        };
+        let config = screenpipe_engine::RecordingConfig::from_settings(
+            &settings,
+            PathBuf::from("unused-fixture-path"),
+            None,
+        );
+        let attempts = AtomicUsize::new(0);
+        let key = tokio::time::timeout(
+            Duration::from_secs(3),
+            wait_for_background_api_key(config.api_auth, || {
+                (attempts.fetch_add(1, Ordering::SeqCst) > 0).then(|| "sp-fixture".to_string())
+            }),
+        )
+        .await
+        .expect("installer must resume after the server resolves its key");
+        assert_eq!(key.as_deref(), Some("sp-fixture"));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            wait_for_background_api_key(false, || panic!("unauthenticated local API needs no key")).await,
+            None
+        );
+    }
+
+    #[tokio::test]
     async fn ai_tool_policy_pauses_and_resumes_background_setup() {
         use std::sync::Arc;
         let fixture = tempfile::tempdir().unwrap();
@@ -1831,19 +1863,19 @@ mod tests {
         ));
         let outcome = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::time::sleep(Duration::from_millis(100)).await;
-            assert!(!home.join(".cursor/mcp.json").exists());
-            assert!(!home.join(".cursor/skills").exists());
+            if home.join(".cursor/mcp.json").exists() || home.join(".cursor/skills").exists() {
+                return Err("disabled policy wrote a configuration".to_string());
+            }
             enabled.update(enabled.begin_refresh(), true);
             while !home.join(".cursor/skills/screenpipe-api/SKILL.md").is_file()
                 || !home.join(".cursor/mcp.json").is_file()
             {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
-            assert!(home.join(".cursor/mcp.json").is_file());
             {
                 let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
                 enabled.update(enabled.begin_refresh(), false);
-                std::fs::remove_file(home.join(".cursor/mcp.json")).unwrap();
+                std::fs::remove_file(home.join(".cursor/mcp.json")).map_err(|e| e.to_string())?;
                 enabled.update(enabled.begin_refresh(), true);
             }
             while !home.join(".cursor/mcp.json").is_file() {
@@ -1855,28 +1887,27 @@ mod tests {
                 let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
-            std::fs::create_dir_all(home.join(".runner")).unwrap();
+            std::fs::create_dir_all(home.join(".runner")).map_err(|e| e.to_string())?;
             tokio::time::sleep(Duration::from_millis(100)).await;
-            assert!(!home.join(".runner/mcp.json").exists());
-            assert!(
-                home.join(".cursor/mcp.json").is_file(),
-                "policy preserves existing connections"
-            );
+            if home.join(".runner/mcp.json").exists() || !home.join(".cursor/mcp.json").is_file() {
+                return Err("disabled policy must preserve existing connections without adding new ones".to_string());
+            }
             // A successful target may be changed while the org disables setup.
             // Re-enabling must reconcile it again, not retain a stale success.
-            std::fs::remove_file(home.join(".cursor/mcp.json")).unwrap();
+            std::fs::remove_file(home.join(".cursor/mcp.json")).map_err(|e| e.to_string())?;
             enabled.update(enabled.begin_refresh(), true);
             while !home.join(".runner/mcp.json").is_file()
                 || !home.join(".cursor/mcp.json").is_file()
             {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
+            Ok::<(), String>(())
         })
         .await;
         let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
         task.abort();
         let _ = task.await;
-        outcome.expect("AI-tool policy did not resume setup");
+        outcome.expect("AI-tool policy did not resume setup").unwrap();
     }
 
     #[tokio::test]

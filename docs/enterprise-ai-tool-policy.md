@@ -6,6 +6,8 @@
 skill setup for supported, detected AI tools. It defaults to enabled when absent.
 Both JSON booleans and the control plane's `"true"` / `"false"` strings are accepted.
 Malformed values defer automatic setup; missing/null values use the enabled default.
+The control plane preserves malformed values as an explicit disable instead of
+dropping the key. Clearing the policy in the editor restores the enabled default.
 
 ```json
 {
@@ -47,3 +49,7 @@ receive MCP configuration; supported skill clients also receive the bundled
 Screenpipe skills. Screenpipe does not install the AI applications themselves.
 The policy requires a desktop version that implements it; older versions retain
 their existing behavior.
+
+Automatic setup uses the effective local API authentication setting, including
+authentication forced by LAN access. It waits for the server to resolve the
+shared key before writing authenticated MCP configuration.
