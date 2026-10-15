@@ -6518,6 +6518,56 @@
         ],
         "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
       }
+    },
+    {
+      "id": "app-recording-status-authority",
+      "name": "Recover unavailable recording status without changing capture authority",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "dd332af338ba8302b3df12ef424d8a4c7e7bf291"
+      },
+      "base_ref": "bbc17e34d453abb9449be47e0cfc9d7a9ecd8565",
+      "oracle_ref": "dd332af338ba8302b3df12ef424d8a4c7e7bf291",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/recording-status.tsx"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/recording-status.tsx"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "recording",
+        "user-pause",
+        "status-recovery"
+      ],
+      "prompt": "The recording status popover offers the wrong controls when device information is empty or stale. Preserve the RecordingStatus public interface. For a running session with no reported devices, provide accessible Check again and Open settings actions, without offering a global pause/resume action or changing capture. Check again calls onRefreshDevices once, keeps an accessible Check again or Checking button disabled while pending, prevents duplicate requests, and becomes usable again after either success or rejection. Open settings invokes onOpenRecordingSettings. Global pause must take precedence over an empty device list or stale active devices: show an accessible Resume all recording action that invokes onResumeRecording once, with no individual Pause/Resume controls or device requests. When settings disable all capture, show no capture or status-retry controls, but keep Open settings available, regardless of reported device or global-pause state. Preserve existing behavior: a live session whose devices are individually paused resumes those devices through POST /vision/device/start with monitor_id and POST /audio/device/start with device_name, without global callbacks; active or mixed devices pause through onPauseRecording; a globally paused session resumes through the global callback. A monitor without an id must issue no request while eligible audio devices still resume. Failed individual requests must restore their previous paused state. Hide the global control when both callbacks are absent; an unavailable global resume callback must leave its action disabled or absent. Preserve accessible action names pause all recording, resume all recording and resume (case-insensitive). No private function names, test attributes or implementation structure are required. This task covers frontend controls with synthetic callback/API boundaries, not Home wiring or native recording.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/recording-status-authority.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume.test.tsx"
+          },
+          {
+            "local_path": "graders/recording-resume-config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume.config.mjs"
+          },
+          {
+            "local_path": "graders/recording-resume-translation.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume-translation.ts"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/recording-resume.config.mjs"
+      }
     }
   ]
 }
