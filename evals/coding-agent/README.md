@@ -1,5 +1,16 @@
 # Coding-agent regression evals
 
+`ai-gateway-vertex-stream-fallback` executes the public streaming provider with
+synthetic authentication and transport. Twelve outcomes cover reasoning-only
+finish, terminal marker, EOF, split Unicode, CRLF and empty deltas, while
+preserving ordinary answers, reasoning events, tools, usage and refusals.
+Run `bun test evals/coding-agent/calibrate-vertex-stream-fallback.test.js` for ten
+controls, including equivalent guards, disconnected correct code, duplicate
+fallback, overwritten answers, lost reasoning and missing-source setup errors.
+Hidden fixtures appear only at grading; no dependency links are needed.
+This does not test live models, multiple-choice streams, full HTTP gateway
+admission, billing, desktop rendering, execution isolation or model trials.
+
 `app-browser-native-consent-navigation` mounts the actual browser sidebar,
 event hook and ownership helpers with synthetic native and persistence ports.
 Twelve outcomes cover native and compatible event formats, default/user tabs,
