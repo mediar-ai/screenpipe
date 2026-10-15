@@ -7,13 +7,16 @@ import { workflowTiming, formatTimingMinutes } from "./timing";
 import styles from "./timing-disclosure.module.css";
 
 /** Lightweight, local disclosure: no requests, timers or per-row document listeners. */
-export function TimingDisclosure({ value, label, measured }: {
+export function TimingDisclosure({ value, label, measured, hideWhenUnknown = false, showDuration = false }: {
   value: unknown;
+  hideWhenUnknown?: boolean;
+  showDuration?: boolean;
   label: string;
   measured?: { minutes: number; samples: number };
 }) {
   const timing = workflowTiming(value);
   const recording = !timing && measured && Number.isFinite(measured.minutes) && measured.minutes > 0 && measured.samples >= 2 ? measured : null;
+  const hasTiming = Boolean(timing || recording);
   const [open, setOpen] = useState(false);
   const [above, setAbove] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -25,6 +28,7 @@ export function TimingDisclosure({ value, label, measured }: {
     setOpen(true);
   };
   const close = () => { setOpen(false); setPinned(false); };
+  useEffect(() => { if (hideWhenUnknown && !hasTiming) close(); }, [hideWhenUnknown, hasTiming]);
   useEffect(() => {
     if (!pinned) return;
     const dismiss = (event: PointerEvent) => {
@@ -33,14 +37,16 @@ export function TimingDisclosure({ value, label, measured }: {
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [pinned]);
+  if (hideWhenUnknown && !timing && !recording) return null;
   return <span ref={root} className={styles.root}
     onMouseEnter={show} onMouseLeave={() => { if (!pinned && !root.current?.contains(document.activeElement)) setOpen(false); }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) close(); }}
     onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
-    <button type="button" className={styles.trigger} aria-label={label}
+    <button type="button" className={`${styles.trigger} ${showDuration ? styles.withDuration : ""}`} aria-label={label}
       aria-expanded={open} aria-controls={open ? id : undefined} aria-describedby={open ? id : undefined}
       onFocus={show} onClick={() => { if (pinned) close(); else { show(); setPinned(true); } }}>
       <Clock3 size={15} aria-hidden="true" />
+      {showDuration && (timing || recording) && <span aria-hidden="true">{formatTimingMinutes(timing ? timing.averageMinutes : recording!.minutes)}</span>}
     </button>
     {open && <span className={styles.anchor} data-above={above || undefined}><span id={id} role="tooltip" className={styles.content}>
       {timing ? <>

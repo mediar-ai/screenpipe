@@ -174,7 +174,8 @@ it("uses the document layout with visible steps and no editing capabilities", as
   expect(document.querySelector('[contenteditable="true"]')).toBeNull();
   expect(within(document).queryByRole('button', { name: /Add step|Move step|Undo last edit/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Expand all' })).not.toBeInTheDocument();
-  fireEvent.click(within(document).getByRole('button', { name: 'Workflow timing' }));
-  expect(screen.getByRole('tooltip')).toHaveTextContent('Time not measured yet');
+  expect(within(document).queryByRole('button', { name: 'Workflow timing' })).not.toBeInTheDocument();
+  expect(within(step).queryByRole('button', { name: 'Timing for step 1' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   expect(service.stopLocal).not.toHaveBeenCalled();
 });
