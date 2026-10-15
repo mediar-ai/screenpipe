@@ -134,3 +134,22 @@
   .readOnlyKind { grid-column: 1; grid-row: 2; }
   .stepApps { margin-left: 25px; }
 }
+
+/* Plus insertion follows the web document: reveal in the gap between steps. */
+.insertion + .step { margin-bottom: 4px; }
+.insertion { position: relative; display: flex; align-items: center; height: 24px; margin-left: -30px; padding-left: 30px; }
+.insertion > button { position: absolute; left: 0; opacity: 0; pointer-events: none; }
+.insertion > span { width: 100%; border-top: 1px solid transparent; }
+.insertion:hover > button, .insertion:focus-within > button { opacity: 1; pointer-events: auto; }
+.insertion:hover > span, .insertion:focus-within > span { border-color: var(--line); }
+.editor .addDetail { margin: 4px 0 4px 25px; font-size: 12px; gap: 5px; }
+/* Keep measured timing available without a permanent clock on every row. */
+.stepActions > span, .titleRow > span { opacity: 0; pointer-events: none; }
+.step:hover > .stepTop > .stepActions > span, .step:focus-within > .stepTop > .stepActions > span,
+.titleRow:hover > span, .titleRow:focus-within > span { opacity: 1; pointer-events: auto; }
+@media (hover: none) {
+  .insertion > button, .stepActions > span, .titleRow > span { opacity: 1; pointer-events: auto; }
+}
+@container workflow-editor (max-width: 560px) {
+  .editor .addDetail { margin-left: 21px; }
+}

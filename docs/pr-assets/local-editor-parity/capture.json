@@ -21,7 +21,10 @@
     "after keyboard menu focus",
     "after handle focus",
     "after mouse leave",
-    "after touch menu"
+    "after touch menu",
+    "after measured timing disclosure",
+    "after plus insertion"
   ],
-  "installed_app_verified": false
+  "installed_app_verified": false,
+  "revision": 2
 }

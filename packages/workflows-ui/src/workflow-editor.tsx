@@ -1,7 +1,7 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -187,6 +187,15 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
     closeStepMenu(false);
     focusField(`Block ${stage.procedure.length + 1} in step ${index + 1}`);
   }
+  function insertion(index: number) {
+    return <div className={styles.insertion}>
+      <button type="button" aria-label={index === 0 ? "Add step at start" : `Add step after ${index}`}
+        title="Add step" disabled={draft.stages.length >= 100} onClick={() => addStage(index)}>
+        <Plus size={16} aria-hidden="true" />
+      </button>
+      <span />
+    </div>;
+  }
   function focusField(label: string) {
     requestAnimationFrame(() =>
       document
@@ -296,7 +305,7 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
         <div className={styles.intro}>
           <div className={styles.titleRow}>
           {stepsOnly ? <h1 className={styles.title}>{workflow.title}</h1> : <Text title label="Workflow title" value={draft.title} onChange={title => change({ ...draft, title })} />}
-          <TimingDisclosure label="Workflow timing" value={unchangedStages ? workflow.timing : null}
+          <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={unchangedStages ? workflow.timing : null}
             measured={unchangedStages && workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />
           </div>
           {stepsOnly ? <p className={styles.readOnlyText}>{workflow.description}</p> : <Text label="Workflow description" value={draft.description} onChange={description => change({ ...draft, description })} />}
@@ -308,9 +317,10 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
         <div className={styles.stepsHeading}><strong>Steps</strong></div>
         <div className={styles.steps}>
           {draft.stages.map((stage, index) => (
+            <Fragment key={stage.key}>
+            {insertion(index)}
             <article
               className={`${styles.step} ${dragOver === index ? styles.drop : ""}`}
-              key={stage.key}
               aria-label={`Step ${index + 1}`}
               onDragOver={(e) => {
                 if (
@@ -400,7 +410,7 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                 onChange={(name) => stageChange(index, { ...stage, name })}
               />
                 <div className={styles.stepActions}>
-                <TimingDisclosure label={`Timing for step ${index + 1}`} value={stage.sourceIndex !== null &&
+                <TimingDisclosure hideWhenUnknown showDuration label={`Timing for step ${index + 1}`} value={stage.sourceIndex !== null &&
                   isUnchangedStage(stage, workflow.stages[stage.sourceIndex])
                     ? workflow.stages[stage.sourceIndex]?.timing : null} />
                 </div>
@@ -539,8 +549,14 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                   </div>
                 ))}
               </div>
+              {(!singleCheck || !stage.procedure.length) && <button type="button" className={styles.addDetail}
+                aria-label={singleCheck ? `Add expected result to step ${index + 1}` : `Add detail to step ${index + 1}`}
+                disabled={stage.procedure.length >= 100} onClick={() => addDetail(index)}>
+                <Plus size={14} aria-hidden="true" />{singleCheck ? "Add expected result" : "Add detail"}
+              </button>}
               {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && <div className={styles.source}>{renderSource?.(workflow.stages[stage.sourceIndex])}</div>}
             </article>
+            </Fragment>
           ))}
         </div>
         <button
@@ -585,7 +601,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
     <div className={styles.intro}>
       <div className={styles.titleRow}>
         <h1 className={styles.title}>{workflow.title}</h1>
-        <TimingDisclosure label="Workflow timing" value={workflow.timing}
+        <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={workflow.timing}
           measured={workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />
       </div>
       <p className={styles.readOnlyText}>{workflow.description}</p>
@@ -597,7 +613,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
         <div className={styles.stepTop}>
           <span className={styles.number}>{String(index + 1).padStart(2, "0")}</span>
           <h2 className={`${styles.title} ${styles.readOnlyText}`}>{stage.name}</h2>
-          <div className={styles.stepActions}><TimingDisclosure label={`Timing for step ${index + 1}`} value={stage.timing} /></div>
+          <div className={styles.stepActions}><TimingDisclosure hideWhenUnknown showDuration label={`Timing for step ${index + 1}`} value={stage.timing} /></div>
         </div>
         {stage.description && <WorkflowRichText label={`Step ${index + 1} description`} value={stage.description} />}
         <div className={styles.blocks}>
