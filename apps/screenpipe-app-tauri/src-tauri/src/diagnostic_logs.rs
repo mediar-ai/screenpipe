@@ -236,6 +236,59 @@ async fn build_bundle(files: &[LogFile]) -> String {
 mod tests {
     use super::*;
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn required_pii_failure_survives_rotation_and_support_redaction() {
+        use std::sync::Arc;
+        let root = tempfile::tempdir().unwrap();
+        let logs = root.path().join("logs");
+        std::fs::create_dir(&logs).unwrap();
+        let current = logs.join("screenpipe.2026-10-15.log");
+        let file = std::fs::File::create(&current).unwrap();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(file))
+            .finish();
+        let guard = tracing::subscriber::set_default(subscriber);
+        let db = Arc::new(
+            screenpipe_db::DatabaseManager::new(
+                root.path().join("db.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "support-test".into(),
+            text: true,
+            images: false,
+        })
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-15','private-person@example.com')").await.unwrap();
+        let worker = screenpipe_redact::worker::Worker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            Arc::new(screenpipe_redact::Pipeline::regex_only()),
+            Default::default(),
+        )
+        .with_frame_storage(db.clone());
+        assert_eq!(worker.process_release_batch(1).await.unwrap(), 0);
+        db.close().await;
+        drop(guard);
+        std::fs::rename(&current, logs.join("screenpipe.2026-10-15.1.log")).unwrap();
+        std::fs::write(
+            &current,
+            "INFO recorder restarted contact=private-person@example.com\n",
+        )
+        .unwrap();
+        let report = collect_redacted_from_dirs(&[logs]).await.unwrap();
+        assert!(report.contains("required PII model is unavailable"));
+        assert!(report.contains("retry scheduled"));
+        assert!(report.contains("kind=frames"));
+        assert!(report.contains("recorder restarted"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
     #[tokio::test]
     async fn enterprise_access_timeout_survives_support_collection_and_rotation() {
         let dir = tempfile::tempdir().unwrap();

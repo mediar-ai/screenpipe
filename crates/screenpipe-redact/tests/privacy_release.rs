@@ -477,7 +477,10 @@ async fn recent_arrivals_do_not_starve_old_work_and_recovery_clears_worker_error
     )
     .with_frame_storage(db.clone());
     assert_eq!(worker.process_release_batch(1).await.unwrap(), 0);
-    assert!(worker.status().await.last_error.is_some());
+    let failure = worker.status().await.last_error.unwrap();
+    assert!(failure.contains("synthetic failure"));
+    assert!(failure.contains("kind=frames"));
+    assert!(failure.contains("retry scheduled"));
     fail.store(false, Ordering::SeqCst);
     db.execute_raw_sql_write(
         "INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2020-01-03','newest')",
@@ -927,4 +930,197 @@ async fn partial_multifield_work_survives_close_reopen_sqlite_and_hybrid() {
         protected.close().await;
         db.close().await;
     }
+}
+
+#[tokio::test]
+async fn activity_labels_keep_structure_and_revoke_on_edit_policy_and_restart() {
+    let (root, db) = database().await;
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-14T10:00:00Z','pending'); INSERT INTO activity_tasks(id,task_key,kind,title,confidence,producer,user_locked) VALUES(1,'task','task','SYNTHETIC_SECRET',1,'test',1); INSERT INTO activity_intervals(id,interval_key,task_id,start_at,end_at,state,confidence,producer) VALUES(1,'interval',1,'2026-10-14T10:00:00Z','2026-10-14T10:05:00Z','final',1,'test'); INSERT INTO activity_actions(id,action_key,interval_id,occurred_at,action_type,summary,confidence,source_type,source_id) VALUES(1,'action',1,'2026-10-14T10:00:00Z','view','SYNTHETIC_SECRET',1,'frame',1)").await.unwrap();
+    let protected = db.protected_reads().await.unwrap();
+    let start = "2026-10-14T09:00:00Z".parse().unwrap();
+    let end = "2026-10-14T11:00:00Z".parse().unwrap();
+    assert!(!protected.activity_sources_ready(start, end).await.unwrap());
+    let pending = protected
+        .list_activity_ledger(start, end, true, true)
+        .await
+        .unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, 1);
+    assert!(pending[0].title.contains("privacy processing"));
+    assert!(pending[0].actions[0].summary.contains("privacy processing"));
+    for kind in ["activity_tasks", "activity_actions", "frames"] {
+        let job = db.release_pending(kind, 1).await.unwrap().remove(0);
+        let values = job
+            .values
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    v.as_ref()
+                        .map(|v| v.replace("SYNTHETIC_SECRET", "[PRIVATE]")),
+                )
+            })
+            .collect();
+        assert!(db.publish_release(&job, &values).await.unwrap());
+    }
+    assert!(protected.activity_sources_ready(start, end).await.unwrap());
+    let ready = protected
+        .list_activity_ledger(start, end, true, true)
+        .await
+        .unwrap();
+    assert_eq!(ready[0].id, pending[0].id);
+    assert_eq!(ready[0].start_at, pending[0].start_at);
+    assert_eq!(ready[0].title, "[PRIVATE]");
+    assert_eq!(ready[0].actions[0].summary, "[PRIVATE]");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT user_locked FROM activity_tasks WHERE id=1")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    db.execute_raw_sql_write("UPDATE activity_tasks SET title='SYNTHETIC_SECRET_EDIT' WHERE id=1")
+        .await
+        .unwrap();
+    assert!(protected
+        .list_activity_ledger(start, end, false, false)
+        .await
+        .unwrap()[0]
+        .title
+        .contains("privacy processing"));
+    db.configure_release(&ReleasePolicy {
+        identity: "v2".into(),
+        text: true,
+        images: true,
+    })
+    .await
+    .unwrap();
+    assert!(protected
+        .list_activity_ledger(start, end, true, false)
+        .await
+        .unwrap()[0]
+        .actions[0]
+        .summary
+        .contains("privacy processing"));
+    db.close().await;
+    drop(protected);
+    drop(db);
+    let reopened = Arc::new(
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap(),
+    );
+    let protected = reopened.protected_reads().await.unwrap();
+    assert!(protected
+        .list_activity_ledger(start, end, false, false)
+        .await
+        .unwrap()[0]
+        .title
+        .contains("privacy processing"));
+    assert_eq!(
+        reopened
+            .release_pending("activity_tasks", 1)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    reopened.close().await;
+}
+
+#[tokio::test]
+async fn bulk_release_can_seal_without_revoking_and_edits_still_revoke() {
+    let root = tempfile::tempdir().unwrap();
+    let db = Arc::new(
+        DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap(),
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "bulk-v1".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-14T10:00:00Z','safe'); INSERT INTO audio_chunks(id,file_path) VALUES(1,'test.wav'); INSERT INTO audio_transcriptions(id,audio_chunk_id,offset_index,timestamp,transcription,device) VALUES(1,1,0,'2026-10-14T10:00:00Z','safe audio','test'); INSERT INTO ui_events(id,timestamp,event_type,text_content) VALUES(1,'2026-10-14T10:00:00Z','text','safe input'); INSERT INTO elements(id,frame_id,source,role,text) VALUES(1,1,'accessibility','AXText','safe element')").await.unwrap();
+    for kind in ["frames", "audio", "input", "elements"] {
+        let job = db.release_pending(kind, 1).await.unwrap().remove(0);
+        assert!(db.publish_release(&job, &job.values).await.unwrap());
+    }
+    for table in ["audio_transcriptions", "ui_events", "elements"] {
+        assert!(sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
+            "SELECT redacted_at IS NOT NULL FROM {table} WHERE id=1"
+        )))
+        .fetch_one(&db.pool)
+        .await
+        .unwrap());
+    }
+    let before = db.release_revocation().await.unwrap();
+    let mut sealed = 0;
+    loop {
+        let count = db.seal_payloads().await.unwrap();
+        if count == 0 {
+            break;
+        }
+        sealed += count;
+    }
+    assert_eq!(sealed, 4);
+    assert_eq!(db.release_revocation().await.unwrap(), before);
+    for kind in ["frames", "audio", "input", "elements"] {
+        assert!(db.release_ready(kind, "1").await.unwrap(), "{kind}");
+        assert!(
+            db.release_pending(kind, 1).await.unwrap().is_empty(),
+            "{kind}"
+        );
+    }
+    db.execute_raw_sql_write("UPDATE audio_transcriptions SET transcription='new private audio' WHERE id=1; UPDATE ui_events SET text_content='new private input' WHERE id=1; UPDATE elements SET text='new private element' WHERE id=1").await.unwrap();
+    for kind in ["audio", "input", "elements"] {
+        assert!(!db.release_ready(kind, "1").await.unwrap(), "{kind}");
+        assert_eq!(
+            db.release_pending(kind, 1).await.unwrap().len(),
+            1,
+            "{kind}"
+        );
+    }
+    let obsolete = db.release_pending("elements", 1).await.unwrap().remove(0);
+    db.execute_raw_sql_write("DELETE FROM elements WHERE id=1")
+        .await
+        .unwrap();
+    assert!(!db.release_ready("elements", "1").await.unwrap());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM _privacy_work WHERE kind='elements'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    db.execute_raw_sql_write("INSERT INTO elements(id,frame_id,source,role,text) VALUES(1,1,'accessibility','AXText','replacement')").await.unwrap();
+    assert!(!db
+        .publish_release(&obsolete, &obsolete.values)
+        .await
+        .unwrap());
+    db.close().await;
+}
+
+#[tokio::test]
+async fn unchanged_configuration_keeps_receipts_but_an_older_contract_is_revoked() {
+    let (_root, db) = database().await;
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,document_path) VALUES(1,'2026-10-14','safe','/private/document')").await.unwrap();
+    let job = db.release_pending("frames", 1).await.unwrap().remove(0);
+    assert!(job.values.contains_key("document_path"));
+    assert!(db.publish_release(&job, &job.values).await.unwrap());
+    let policy = db.release_policy().await.unwrap();
+    db.configure_release(&policy).await.unwrap();
+    assert!(db.release_ready("frames", "1").await.unwrap());
+    // Simulate a receipt produced by the earlier field contract, which did
+    // not watch document paths. Startup must not reuse it for the wider gate.
+    db.execute_raw_sql_write("DROP TRIGGER privacy_frames_UPDATE; CREATE TRIGGER privacy_frames_UPDATE AFTER UPDATE OF full_text ON frames BEGIN SELECT 1; END;").await.unwrap();
+    db.configure_release(&policy).await.unwrap();
+    assert!(!db.release_ready("frames", "1").await.unwrap());
+    assert_eq!(db.release_pending("frames", 1).await.unwrap().len(), 1);
+    db.close().await;
 }

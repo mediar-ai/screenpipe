@@ -52,6 +52,8 @@ pub(crate) const SURFACES: &[Surface] = &[
             "text_json",
             "window_name",
             "browser_url",
+            "app_name",
+            "document_path",
         ],
     },
     Surface {
@@ -70,6 +72,7 @@ pub(crate) const SURFACES: &[Surface] = &[
             "window_title",
             "browser_url",
             "element_name",
+            "app_name",
         ],
     },
     Surface {
@@ -93,11 +96,30 @@ pub(crate) const SURFACES: &[Surface] = &[
         columns: &["transcript", "speaker_name", "device_name"],
     },
     Surface {
+        kind: "activity_tasks",
+        table: "activity_tasks",
+        columns: &["title", "app_name"],
+    },
+    Surface {
+        kind: "activity_actions",
+        table: "activity_actions",
+        columns: &["summary", "app_name"],
+    },
+    Surface {
         kind: "image",
         table: "frames",
         columns: &["snapshot_path", "name"],
     },
 ];
+
+/// Text worker scheduling follows the same registry as receipts and read gates.
+pub fn text_release_kinds() -> Vec<&'static str> {
+    SURFACES
+        .iter()
+        .filter(|s| s.kind != "image")
+        .map(|s| s.kind)
+        .collect()
+}
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS _privacy_policy(id INTEGER PRIMARY KEY CHECK(id=1),identity TEXT NOT NULL,text_required INTEGER NOT NULL,image_required INTEGER NOT NULL,epoch INTEGER NOT NULL DEFAULT 0,revocation INTEGER NOT NULL DEFAULT 0);
@@ -180,6 +202,9 @@ impl DatabaseManager {
             if surface.kind == "image" {
                 watched.push("timestamp");
             }
+            if physical == "_bulk_element_rows" {
+                watched.push("_archive_deleted");
+            }
             let changed = watched
                 .iter()
                 .map(|c| format!("NEW.\"{c}\" IS NOT OLD.\"{c}\""))
@@ -190,6 +215,7 @@ impl DatabaseManager {
                 .map(|c| format!("\"{c}\""))
                 .collect::<Vec<_>>()
                 .join(",");
+            let mut changed_contract = false;
             for event in ["INSERT", "UPDATE", "DELETE"] {
                 let id = if event == "DELETE" {
                     "OLD.id"
@@ -201,7 +227,10 @@ impl DatabaseManager {
                 } else {
                     event.into()
                 };
-                let maintenance = if self.storage.is_some() && surface.table == "frames" {
+                let maintenance = if self.storage.is_some()
+                    && (event == "UPDATE"
+                        || (event == "DELETE" && physical == "_bulk_element_rows"))
+                {
                     " AND (SELECT maintenance=0 FROM storage_metadata WHERE singleton=1)"
                 } else {
                     ""
@@ -216,13 +245,18 @@ impl DatabaseManager {
                 let when = if event == "UPDATE" {
                     format!("WHEN {active} AND ({changed}){maintenance}")
                 } else {
-                    format!("WHEN {active}")
+                    format!("WHEN {active}{maintenance}")
                 };
                 let table = physical;
                 let mutation = if event == "DELETE" {
                     format!("UPDATE _privacy_release SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL WHERE kind='{kind}' AND id=CAST({id} AS TEXT); DELETE FROM _privacy_work WHERE kind='{kind}' AND id=CAST({id} AS TEXT);")
                 } else {
                     format!("INSERT INTO _privacy_release(kind,id,revision) VALUES('{kind}',CAST({id} AS TEXT),1) ON CONFLICT(kind,id) DO UPDATE SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL;")
+                };
+                let mutation = if physical == "_bulk_element_rows" && event != "DELETE" {
+                    format!("{mutation} DELETE FROM _privacy_work WHERE kind='{kind}' AND id=CAST({id} AS TEXT) AND NEW._archive_deleted=1;")
+                } else {
+                    mutation
                 };
                 let create = format!("CREATE TRIGGER privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
                   UPDATE _privacy_policy SET epoch=epoch+1,revocation=revocation+1 WHERE EXISTS(SELECT 1 FROM _privacy_release WHERE kind='{kind}' AND id=CAST({id} AS TEXT) AND policy IS NOT NULL);
@@ -238,6 +272,7 @@ impl DatabaseManager {
                 // triggers invalidates cached FTS/write statements in other
                 // pooled connections and adds needless schema-lock work.
                 if existing.as_deref() != Some(create.as_str()) {
+                    changed_contract |= existing.is_some();
                     schema_changed = true;
                     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
                         "DROP TRIGGER IF EXISTS privacy_{kind}_{event}; {create};"
@@ -245,6 +280,21 @@ impl DatabaseManager {
                     .execute(&mut **tx.conn())
                     .await?;
                 }
+            }
+            if changed_contract {
+                // A receipt from an older field/trigger contract cannot certify
+                // newly covered values, even if the model policy did not change.
+                sqlx::query("UPDATE _privacy_release SET policy=NULL,revision=revision+1,attempts=0,retry_at=NULL WHERE kind=?")
+                    .bind(surface.kind).execute(&mut **tx.conn()).await?;
+                sqlx::query("DELETE FROM _privacy_discovery WHERE kind=?")
+                    .bind(surface.kind)
+                    .execute(&mut **tx.conn())
+                    .await?;
+                sqlx::query(
+                    "UPDATE _privacy_policy SET epoch=epoch+1,revocation=revocation+1 WHERE id=1",
+                )
+                .execute(&mut **tx.conn())
+                .await?;
             }
         }
         if self.storage.is_some() {
@@ -552,7 +602,7 @@ impl DatabaseManager {
                     63,
                     values["window_name"].as_deref(),
                     values["browser_url"].as_deref(),
-                    Some(job),
+                    Some((job, values)),
                 )
                 .await;
         }
@@ -582,6 +632,16 @@ impl DatabaseManager {
             == 0
         {
             return Ok(false);
+        }
+        // Legacy compaction eligibility is independent from release authority.
+        if matches!(job.kind.as_str(), "audio" | "input" | "elements") {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "UPDATE {} SET redacted_at=unixepoch() WHERE id=?",
+                surface.table
+            )))
+            .bind(&job.id)
+            .execute(&mut **tx.conn())
+            .await?;
         }
         certify(&mut **tx.conn(), job).await?;
         tx.commit().await?;
@@ -650,11 +710,25 @@ impl DatabaseManager {
                 .bind(surface.table)
                 .fetch_all(&self.pool)
                 .await?;
+            let preserve_structure = matches!(surface.kind, "activity_tasks" | "activity_actions");
+            let ready = format!("gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='{}' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT))", surface.kind);
             let projection=columns.iter().map(|column| {
+                if preserve_structure && surface.columns.contains(&column.as_str()) {
+                    let placeholder = match column.as_str() {
+                        "title" => "'Activity — privacy processing'",
+                        "summary" => "'Action — privacy processing'",
+                        _ => "NULL",
+                    };
+                    return format!("CASE WHEN {ready} THEN s.\"{column}\" ELSE {placeholder} END AS \"{column}\"");
+                }
                 if surface.table=="frames" && matches!(column.as_str(),"name"|"snapshot_path"|"video_chunk_id") {
                     format!("CASE WHEN gate.image_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='image' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)) THEN s.\"{column}\" END AS \"{column}\"")
                 } else {format!("s.\"{column}\"")}
             }).collect::<Vec<_>>().join(",");
+            if preserve_structure {
+                views.push(format!("CREATE TEMP VIEW {} AS SELECT {projection} FROM _privacy_policy gate CROSS JOIN main.{source} s WHERE gate.id=1;", surface.table));
+                continue;
+            }
             // Check the singleton policy and indexed existence of any certified
             // row before traversing capture history. An entirely pending backlog
             // must return empty without one receipt lookup per captured row.
@@ -742,6 +816,33 @@ impl DatabaseManager {
             .fetch_one(&self.pool)
             .await
             .map(Some)
+    }
+
+    /// A refresh must not replace durable intervals using an incomplete source set.
+    pub async fn activity_sources_ready(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<bool, sqlx::Error> {
+        let Some(owner) = &self.release_owner else {
+            return Ok(true);
+        };
+        if !owner.release_policy().await?.text {
+            return Ok(true);
+        }
+        for (kind, table, timestamp) in [
+            ("frames", "frames", "timestamp"),
+            ("input", "ui_events", "timestamp"),
+            ("audio", "audio_transcriptions", "timestamp"),
+        ] {
+            let pending: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT EXISTS(SELECT 1 FROM {table} s CROSS JOIN _privacy_policy p WHERE p.id=1 AND s.{timestamp}>=? AND s.{timestamp}<? AND julianday(s.{timestamp}) BETWEEN julianday(?) AND julianday(?) AND NOT EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=? AND r.id=CAST(s.id AS TEXT) AND r.policy=p.identity))")))
+                .bind(start.format("%Y-%m-%d").to_string()).bind((end + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()).bind(start.to_rfc3339()).bind(end.to_rfc3339()).bind(kind).fetch_one(&owner.pool).await?;
+            if pending {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     pub async fn release_epoch(&self) -> Result<Option<i64>, sqlx::Error> {
@@ -902,6 +1003,7 @@ impl DatabaseManager {
 /// before legacy rows or a policy upgrade have been visited.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReleaseQueueStatus {
+    pub epoch: i64,
     pub enabled: bool,
     pub scope: String,
     pub surfaces: Vec<ReleaseSurfaceStatus>,
@@ -941,7 +1043,15 @@ impl DatabaseManager {
                 });
             }
         }
+        let epoch = if policy.text || policy.images {
+            sqlx::query_scalar("SELECT epoch FROM _privacy_policy WHERE id=1")
+                .fetch_one(&self.pool)
+                .await?
+        } else {
+            0
+        };
         Ok(ReleaseQueueStatus {
+            epoch,
             enabled: policy.text || policy.images,
             scope: "protected_capture_surfaces".into(),
             surfaces,

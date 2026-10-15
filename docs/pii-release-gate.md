@@ -3,7 +3,7 @@
 Draft implementation, not a complete product privacy guarantee.
 
 <!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-redact/src/image/worker.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
-<!-- doc-verified: 4891123c43f0d0e23605499f249dd023b65a9265 -->
+<!-- doc-verified: 7f5783a4c3736d41ad41d2e064d5144d9d424d65 -->
 
 Capture persists through the existing writer. Background detectors process a source revision under a desired policy, then publish the sanitized replacement and its receipt in one transaction. A read adapter exposes only current receipts. Text and image completion are independent. Optional regex filtering and legacy timestamps cannot certify required model processing.
 
@@ -27,13 +27,23 @@ Hybrid payload replacements retain their generation checks. Storage-only sealing
 
 The work queue is indexed by surface and availability deadline. A completed discovery cursor avoids scanning certified history on every idle poll. Legacy history and policy changes are discovered in pages of 128 IDs using the existing coordinated writer. Each selection examines at most 256 due candidates. Image maturity scheduling advances at most 256 young/future records, and a bounded oldest fallback avoids treating fresh screenshots as an empty queue while mature work is waiting. Undecodable image timestamps defer that record without blocking valid work; other database errors still propagate. Source deletion retains a revision tombstone, including while protection is disabled, so reusing an ID cannot accept stale work.
 
-Text scheduling rotates across seven streams and alternates recent and oldest work. A record with multiple fields resumes between slices; no partial record becomes visible. The target duration is checked between model calls, so one inference, JSON parse or large field is not preemptible. Failed attempts count toward CPU cooldown. Images release the shared CPU lane before idle or retry sleeps. Ready events retain only the current event per record; completion sequences still advance monotonically.
+Text scheduling rotates across the registered text surfaces, including saved activity tasks and actions and alternates recent and oldest work. A record with multiple fields resumes between slices; no partial record becomes visible. The target duration is checked between model calls, so one inference, JSON parse or large field is not preemptible. Failed attempts count toward CPU cooldown. Images release the shared CPU lane before idle or retry sleeps. Ready events retain only the current event per record; completion sequences still advance monotonically.
 
 ## User-visible status
 
 Settings shows processing, history discovery, retry, completion and unavailable states. Text and screenshots are reported separately. The API reads at most 1,001 queue entries per enabled surface, returns counts capped at 1,000, and marks counts as lower bounds during discovery or capping. Normal screenshot maturity waiting does not appear as a failed retry. Status polling runs sequentially every 15 seconds while the settings card is mounted and visible, with a five-second request timeout.
 
-Protected responses expose `x-screenpipe-privacy-completeness: unknown` and `/privacy/status`; JSON search also includes this metadata. An empty protected result must not be treated as proof that matching history does not exist. Status is a global snapshot, not exact completeness for a query range or confirmation of upload completion. HTTP admission checks revocation rather than the completion epoch, so unrelated newly processed records do not reject an otherwise valid response. Caches still use the completion epoch for freshness.
+Protected responses expose `x-screenpipe-privacy-completeness: unknown` and `/privacy/status`; JSON search, activity ledger and activity summary responses also include this metadata. An empty protected result must not be treated as proof that matching history does not exist. Status is a global snapshot, not exact completeness for a query range or confirmation of upload completion. HTTP admission checks revocation rather than the completion epoch, so unrelated newly processed records do not reject an otherwise valid response. Caches still use the completion epoch for freshness.
+
+## Activities
+
+Saved task titles and action summaries have their own revision receipts. Pending labels use explicit placeholders while interval IDs, timestamps, grouping, evidence links and user-lock flags remain intact. Edits and policy changes revoke the labels immediately. The worker processes both old and new ledger rows; reads never invoke inference.
+
+The summary API uses audited internal queries through the protected read adapter. Frame app names and document paths and input app names are included in text processing because summaries and ledger labels can derive from them. Raw SQL remains unavailable to external callers. A range with pending capture sources reports `privacy_processing`; ledger refresh defers reconciliation so an incomplete read cannot erase saved intervals. Activities polls the existing privacy-status cadence and refreshes its summary and links when the completion epoch changes.
+
+Required-text publication also stamps the legacy audio/input/element compaction markers in the same transaction. These timestamps permit archival but do not authorize reads. Moving unchanged bulk rows into Parquet preserves receipts; content edits and logical element deletion still invalidate them. Upgrading an existing receipt field contract revokes affected old receipts and enrolls them for processing again.
+
+Required-worker failures retain their technical cause and record kind, ID and revision in status and normal support logs. Remote HTTP response bodies and request URLs are excluded because they can echo private source data.
 
 ## Performance model
 
@@ -51,7 +61,7 @@ The regression suite uses synthetic private text and generated screenshot pixels
 
 ## Merge blockers and boundaries
 
-- Protected mode currently closes raw SQL, raw video export, original audio samples, frame streaming, on-demand OCR, live content events, activity summaries, artifacts and database backup. These paths need their own release adapters and accurate product status before rollout.
+- Protected mode currently closes raw SQL, raw video export, original audio samples, frame streaming, on-demand OCR, live content events, artifacts and database backup. These paths need their own release adapters and accurate product status before rollout.
 - Meetings, speakers, semantic actors, outputs, feedback and executions have no release worker in this draft. Their protected views stay empty. Parsed, activity and feedback enterprise uploads are held. This is a functional limitation, not a transient processing delay.
 - Historical administrative replay is rejected in protected mode until pending work can be tracked within the exact requested range. Regular sync supports late completion; replay must not report success while relevant records remain pending.
 - The gate covers the selected local API and enterprise upload paths. Native model consumers that read the raw database, direct filesystem access, browser tools, other sync services, support logs and cloud history require separate boundary review. An agent with unrestricted filesystem access can bypass an HTTP gate.

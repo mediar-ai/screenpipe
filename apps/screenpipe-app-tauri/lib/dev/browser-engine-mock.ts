@@ -250,7 +250,7 @@ export function mockLocalApiResponse(
   if (url.pathname === "/privacy/status") {
     const state = typeof window === "undefined" ? "processing" : new URLSearchParams(window.location.search).get("privacyState") ?? "processing";
     if (state === "unavailable") return Response.json({ error: "synthetic unavailable" }, { status: 503 });
-    return Response.json({ enabled: state !== "disabled", scope: "protected_capture_surfaces", surfaces: [
+    return Response.json({ epoch: state === "ready" ? 2 : 1, enabled: state !== "disabled", scope: "protected_capture_surfaces", surfaces: [
       { kind: "frames", discovering: state === "discovering", pending: state === "ready" ? 0 : 12, pending_capped: false, deferred: state === "retry" ? 3 : 0 },
       { kind: "image", discovering: false, pending: state === "ready" ? 0 : 5, pending_capped: false, deferred: 0 },
     ] });
@@ -288,6 +288,13 @@ export function mockLocalApiResponse(
   // Receipts reads `windows` straight off this body without validating it, so
   // the harness has to return the real shape rather than an empty object.
   if (url.pathname === "/activity-summary") {
+    const privacyState = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("privacyState");
+    if (privacyState === "blocked") return Response.json({ error: "This surface has no privacy release adapter" }, { status: 503 });
+    if (privacyState && privacyState !== "disabled") return Response.json({
+      ...mockActivitySummary(),
+      data_status: privacyState === "ready" ? "ok" : "privacy_processing",
+      privacy: { completeness: "unknown", status_url: "/privacy/status" },
+    });
     if (scenario === "empty") {
       return Response.json({ windows: [], total_active_seconds: 0 });
     }

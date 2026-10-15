@@ -8,15 +8,23 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-const KINDS: [&str; 7] = [
-    "frames", "audio", "input", "elements", "memory", "parsed", "segments",
-];
-
-#[derive(Default)]
 pub(super) struct ReleaseScheduler {
+    kinds: Vec<&'static str>,
     next: usize,
-    oldest: [bool; 7],
-    progress: [Option<Progress>; 7],
+    oldest: Vec<bool>,
+    progress: Vec<Option<Progress>>,
+}
+
+impl Default for ReleaseScheduler {
+    fn default() -> Self {
+        let kinds = screenpipe_db::privacy_release::text_release_kinds();
+        Self {
+            oldest: vec![false; kinds.len()],
+            progress: (0..kinds.len()).map(|_| None).collect(),
+            kinds,
+            next: 0,
+        }
+    }
 }
 
 struct Field {
@@ -117,13 +125,16 @@ impl Worker {
         let mut scheduler = self.release_scheduler.lock().await;
         let started = Instant::now();
         let (mut attempted, mut completed, mut empty) = (0, 0, 0);
-        while attempted < limit && empty < KINDS.len() && !self.paused.load(Ordering::SeqCst) {
+        while attempted < limit
+            && empty < scheduler.kinds.len()
+            && !self.paused.load(Ordering::SeqCst)
+        {
             if attempted > 0 && started.elapsed() >= self.cfg.target_batch_duration {
                 break;
             }
             let index = scheduler.next;
-            scheduler.next = (index + 1) % KINDS.len();
-            let kind = KINDS[index];
+            scheduler.next = (index + 1) % scheduler.kinds.len();
+            let kind = scheduler.kinds[index];
             if let Some(progress) = scheduler.progress[index].as_ref() {
                 if !db.release_job_current(&progress.job).await? {
                     scheduler.progress[index] = None;
@@ -151,10 +162,10 @@ impl Worker {
                 scheduler.oldest[index] = !scheduler.oldest[index];
                 match Progress::new(job.clone()) {
                     Ok(progress) => scheduler.progress[index] = Some(progress),
-                    Err(_) => {
+                    Err(error) => {
                         attempted += 1;
                         db.defer_release(&job).await?;
-                        self.release_failed().await;
+                        self.release_failed(&job, &error).await;
                         continue;
                     }
                 }
@@ -162,20 +173,20 @@ impl Worker {
             empty = 0;
             attempted += 1;
             let progress = scheduler.progress[index].as_mut().unwrap();
-            let mut failed = false;
+            let mut failed = None;
             while !progress.fields.is_empty() && !self.paused.load(Ordering::SeqCst) {
-                if progress.step(self.redactor.as_ref()).await.is_err() {
-                    failed = true;
+                if let Err(error) = progress.step(self.redactor.as_ref()).await {
+                    failed = Some(error);
                     break;
                 }
                 if started.elapsed() >= self.cfg.target_batch_duration {
                     break;
                 }
             }
-            if failed {
+            if let Some(error) = failed {
                 db.defer_release(&progress.job).await?;
+                self.release_failed(&progress.job, &error).await;
                 scheduler.progress[index] = None;
-                self.release_failed().await;
             } else if progress.fields.is_empty() {
                 progress.finish()?;
                 if db.publish_release(&progress.job, &progress.values).await? {
@@ -191,9 +202,21 @@ impl Worker {
         Ok((attempted, completed))
     }
 
-    async fn release_failed(&self) {
-        self.status.lock().await.last_error =
-            Some("Required PII processing is pending; retry scheduled".into());
+    async fn release_failed(&self, job: &ReleaseJob, error: &RedactError) {
+        // Remote bodies and request URLs can echo captured text or credentials.
+        let cause = match error {
+            RedactError::HttpStatus { status, .. } => format!("redactor HTTP status {status}"),
+            RedactError::Http(error) => format!(
+                "redactor HTTP failure: timeout={}, connect={}, status={:?}",
+                error.is_timeout(),
+                error.is_connect(),
+                error.status()
+            ),
+            _ => error.to_string(),
+        };
+        let message = format!("Required PII processing pending; retry scheduled: kind={}, id={}, revision={}: {cause}", job.kind, job.id, job.revision);
+        tracing::warn!("{message}");
+        self.status.lock().await.last_error = Some(message);
     }
 }
 

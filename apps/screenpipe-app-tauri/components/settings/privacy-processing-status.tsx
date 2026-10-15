@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useGT } from "gt-react";
 import { localFetch } from "@/lib/api";
+import { PRIVACY_STATUS_POLL_INTERVAL_MS } from "@/lib/privacy-processing";
 
 export type PrivacyQueueStatus = {
   enabled: boolean;
@@ -92,7 +93,7 @@ export function PrivacyProcessingStatus() {
           if (!stopped) { setStatus(null); setUnavailable(true); }
         } finally { clearTimeout(timeout); }
       }
-      if (!stopped) timer = setTimeout(poll, 15000);
+      if (!stopped) timer = setTimeout(poll, PRIVACY_STATUS_POLL_INTERVAL_MS);
     };
     void poll();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };

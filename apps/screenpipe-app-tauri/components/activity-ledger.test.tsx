@@ -463,6 +463,50 @@ async function generateActivities(): Promise<void> {
   );
 }
 
+it("refreshes protected activity snapshots when privacy receipts change", async () => {
+  let epoch = 1;
+  mocks.localFetch.mockImplementation(async (path: string) => ({
+    ok: true, status: 200,
+    json: async () => {
+      if (path === "/privacy/status") return { epoch };
+      if (path.startsWith("/meetings?")) return [];
+      if (path.startsWith("/activity-ledger?")) return LEDGER_ARTIFACTS_RESPONSE;
+      return { data_status: "ok", total_active_minutes: 60, privacy: { completeness: "unknown", status_url: "/privacy/status" } };
+    },
+  }));
+  const view = render(<ActivityLedger />);
+  await waitFor(() => expect(mocks.localFetch).toHaveBeenCalled());
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+  const summaries = () => mocks.localFetch.mock.calls.filter(([path]) => String(path).startsWith("/activity-summary?")).length;
+  const before = summaries();
+  epoch = 2;
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+  expect(summaries()).toBe(before + 1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+  expect(summaries()).toBe(before + 1);
+  view.unmount();
+  const calls = mocks.localFetch.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+  expect(mocks.localFetch).toHaveBeenCalledTimes(calls);
+});
+
+it("retries privacy admission failures even before the first summary loads", async () => {
+  let ready = false;
+  mocks.localFetch.mockImplementation(async (path: string) => ({
+    ok: !path.startsWith("/activity-summary?") || ready,
+    status: path.startsWith("/activity-summary?") && !ready ? 503 : 200,
+    json: async () => path === "/privacy/status" ? { epoch: 1 }
+      : path.startsWith("/meetings?") ? []
+      : path.startsWith("/activity-ledger?") ? LEDGER_ARTIFACTS_RESPONSE
+      : { data_status: "ok", total_active_minutes: 60, privacy: { completeness: "unknown", status_url: "/privacy/status" } },
+  }));
+  render(<ActivityLedger />);
+  await waitFor(() => expect(mocks.localFetch).toHaveBeenCalled());
+  ready = true;
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+  expect(mocks.localFetch.mock.calls.filter(([path]) => String(path).startsWith("/activity-summary?")).length).toBe(2);
+});
+
 describe("activity history helpers", () => {
   it("offers only today and 24 hours when activity history is restricted", () => {
     expect(activityRangePresets(true)).toEqual(["today", "24h"]);

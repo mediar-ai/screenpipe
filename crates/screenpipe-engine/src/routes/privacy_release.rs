@@ -30,7 +30,6 @@ pub(crate) async fn release_middleware(
         path,
         "/raw_sql" | "/export" | "/ws/events" | "/ws/meeting-overlay" | "/ws/meeting-status"
     ) || path.starts_with("/frames/preview-media/")
-        || path.starts_with("/activity-summary")
         || path.starts_with("/artifacts")
         || path.starts_with("/speakers/sample/")
         || path == "/data/backup"
@@ -174,6 +173,7 @@ mod tests {
         .await
         .unwrap();
         db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,app_name,window_name) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET','Test','Test')").await.unwrap();
+        db.execute_raw_sql_write("INSERT INTO activity_tasks(id,task_key,kind,title,confidence,producer,user_locked) VALUES(1,'task','task','SYNTHETIC_SECRET',1,'test',1); INSERT INTO activity_intervals(id,interval_key,task_id,start_at,end_at,state,confidence,producer) VALUES(1,'interval',1,'2026-10-14T10:00:00Z','2026-10-14T10:05:00Z','final',1,'test'); INSERT INTO activity_actions(id,action_key,interval_id,occurred_at,action_type,summary,confidence,source_type,source_id) VALUES(1,'action',1,'2026-10-14T10:00:00Z','view','SYNTHETIC_SECRET',1,'frame',1)").await.unwrap();
         let audio = Arc::new(
             screenpipe_audio::audio_manager::AudioManagerBuilder::new()
                 .is_disabled(true)
@@ -257,6 +257,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(sql.status().as_u16(), 503);
+        let range = "start_time=2026-10-14T09:00:00Z&end_time=2026-10-14T11:00:00Z";
+        for refresh in [false, true] {
+            let response = client
+                .get(format!(
+                    "{base}/activity-ledger?{range}&depth=action&refresh={refresh}"
+                ))
+                .send()
+                .await
+                .unwrap();
+            assert!(
+                response.status().is_success(),
+                "{}",
+                response.text().await.unwrap()
+            );
+            let ledger: serde_json::Value = response.json().await.unwrap();
+            assert_eq!(ledger["intervals"][0]["id"], 1);
+            assert!(ledger["intervals"][0]["title"]
+                .as_str()
+                .unwrap()
+                .contains("privacy processing"));
+            assert!(!ledger.to_string().contains("SYNTHETIC_SECRET"));
+        }
+        let response = client
+            .get(format!("{base}/activity-summary?{range}"))
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "{}",
+            response.text().await.unwrap()
+        );
+        let summary: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(summary["privacy"]["completeness"], "unknown");
+        assert!(!summary.to_string().contains("SYNTHETIC_SECRET"));
         let calls = Arc::new(AtomicUsize::new(0));
         let pipeline = screenpipe_redact::Pipeline::regex_then_ai(
             Arc::new(Detector(calls.clone())),
@@ -298,6 +333,29 @@ mod tests {
             before,
             "reads must not invoke inference"
         );
+        let ledger: serde_json::Value = client
+            .get(format!(
+                "{base}/activity-ledger?{range}&depth=action&refresh=false"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(ledger["intervals"][0]["id"], 1);
+        assert_eq!(ledger["intervals"][0]["title"], "[PRIVATE]");
+        assert_eq!(ledger["intervals"][0]["actions"][0]["summary"], "[PRIVATE]");
+        let summary: serde_json::Value = client
+            .get(format!("{base}/activity-summary?{range}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(summary["total_frames"], 1, "{summary}");
+        assert!(!summary.to_string().contains("SYNTHETIC_SECRET"));
         let pixels = root.path().join("frame.png");
         image::RgbImage::from_pixel(32, 32, image::Rgb([255, 255, 255]))
             .save(&pixels)

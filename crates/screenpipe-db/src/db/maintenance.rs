@@ -66,7 +66,17 @@ impl DatabaseManager {
                 "privacy-required: use typed search; unrestricted SQL is unavailable".into(),
             ));
         }
-        if self.storage.is_some() {
+        self.query_activity_summary_sql(query).await
+    }
+
+    /// Internal activity-summary queries use only audited fields and resolve
+    /// through the protected TEMP views. Never pass caller-supplied SQL here.
+    /// The external raw-SQL API remains disabled for protected readers.
+    pub async fn query_activity_summary_sql(
+        &self,
+        query: &str,
+    ) -> Result<serde_json::Value, sqlx::Error> {
+        if self.storage.is_some() && self.release_owner.is_none() {
             crate::storage::sql::validate_resident_query(&self.pool, query).await?;
         }
         self.consistent_read(|| async {

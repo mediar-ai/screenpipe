@@ -437,13 +437,13 @@ pub struct SearchResponse {
     pub related: Option<std::collections::HashMap<String, Vec<String>>>,
 }
 
-#[derive(OaSchema, Serialize, Deserialize, Clone)]
+#[derive(Debug, OaSchema, Serialize, Deserialize, Clone)]
 pub struct SearchPrivacy {
     pub completeness: String,
     pub status_url: String,
 }
 
-fn search_privacy(protected: bool) -> Option<SearchPrivacy> {
+pub(crate) fn search_privacy(protected: bool) -> Option<SearchPrivacy> {
     protected.then(|| SearchPrivacy {
         completeness: "unknown".into(),
         status_url: "/privacy/status".into(),
