@@ -242,7 +242,7 @@ struct OverlayNotification: Equatable {
         return actions.map { action in
             guard action.id == detailAction.id else { return action }
             return OverlayNotificationAction(
-                id: action.id, label: uiText("join with screen detail"), primary: false,
+                id: action.id, label: uiText("join + HD"), primary: false,
                 payload: combined.payload, meetingProvider: combined.meetingProvider,
                 screenDetailBody: nil
             )
@@ -1722,10 +1722,70 @@ private struct OverlayNotificationView: View {
             }
             HStack(spacing: s(8)) {
                 Spacer(minLength: 0)
-                actionButtons
+                meetingJoinActions
             }
         }
         .padding(s(14))
+    }
+
+    /// Two immediate actions share one light surface. HD remains one click,
+    /// and its label explicitly includes joining rather than a recording toggle.
+    @ViewBuilder
+    private var meetingJoinActions: some View {
+        if let join = notification.actions.first(where: { $0.meetingProvider != nil }),
+           let detailID = notification.screenDetailAction?.id,
+           let detail = notification.displayActions.first(where: { $0.id == detailID }) {
+            ForEach(orderedActions.filter { $0.id != join.id && $0.id != detailID }) { action in
+                Button(action.label) { onAction(action) }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.white.opacity(0.88))
+            }
+            HStack(spacing: 0) {
+                Button(action: { onAction(join) }) {
+                    HStack(spacing: s(7)) {
+                        if let provider = join.meetingProvider {
+                            if let image = provider.image {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .scaledToFit()
+                                    .frame(width: s(18), height: s(18))
+                                    .accessibilityHidden(true)
+                            } else {
+                                Image(systemName: "video.fill")
+                                    .font(.system(size: 16 * scale))
+                                    .frame(width: s(18), height: s(18))
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        Text(join.label)
+                    }
+                    .padding(.horizontal, s(12))
+                    .frame(height: s(36))
+                    .contentShape(Rectangle())
+                }
+                Rectangle()
+                    .fill(Color.black.opacity(0.15))
+                    .frame(width: 1, height: s(20))
+                    .accessibilityHidden(true)
+                Button(action: { onAction(detail) }) {
+                    Text(detail.label)
+                        .padding(.horizontal, s(12))
+                        .frame(height: s(36))
+                        .contentShape(Rectangle())
+                }
+                .help(uiText("Join and take notes with HD screen recording: more frequent screenshots for smoother replay. Uses more storage."))
+                .accessibilityLabel(uiText("Join and take notes with HD screen recording"))
+            }
+            .font(Brand.swiftUIMonoFont(size: 13 * scale, weight: .medium))
+            .foregroundColor(.black)
+            .buttonStyle(.plain)
+            .background(Color.white.opacity(0.92))
+            .clipShape(RoundedRectangle(cornerRadius: s(6)))
+            .fixedSize()
+        } else {
+            actionButtons
+        }
     }
 
     private var compactContent: some View {

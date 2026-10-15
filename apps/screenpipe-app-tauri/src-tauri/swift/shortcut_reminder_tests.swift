@@ -617,7 +617,7 @@ private func testJoinScreenDetailChoice() {
     let displayed = notification.displayActions
     expect(displayed.count == 2, "meeting must expose two one-click join choices")
     expect(displayed[0] == join, "ordinary Join must remain unchanged")
-    expect(displayed[1].label == "join with screen detail", "capture choice must explicitly say it joins")
+    expect(displayed[1].label == "join + HD", "capture choice must explicitly say it joins")
     expect(displayed[1].meetingProvider == .googleMeet, "both join choices must show the service icon")
     let detailPayload = try! JSONSerialization.jsonObject(with: Data(displayed[1].payload.utf8)) as! [String: Any]
     expect(detailPayload["type"] as? String == "meeting_join", "screen-detail button must join directly")
