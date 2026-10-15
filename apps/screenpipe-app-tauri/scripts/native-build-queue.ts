@@ -88,6 +88,27 @@ export function nativeTestCommand(args: string[]): string[] {
   ];
 }
 
+export function parseEnterpriseBundleArgs(args: string[]): {
+  build: boolean;
+  updaterArtifacts: boolean;
+  upstreamTemplate: boolean;
+  ignoreVersionMismatches: boolean;
+  bundleArgs: string[];
+} {
+  return {
+    build: args.includes("--build"),
+    updaterArtifacts: args.includes("--updater-artifacts"),
+    upstreamTemplate: args.includes("--upstream-template"),
+    ignoreVersionMismatches: args.includes("--ignore-version-mismatches"),
+    bundleArgs: args.filter((arg) => ![
+      "--upstream-template",
+      "--build",
+      "--updater-artifacts",
+      "--ignore-version-mismatches",
+    ].includes(arg)),
+  };
+}
+
 function decode(value: Uint8Array): string {
   return new TextDecoder().decode(value).trim();
 }
@@ -187,7 +208,7 @@ function persistentEnterpriseConfig(target: string): string {
   return JSON.stringify(mergeConfig(enterprise, persistence));
 }
 
-function unsignedEnterpriseConfig(): string {
+function unsignedEnterpriseConfig(createUpdaterArtifacts = false): string {
   const enterprise = JSON.parse(readFileSync(
     join(APP_ROOT, "src-tauri", "tauri.enterprise.conf.json"),
     "utf8",
@@ -198,14 +219,14 @@ function unsignedEnterpriseConfig(): string {
   ));
   return JSON.stringify(mergeConfig(mergeConfig(enterprise, windows), {
     bundle: {
-      createUpdaterArtifacts: false,
+      createUpdaterArtifacts,
       windows: { signCommand: null },
     },
   }));
 }
 
-function upstreamMachineEnterpriseConfig(): string {
-  return JSON.stringify(mergeConfig(JSON.parse(unsignedEnterpriseConfig()), {
+function upstreamMachineEnterpriseConfig(createUpdaterArtifacts = false): string {
+  return JSON.stringify(mergeConfig(JSON.parse(unsignedEnterpriseConfig(createUpdaterArtifacts)), {
     bundle: { windows: { nsis: { installMode: "perMachine", template: null } } },
   }));
 }
@@ -504,14 +525,25 @@ async function perform(mode: BuildMode, args: string[]): Promise<number> {
     }
     case "enterprise-bundle": {
       const target = "x86_64-pc-windows-msvc";
-      const upstreamTemplate = args.includes("--upstream-template");
-      const bundleArgs = args.filter((arg) => arg !== "--upstream-template");
+      const { build, updaterArtifacts, upstreamTemplate, ignoreVersionMismatches, bundleArgs } =
+        parseEnterpriseBundleArgs(args);
+      const config = upstreamTemplate
+        ? upstreamMachineEnterpriseConfig(updaterArtifacts)
+        : unsignedEnterpriseConfig(updaterArtifacts);
+      if (build) {
+        const buildArgs = [
+          "bun", "tauri", "build", "--no-bundle", "--target", target,
+          "--features", "enterprise-build", "--config", config,
+          ...bundleArgs,
+        ];
+        if (ignoreVersionMismatches) buildArgs.splice(8, 0, "--ignore-version-mismatches");
+        const exitCode = await run(buildArgs, env);
+        if (exitCode !== 0) return exitCode;
+      }
       return run([
         "bun", "tauri", "bundle", "--target", target,
         "--features", "enterprise-build", "--bundles", "nsis",
-        "--config", upstreamTemplate
-          ? upstreamMachineEnterpriseConfig()
-          : unsignedEnterpriseConfig(),
+        "--config", config,
         ...bundleArgs,
       ], env);
     }
