@@ -1132,11 +1132,12 @@ mod imp {
         }
     }
 
-    async fn fetch_native_policy(
+    async fn fetch_and_apply_native_policy(
         http: &reqwest::Client,
         policy_url: &str,
         device_id: &str,
         credential: &EnterprisePolicyCredential,
+        apply_ai_tool_policy: impl FnOnce(bool),
     ) -> Result<NativeEnterprisePolicy, NativePolicyFetchError> {
         let request = http.get(policy_url).header("X-Device-Id", device_id);
         let request = apply_enterprise_credential(request, credential);
@@ -1157,11 +1158,16 @@ mod imp {
                 "policy",
             ));
         }
-        response
+        let policy = response
             .json::<NativePolicyResponse>()
             .await
             .map(NativePolicyResponse::into_native_policy)
-            .map_err(|error| NativePolicyFetchError::Unavailable(error.to_string()))
+            .map_err(|error| NativePolicyFetchError::Unavailable(error.to_string()))?;
+        // GET authenticated this workspace's policy. Apply AI setup before
+        // recording-paused branches or fallible enrollment/settings work can
+        // discard it. This never grants recording or bypasses seat checks.
+        apply_ai_tool_policy(policy.auto_connect_ai_tools);
+        Ok(policy)
     }
 
     async fn send_enrollment_heartbeat(
@@ -1221,7 +1227,15 @@ mod imp {
         let mut account_required = false;
 
         for credential in credentials {
-            match fetch_native_policy(http, policy_url, device_id, &credential).await {
+            match fetch_and_apply_native_policy(
+                http,
+                policy_url,
+                device_id,
+                &credential,
+                crate::enterprise_policy::begin_ai_tool_policy_refresh(),
+            )
+            .await
+            {
                 Ok(policy) if !policy.recording_allowed => {
                     return NativeAuthorizationResult::RecordingDisabled;
                 }
@@ -1360,7 +1374,6 @@ mod imp {
                 crate::enterprise_policy::set_enterprise_policy(
                     policy.hidden_sections,
                     policy.enforce_auto_start,
-                    Some(policy.auto_connect_ai_tools),
                 );
                 crate::enterprise_policy::update_recording_authorized(true);
                 info!("enterprise: startup authentication completed");
@@ -1424,7 +1437,15 @@ mod imp {
             .map_err(|error| format!("enterprise policy client: {error}"))?;
         let device_id = settings_device_id(app).unwrap_or_else(|| "unknown".to_string());
 
-        match fetch_native_policy(&http, &policy_url, &device_id, &credential).await {
+        match fetch_and_apply_native_policy(
+            &http,
+            &policy_url,
+            &device_id,
+            &credential,
+            crate::enterprise_policy::begin_ai_tool_policy_refresh(),
+        )
+        .await
+        {
             Ok(policy)
                 if credential_authorizes_policy(
                     credential.kind(),
@@ -1456,7 +1477,6 @@ mod imp {
                         crate::enterprise_policy::set_enterprise_policy(
                             policy.hidden_sections,
                             policy.enforce_auto_start,
-                            Some(policy.auto_connect_ai_tools),
                         );
                         Ok(())
                     }
@@ -1549,6 +1569,10 @@ mod imp {
                 let authorization =
                     resolve_native_authorization(&http, &policy_url, &heartbeat_url, &device_id)
                         .await;
+                // Also release the first-pass barrier after an offline/rejected
+                // response; an unknown policy keeps its documented default,
+                // while a cached disable remains disabled.
+                crate::enterprise_policy::finish_initial_ai_tool_policy_refresh();
                 let mut next_poll = native_policy_poll_interval(&authorization);
                 match authorization {
                     NativeAuthorizationResult::Authorized(policy) => {
@@ -1593,7 +1617,6 @@ mod imp {
                         crate::enterprise_policy::set_enterprise_policy(
                             policy.hidden_sections,
                             policy.enforce_auto_start,
-                            Some(policy.auto_connect_ai_tools),
                         );
                         if was_hidden
                             && !crate::commands::apply_enterprise_ui_visibility(app.clone())
@@ -1628,7 +1651,7 @@ mod imp {
                             // Authentication recovery must be visible. The Home
                             // webview will fetch and reapply the complete policy
                             // after the employee signs in.
-                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false, None);
+                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
                         let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
@@ -1640,7 +1663,7 @@ mod imp {
                     NativeAuthorizationResult::Rejected
                     | NativeAuthorizationResult::NoCredential => {
                         if was_hidden {
-                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false, None);
+                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
                         let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
@@ -2230,6 +2253,196 @@ mod imp {
             assert!(!policy.sync_streams.audio);
             assert_eq!(policy.sync_streams.feedback_mode(), "full");
             assert_eq!(policy.sync_streams.frame_images_mode(), "all");
+        }
+
+        #[tokio::test]
+        async fn ai_tool_policy_applies_on_fetch_even_when_recording_is_paused() {
+            use wiremock::{
+                matchers::{header, method, path},
+                Mock, MockServer, ResponseTemplate,
+            };
+            let server = MockServer::start().await;
+            let http = reqwest::Client::new();
+            for (value, expected) in [
+                (serde_json::Value::Null, true),
+                (serde_json::json!(false), false),
+                (serde_json::json!("false"), false),
+                (serde_json::json!(true), true),
+                (serde_json::json!("true"), true),
+                (serde_json::json!("invalid"), false),
+            ] {
+                server.reset().await;
+                Mock::given(method("GET"))
+                    .and(path("/policy"))
+                    .and(header("X-Device-Id", "fixture-device"))
+                    .and(header("X-License-Key", "fixture-key"))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "hiddenSections": ["app_ui"],
+                        "recordingAllowed": false,
+                        "lockedSettings": {"autoConnectAiTools": value}
+                    })))
+                    .mount(&server)
+                    .await;
+                let mut applied = None;
+                let policy = super::fetch_and_apply_native_policy(
+                    &http,
+                    &format!("{}/policy", server.uri()),
+                    "fixture-device",
+                    &super::EnterprisePolicyCredential::LicenseKey("fixture-key".into()),
+                    |enabled| applied = Some(enabled),
+                )
+                .await
+                .unwrap();
+                assert_eq!(applied, Some(expected));
+                assert!(!policy.recording_allowed, "setup must not grant recording");
+            }
+        }
+
+        #[tokio::test]
+        async fn ai_tool_policy_late_response_cannot_reverse_newer_disable() {
+            use axum::{routing::get, Json, Router};
+            use std::sync::Arc;
+            let release_older = Arc::new(tokio::sync::Notify::new());
+            let wait_for_newer = release_older.clone();
+            let router = Router::new()
+                .route(
+                    "/older",
+                    get(move || async move {
+                        wait_for_newer.notified().await;
+                        Json(serde_json::json!({"lockedSettings":{"autoConnectAiTools":true}}))
+                    }),
+                )
+                .route(
+                    "/newer",
+                    get(|| async {
+                        Json(serde_json::json!({"lockedSettings":{"autoConnectAiTools":false}}))
+                    }),
+                );
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                axum::Server::from_tcp(listener)
+                    .unwrap()
+                    .serve(router.into_make_service())
+                    .await
+                    .unwrap();
+            });
+            let http = reqwest::Client::new();
+            let policy = crate::enterprise_policy::AiToolPolicy::new(true, false);
+            let older = policy.begin_refresh();
+            let newer = policy.begin_refresh();
+            let credential = super::EnterprisePolicyCredential::LicenseKey("fixture-key".into());
+            let older_url = format!("{base}/older");
+            let newer_url = format!("{base}/newer");
+            let results = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                tokio::join!(
+                    super::fetch_and_apply_native_policy(
+                        &http,
+                        &older_url,
+                        "fixture-device",
+                        &credential,
+                        |enabled| {
+                            assert!(!policy.update(older, enabled));
+                        }
+                    ),
+                    super::fetch_and_apply_native_policy(
+                        &http,
+                        &newer_url,
+                        "fixture-device",
+                        &credential,
+                        |enabled| {
+                            assert!(policy.update(newer, enabled));
+                            release_older.notify_one();
+                        }
+                    ),
+                )
+            })
+            .await;
+            server.abort();
+            let (old_result, new_result) = results.unwrap();
+            assert!(old_result.is_ok());
+            assert!(new_result.is_ok());
+            assert!(!policy.snapshot().allowed);
+        }
+
+        #[tokio::test]
+        async fn ai_tool_policy_fetch_failures_preserve_last_decision() {
+            use wiremock::{matchers::path, Mock, MockServer, ResponseTemplate};
+            let server = MockServer::start().await;
+            let http = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(100))
+                .build()
+                .unwrap();
+            for response in [
+                ResponseTemplate::new(401),
+                ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                    "code": RECORDING_DISABLED_BY_ADMIN_CODE,
+                })),
+                ResponseTemplate::new(500),
+                ResponseTemplate::new(200).set_body_string("{broken"),
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({}))
+                    .set_delay(std::time::Duration::from_secs(2)),
+            ] {
+                server.reset().await;
+                Mock::given(path("/policy"))
+                    .respond_with(response)
+                    .mount(&server)
+                    .await;
+                let mut called = false;
+                let result = super::fetch_and_apply_native_policy(
+                    &http,
+                    &format!("{}/policy", server.uri()),
+                    "fixture-device",
+                    &super::EnterprisePolicyCredential::LicenseKey("fixture-key".into()),
+                    |_| called = true,
+                )
+                .await;
+                assert!(result.is_err());
+                assert!(!called, "failed fetch must not overwrite a cached disable");
+            }
+        }
+
+        #[tokio::test]
+        async fn ai_tool_policy_stalled_response_body_preserves_last_decision() {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}/policy", listener.local_addr().unwrap());
+            let (headers_sent, mut headers_received) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0; 4096];
+                socket.read(&mut request).await.unwrap();
+                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{\"lockedSettings\":").await.unwrap();
+                headers_sent.send(()).unwrap();
+                std::future::pending::<()>().await;
+            });
+            let http = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(500))
+                .build()
+                .unwrap();
+            let credential = super::EnterprisePolicyCredential::LicenseKey("fixture-key".into());
+            let mut called = false;
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                super::fetch_and_apply_native_policy(
+                    &http,
+                    &url,
+                    "fixture-device",
+                    &credential,
+                    |_| called = true,
+                ),
+            )
+            .await;
+            server.abort();
+            let _ = server.await;
+            assert!(headers_received.try_recv().is_ok(), "must exercise a stalled body after headers");
+            assert!(matches!(
+                result.unwrap(),
+                Err(NativePolicyFetchError::Unavailable(_))
+            ));
+            assert!(!called, "headers alone must not apply a default policy");
         }
 
         #[test]

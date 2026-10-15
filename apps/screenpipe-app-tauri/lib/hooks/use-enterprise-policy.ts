@@ -899,8 +899,6 @@ export function useEnterprisePolicyRuntime() {
           commands.setEnterprisePolicy(
             result.hiddenSections,
             isAutoStartEnforced(result.lockedSettings),
-            result.lockedSettings.autoConnectAiTools !== false &&
-              result.lockedSettings.autoConnectAiTools !== "false",
           ),
           LOCAL_POLICY_COMMAND_TIMEOUT_MS
         );

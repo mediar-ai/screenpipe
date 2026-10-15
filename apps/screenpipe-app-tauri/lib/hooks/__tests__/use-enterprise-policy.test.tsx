@@ -389,21 +389,6 @@ describe("enterprise policy runtime manual activation", () => {
     );
   });
 
-  it.each([
-    [undefined, true], [true, true], ["true", true],
-    [false, false], ["false", false],
-  ])("passes AI-tool policy %s to native setup while the UI is hidden", async (value, expected) => {
-    mocks.commands.getEnterpriseLicenseKey.mockResolvedValue(KEY);
-    mockEnterpriseApi({ policy: {
-      hiddenSections: ["app_ui"],
-      lockedSettings: value === undefined ? {} : { autoConnectAiTools: value },
-    } });
-    await renderEnterprisePolicy();
-    await waitFor(() => expect(mocks.commands.setEnterprisePolicy).toHaveBeenCalledWith(
-      expect.arrayContaining(["app_ui"]), false, expected,
-    ));
-  });
-
   it("shows explicit startup enforcement while Rust owns the settings write", async () => {
     mocks.commands.getEnterpriseLicenseKey.mockResolvedValue(KEY);
     Object.assign(mocks.settings, { autoStartEnabled: false });
@@ -416,7 +401,6 @@ describe("enterprise policy runtime manual activation", () => {
     await waitFor(() =>
       expect(mocks.commands.setEnterprisePolicy).toHaveBeenCalledWith(
         ["referral", "autoStartEnabled"],
-        true,
         true,
       ),
     );
@@ -443,7 +427,6 @@ describe("enterprise policy runtime manual activation", () => {
       expect(mocks.commands.setEnterprisePolicy).toHaveBeenCalledWith(
         ["referral", "autoStartEnabled"],
         false,
-        true,
       ),
     );
     expect(result.current.isSettingLocked("autoStartEnabled")).toBe(false);
@@ -466,7 +449,6 @@ describe("enterprise policy runtime manual activation", () => {
       expect(mocks.commands.setEnterprisePolicy).toHaveBeenCalledWith(
         ["referral", "autoStartEnabled"],
         false,
-        true,
       ),
     );
     expect(result.current.isSettingLocked("autoStartEnabled")).toBe(false);
@@ -489,7 +471,6 @@ describe("enterprise policy runtime manual activation", () => {
       expect(mocks.commands.setEnterprisePolicy).toHaveBeenCalledWith(
         ["referral"],
         false,
-        true,
       ),
     );
     expect(result.current.isSettingLocked("autoStartEnabled")).toBe(false);

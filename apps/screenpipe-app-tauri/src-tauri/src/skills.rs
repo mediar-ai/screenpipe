@@ -199,7 +199,7 @@ pub fn connect_detected_ai_tools_in_background(
             format!("http://localhost:{api_port}"),
             ai_tool_auto_connect_opt_out_dir(),
             AI_TOOL_CHECK_INTERVAL,
-            crate::enterprise_policy::auto_connect_ai_tools,
+            crate::enterprise_policy::ai_tool_setup_policy,
         )
         .await;
     });
@@ -212,15 +212,23 @@ async fn connect_detected_ai_tools_in(
     api_url: String,
     opt_out_dir: PathBuf,
     check_interval: Duration,
-    auto_connect_allowed: impl Fn() -> bool + Send + 'static,
+    auto_connect_policy: impl Fn() -> crate::enterprise_policy::AiToolSetupPolicy + Send + 'static,
 ) {
     let mut reconciler = screenpipe_engine::cli::agent::DesktopAgentReconciler::default();
     let mut previous_report = None;
     let mut attempt = 0;
+    let mut policy_revision = None;
     loop {
+        let policy = auto_connect_policy();
+        if policy_revision != Some(policy.revision) {
+            reconciler = Default::default();
+            previous_report = None;
+            attempt = 0;
+            policy_revision = Some(policy.revision);
+        }
         // Keep the watcher alive while disabled so the next policy refresh can
         // enable setup, including on deployments with no webview.
-        if !auto_connect_allowed() {
+        if !policy.allowed {
             tokio::time::sleep(check_interval).await;
             continue;
         }
@@ -236,8 +244,9 @@ async fn connect_detected_ai_tools_in(
         // returns, no older launch repair can still reconnect that target.
         let result = {
             let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
-            if !auto_connect_allowed() {
-                reconciler = current;
+            let latest_policy = auto_connect_policy();
+            if !latest_policy.allowed || latest_policy.revision != policy.revision {
+                // Retry with a coherent policy/cache after any lock-wait change.
                 continue;
             }
             tokio::task::spawn_blocking(move || {
@@ -1758,7 +1767,7 @@ mod tests {
             "http://localhost:3137".into(),
             opt_out_dir.clone(),
             Duration::from_millis(20),
-            || true,
+            || crate::enterprise_policy::AiToolSetupPolicy { allowed: true, revision: 0 },
         ));
         let outcome = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1805,14 +1814,11 @@ mod tests {
 
     #[tokio::test]
     async fn ai_tool_policy_pauses_and_resumes_background_setup() {
-        use std::sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        };
+        use std::sync::Arc;
         let fixture = tempfile::tempdir().unwrap();
         let home = fixture.path().join("home");
         std::fs::create_dir_all(home.join(".cursor")).unwrap();
-        let enabled = Arc::new(AtomicBool::new(false));
+        let enabled = Arc::new(crate::enterprise_policy::AiToolPolicy::new(false, true));
         let policy = enabled.clone();
         let task = tokio::spawn(connect_detected_ai_tools_in(
             home.clone(),
@@ -1821,20 +1827,29 @@ mod tests {
             "http://localhost:3137".into(),
             fixture.path().join("opt-outs"),
             Duration::from_millis(20),
-            move || policy.load(Ordering::SeqCst),
+            move || policy.snapshot(),
         ));
         let outcome = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::time::sleep(Duration::from_millis(100)).await;
             assert!(!home.join(".cursor/mcp.json").exists());
             assert!(!home.join(".cursor/skills").exists());
-            enabled.store(true, Ordering::SeqCst);
+            enabled.update(enabled.begin_refresh(), true);
             while !home.join(".cursor/skills/screenpipe-api/SKILL.md").is_file()
                 || !home.join(".cursor/mcp.json").is_file()
             {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
             assert!(home.join(".cursor/mcp.json").is_file());
-            enabled.store(false, Ordering::SeqCst);
+            {
+                let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+                enabled.update(enabled.begin_refresh(), false);
+                std::fs::remove_file(home.join(".cursor/mcp.json")).unwrap();
+                enabled.update(enabled.begin_refresh(), true);
+            }
+            while !home.join(".cursor/mcp.json").is_file() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            enabled.update(enabled.begin_refresh(), false);
             // Drain an in-flight pass before introducing the next tool.
             {
                 let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
@@ -1847,8 +1862,13 @@ mod tests {
                 home.join(".cursor/mcp.json").is_file(),
                 "policy preserves existing connections"
             );
-            enabled.store(true, Ordering::SeqCst);
-            while !home.join(".runner/mcp.json").is_file() {
+            // A successful target may be changed while the org disables setup.
+            // Re-enabling must reconcile it again, not retain a stale success.
+            std::fs::remove_file(home.join(".cursor/mcp.json")).unwrap();
+            enabled.update(enabled.begin_refresh(), true);
+            while !home.join(".runner/mcp.json").is_file()
+                || !home.join(".cursor/mcp.json").is_file()
+            {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
