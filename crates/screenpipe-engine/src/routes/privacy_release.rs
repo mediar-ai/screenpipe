@@ -304,7 +304,25 @@ mod tests {
             Default::default(),
         )
         .with_frame_storage(db.clone());
-        assert!(worker.process_release_batch(7).await.unwrap() > 0);
+        // A scheduling turn can yield before all fixture surfaces complete.
+        // Assert actual receipts rather than assuming one turn drains the queue.
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                worker.process_release_batch(7).await.unwrap();
+                let ready: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM _privacy_release WHERE kind IN ('frames','activity_tasks','activity_actions') AND id='1' AND policy='synthetic-v1'",
+                )
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+                if ready == 3 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("text worker did not certify all fixture surfaces");
         let before = calls.load(Ordering::SeqCst);
         assert!(before > 0);
         let body: serde_json::Value = client

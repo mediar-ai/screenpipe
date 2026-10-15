@@ -342,6 +342,8 @@ jemalloc = ["tikv-jemallocator"]
 
 
 [dev-dependencies]
+# Feedback recovery tests create SQLite triggers on every supported platform.
+rusqlite = { version = "=0.39.0", features = ["bundled"] }
 tokio = { version = "1.36.0", features = ["test-util"] }
 wiremock = "0.6"
 serial_test = "3"
