@@ -17,6 +17,7 @@ vi.mock("@/components/share-logs-button", () => ({
 }));
 
 const resources = [
+  ["Talk to the team", "https://cal.com/team/screenpipe/chat"],
   ["Documentation", "https://docs.screenpi.pe"],
   ["Video tutorials", "https://www.youtube.com/@screen_pipe/videos"],
   ["Feature ideas", "https://screenpipe.com/ideas"],
