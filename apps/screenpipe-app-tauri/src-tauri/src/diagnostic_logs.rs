@@ -275,11 +275,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn installer_elevation_failure_reaches_redacted_support_bundle() {
+    async fn installer_failure_reaches_redacted_support_bundle() {
         let dir = tempfile::tempdir().unwrap();
         tokio::fs::write(
             dir.path().join(crate::update_diagnostics::LOG_NAME),
-            "installer_elevation_failed: result=1223 scope=all recovery=original_app_relaunch_succeeded contact=private-person@example.com\n",
+            concat!(
+                "installer_elevation_failed: result=1223 scope=all recovery=original_app_relaunch_succeeded contact=private-person@example.com\n",
+                "installer_migration_failed: operation=copy_enterprise_config windows_result=5 scope=current recovery=original_app_relaunch_result_0 contact=private-person@example.com\n",
+            ),
         )
         .await
         .unwrap();
@@ -288,6 +291,8 @@ mod tests {
             .unwrap();
         assert!(report.contains("installer_elevation_failed: result=1223"));
         assert!(report.contains("recovery=original_app_relaunch_succeeded"));
+        assert!(report.contains("installer_migration_failed: operation=copy_enterprise_config windows_result=5"));
+        assert!(report.contains("recovery=original_app_relaunch_result_0"));
         assert!(!report.contains("private-person@example.com"));
     }
 

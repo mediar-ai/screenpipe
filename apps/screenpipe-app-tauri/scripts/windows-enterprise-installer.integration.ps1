@@ -124,6 +124,10 @@ $installerA = Join-Path $fixtureDir "screenpipe-enterprise-A.exe"
 $installerB = Join-Path $fixtureDir "screenpipe-enterprise-B.exe"
 $legacyInstallerA = Join-Path $fixtureDir "screenpipe-enterprise-legacy-machine-A.exe"
 if (-not $InstallOnly) {
+  $releasePayload = Join-Path $releaseDir "screenpipe-app.exe"
+  $savedPayload = Join-Path $fixtureDir ("original-payload-" + [Guid]::NewGuid() + ".exe")
+  $hadPayload = Test-Path -LiteralPath $releasePayload
+  if ($hadPayload) { Copy-Item -LiteralPath $releasePayload -Destination $savedPayload }
   Push-Location $appRoot
   try {
     $payloadA = Build-ProofPayload "A"
@@ -133,6 +137,12 @@ if (-not $InstallOnly) {
     $legacyInstallerA = Build-Fixture "legacy-machine-A" "91.0.0" $payloadA $true
   } finally {
     Pop-Location
+    if ($hadPayload) {
+      Copy-Item -LiteralPath $savedPayload -Destination $releasePayload -Force
+      Remove-Item -LiteralPath $savedPayload
+    } else {
+      Remove-Item -LiteralPath $releasePayload -Force -ErrorAction SilentlyContinue
+    }
   }
 }
 
