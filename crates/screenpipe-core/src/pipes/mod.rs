@@ -939,7 +939,8 @@ pub struct TombstoneEntry {
     /// When the pipe was deleted (UTC ISO 8601).
     pub deleted_at: String,
     /// FNV-1a hash of the pipe.md content at the time of deletion.
-    /// Used by `install_builtin_pipes` to detect updated builtins.
+    /// Retained for compatibility with existing deletion registries. A bundle
+    /// update must not override the user's deletion, regardless of this hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_hash: Option<String>,
 }
@@ -7802,25 +7803,12 @@ impl PipeManager {
             let pipe_md = dir.join("pipe.md");
             if !pipe_md.exists() {
                 // Check tombstone — user may have intentionally deleted this pipe
-                if let Some(entry) = tombstones.get(name) {
-                    let new_hash = simple_hash(content);
-                    if entry.content_hash.as_deref() == Some(&new_hash) {
-                        // Same content as when deleted — respect user's deletion
-                        debug!(
-                            "skipping tombstoned builtin pipe '{}' (content unchanged)",
-                            name
-                        );
-                        continue;
-                    }
-                    // Content changed (new app version) — install updated version
-                    // and clear the tombstone so user gets the improvement
-                    info!(
-                        "builtin pipe '{}' updated since deletion, re-installing",
-                        name
-                    );
-                    if let Err(e) = remove_tombstone(&self.pipes_dir, name) {
-                        warn!("failed to remove tombstone for '{}': {}", name, e);
-                    }
+                if tombstones.contains_key(name) {
+                    // Only an explicit install may undo a deletion. Updated
+                    // prompts and legacy tombstones without hashes must not
+                    // silently restore an event-triggered or scheduled task.
+                    debug!("skipping deleted builtin pipe '{}'", name);
+                    continue;
                 }
                 std::fs::create_dir_all(&dir)?;
                 atomic_write(&pipe_md, content)?;
@@ -10718,6 +10706,53 @@ mod tests {
             "custom prompt"
         );
         assert!(!read_tombstones(dir.path()).contains_key("time-breakdown"));
+    }
+
+    #[tokio::test]
+    async fn startup_preserves_deleted_builtins_across_bundle_updates() {
+        for deleted_hash in [None, Some("previous-bundle".to_string())] {
+            let dir = tempfile::tempdir().unwrap();
+            let manager = PipeManager::new(dir.path().to_path_buf(), HashMap::new(), None, 0);
+            add_tombstone(dir.path(), "meeting-summary", deleted_hash).unwrap();
+            let before = std::fs::read(dir.path().join(TOMBSTONES_FILE)).unwrap();
+
+            manager.install_builtin_pipes().unwrap();
+            manager.load_pipes().await.unwrap();
+
+            assert!(!dir.path().join("meeting-summary/pipe.md").exists());
+            assert!(manager.get_pipe("meeting-summary").await.is_none());
+            assert_eq!(
+                std::fs::read(dir.path().join(TOMBSTONES_FILE)).unwrap(),
+                before
+            );
+
+            // A later explicit install is still allowed to restore the task.
+            assert!(install_bundled_pipe(dir.path(), "meeting-summary").unwrap());
+            manager.load_pipes().await.unwrap();
+            assert!(manager.get_pipe("meeting-summary").await.is_some());
+            assert!(!read_tombstones(dir.path()).contains_key("meeting-summary"));
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_preserves_disabled_builtins_after_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = PipeManager::new(dir.path().to_path_buf(), HashMap::new(), None, 0);
+        manager.install_builtin_pipes().unwrap();
+        manager.load_pipes().await.unwrap();
+        for &(name, _) in BUNDLED_BUILTIN_PIPES {
+            manager.enable_pipe(name, false).await.unwrap();
+        }
+
+        let restarted = PipeManager::new(dir.path().to_path_buf(), HashMap::new(), None, 0);
+        restarted.install_builtin_pipes().unwrap();
+        restarted.load_pipes().await.unwrap();
+        for &(name, _) in BUNDLED_BUILTIN_PIPES {
+            assert!(
+                !restarted.get_pipe(name).await.unwrap().config.enabled,
+                "{name}"
+            );
+        }
     }
 
     fn write_pipe_source(dir: &Path, name: &str, template: bool) -> PathBuf {
