@@ -6568,6 +6568,52 @@
         ],
         "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/recording-resume.config.mjs"
       }
+    },
+    {
+      "id": "app-pipe-watch-switch-preservation",
+      "name": "Keep authoritative watched-pipe text when switching conversations",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "3a427b22626db983406d917b43abe4888c647dfc"
+      },
+      "base_ref": "6b4edca9b022ddfdc5c489e6175507f626298f71",
+      "oracle_ref": "3a427b22626db983406d917b43abe4888c647dfc",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/hooks/use-chat-conversations.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/hooks/use-chat-conversations.ts",
+        "apps/screenpipe-app-tauri/lib/stores/chat-store.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "data-preservation",
+        "pipe-history"
+      ],
+      "prompt": "Switching conversations can replace a watched pipe's newer streamed text with the panel's stale copy when both copies have the same message count. Repair the actual useChatConversations loadConversation path so leaving a pipe-watch session retains its authoritative store messages. Preserve normal chat ownership: an equally sized panel transcript must still replace the normal chat's older store transcript, while a shorter panel snapshot must not discard additional stored messages. Loading a warm incoming chat must restore its stored messages and update both the current store identity and the panel session reference to that incoming chat. Keep the public hook and session-store interfaces compatible. Checks mount the real React hook with its real store and synthetic native, storage and translation ports. No particular guard, helper, or reducer architecture is required. New-chat creation, stream-event delivery, native rendering, disk durability and crash recovery are outside this historical task.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/pipe-watch-switch.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/pipe-watch-switch.test.tsx"
+          },
+          {
+            "local_path": "graders/pipe-watch-switch-config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/pipe-watch-switch.config.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/pipe-watch-switch.config.mjs"
+      }
     }
   ]
 }
