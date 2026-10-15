@@ -6483,6 +6483,41 @@
           "destination_path": "apps/screenpipe-app-tauri/node_modules"
         }
       ]
+    },
+    {
+      "id": "ai-gateway-vertex-stream-fallback",
+      "name": "Keep reasoning-only Vertex streams visibly readable",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "65f7928a294cc847534cb1adfe693e8553addfa1"
+      },
+      "base_ref": "dec32b804203013868d99a87ba94b6bac61d00e9",
+      "oracle_ref": "65f7928a294cc847534cb1adfe693e8553addfa1",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "streaming",
+        "provider-compatibility"
+      ],
+      "prompt": "The public Vertex MaaS streaming completion can return no visible answer when a thinking model supplies only reasoning_content. Preserve the original reasoning deltas and expose their complete text as content exactly once when the stream finishes, sends [DONE], or closes without either, provided no nonempty content was delivered. Handle empty content deltas, CRLF lines and arbitrary byte boundaries including split Unicode. Preserve response id, model and choice index; fallback content must precede an existing [DONE] marker. Ordinary content and reasoning followed by a real answer must remain exact without appended reasoning. Empty streams must not invent text. Preserve tool-call deltas, usage records, comments, malformed data lines and ordinary upstream client-error refusal. For the existing glm-4.7 endpoint, retain one completion POST, bearer authorization, user messages, zero temperature, max_tokens and stream:true without changing caller input. Use synthetic authentication and transport only; never call live providers. No particular helper or transform implementation is required. This task covers one-choice streaming transport, not non-streaming JSON parsing, multiple-choice multiplexing, live model output, billing or desktop rendering.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/vertex-stream-fallback.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
+      }
     }
   ]
 }
