@@ -979,6 +979,7 @@ async fn activity_labels_keep_structure_and_revoke_on_edit_policy_and_restart() 
             .unwrap(),
         1
     );
+    let before_edit = db.release_revocation().await.unwrap();
     db.execute_raw_sql_write("UPDATE activity_tasks SET title='SYNTHETIC_SECRET_EDIT' WHERE id=1")
         .await
         .unwrap();
@@ -988,6 +989,18 @@ async fn activity_labels_keep_structure_and_revoke_on_edit_policy_and_restart() 
         .unwrap()[0]
         .title
         .contains("privacy processing"));
+    assert!(protected
+        .reconcile_activity_ledger_checked("test", start, end, &[], &[], before_edit)
+        .await
+        .is_err());
+    assert_eq!(
+        protected
+            .list_activity_ledger(start, end, false, false)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     db.configure_release(&ReleasePolicy {
         identity: "v2".into(),
         text: true,

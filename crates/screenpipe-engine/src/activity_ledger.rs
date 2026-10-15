@@ -27,18 +27,23 @@ pub async fn reconcile_range(
     db: &DatabaseManager,
     range_start: DateTime<Utc>,
     range_end: DateTime<Utc>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
+    let revocation = db.release_revocation().await?;
+    if !db.activity_sources_ready(range_start, range_end).await? {
+        return Ok(false);
+    }
     let observations = db
         .load_activity_ledger_observations(range_start, range_end)
         .await?;
     let (tasks, intervals) = build_ledger(observations, range_start, range_end);
     let interval_count = intervals.len();
-    db.reconcile_activity_ledger(
+    db.reconcile_activity_ledger_checked(
         ACTIVITY_LEDGER_PRODUCER,
         range_start,
         range_end,
         &tasks,
         &intervals,
+        revocation,
     )
     .await?;
     debug!(
@@ -49,7 +54,7 @@ pub async fn reconcile_range(
         end = %range_end,
         "activity ledger reconciled"
     );
-    Ok(())
+    Ok(true)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

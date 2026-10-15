@@ -367,9 +367,43 @@ impl DatabaseManager {
         tasks: &[ActivityTaskDraft],
         intervals: &[ActivityIntervalDraft],
     ) -> Result<(), SqlxError> {
+        self.reconcile_activity_ledger_checked(
+            producer,
+            range_start,
+            range_end,
+            tasks,
+            intervals,
+            None,
+        )
+        .await
+    }
+
+    /// Refuse a rebuild assembled before a privacy revocation. The comparison
+    /// shares the replacement transaction, so stale reads cannot erase history.
+    pub async fn reconcile_activity_ledger_checked(
+        &self,
+        producer: &str,
+        range_start: DateTime<Utc>,
+        range_end: DateTime<Utc>,
+        tasks: &[ActivityTaskDraft],
+        intervals: &[ActivityIntervalDraft],
+        expected_revocation: Option<i64>,
+    ) -> Result<(), SqlxError> {
         let range_start_text = range_start.to_rfc3339();
         let range_end_text = range_end.to_rfc3339();
         let mut tx = self.begin_immediate_with_retry().await?;
+        if let Some(expected) = expected_revocation {
+            let current: i64 =
+                sqlx::query_scalar("SELECT revocation FROM _privacy_policy WHERE id=1")
+                    .fetch_one(&mut **tx.conn())
+                    .await?;
+            if current != expected {
+                return Err(SqlxError::Protocol(
+                    "privacy changed during activity reconciliation; saved intervals retained"
+                        .into(),
+                ));
+            }
+        }
 
         // Preserve the finalized prefix of a segment crossing the reconciliation
         // watermark, then replace everything beginning inside the trailing range.

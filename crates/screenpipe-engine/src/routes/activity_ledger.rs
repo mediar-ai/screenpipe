@@ -131,12 +131,7 @@ pub async fn get_activity_ledger(
     if query.end_time - query.start_time > Duration::days(31) {
         return Err(bad_request("activity ledger ranges are limited to 31 days"));
     }
-    let sources_ready = state.db.activity_sources_ready(query.start_time, query.end_time)
-        .await.map_err(|error| {
-            error!(%error, "activity ledger privacy readiness failed");
-            (StatusCode::SERVICE_UNAVAILABLE, JsonResponse(json!({"error":"Privacy processing is pending", "code":"privacy_pending", "retryable":true})))
-        })?;
-    if query.refresh && sources_ready {
+    let sources_ready = if query.refresh {
         crate::activity_ledger::reconcile_range(&state.db, query.start_time, query.end_time)
             .await
             .map_err(|error| {
@@ -145,8 +140,14 @@ pub async fn get_activity_ledger(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(json!({"error": "activity ledger generation failed"})),
                 )
-            })?;
-    }
+            })?
+    } else {
+        state.db.activity_sources_ready(query.start_time, query.end_time)
+            .await.map_err(|error| {
+                error!(%error, "activity ledger privacy readiness failed");
+                (StatusCode::SERVICE_UNAVAILABLE, JsonResponse(json!({"error":"Privacy processing is pending", "code":"privacy_pending", "retryable":true})))
+            })?
+    };
     let include_actions = query.depth == ActivityLedgerDepth::Action;
     let include_evidence = include_actions || query.include_artifacts;
     let records = state
