@@ -523,9 +523,9 @@ fn input_device_is_available(device_name: &str, clamshell_mode: bool) -> bool {
 }
 
 /// Classify the raw audio capture status from health signals. Pure so it can be
-/// unit-tested in isolation. `capture_failed` means a recent unrecovered timeout
-/// or a retained native teardown failure for a selected device, never a
-/// cumulative error count or aggregate activity from some other stream.
+/// unit-tested in isolation. Timeouts are correlated to the same current device.
+/// A retained native teardown failure is separate: its recording handle may be
+/// gone and its original timeout may have expired while the worker is stuck.
 #[allow(clippy::too_many_arguments)]
 fn classify_audio_status(
     audio_disabled: bool,
@@ -534,11 +534,12 @@ fn classify_audio_status(
     audio_waiting_for_meeting: bool,
     audio_never_captured: bool,
     has_input_device: bool,
-    capture_failed: bool,
+    stream_timeout_recent: bool,
     global_audio_active: bool,
     last_audio_ts: u64,
     now_ts: u64,
     threshold_secs: u64,
+    native_teardown_failed: bool,
 ) -> &'static str {
     if audio_disabled {
         "disabled"
@@ -552,7 +553,7 @@ fn classify_audio_status(
         "meeting_detector_unavailable"
     } else if audio_waiting_for_meeting {
         "waiting_for_meeting"
-    } else if capture_failed {
+    } else if native_teardown_failed {
         // Includes a selected stream whose native teardown is still stuck.
         // Its recording handle may already be gone. Neither that absence nor
         // a healthy output stream turns the capture failure into benign idle.
@@ -566,6 +567,9 @@ fn classify_audio_status(
         "no_input_device"
     } else if audio_never_captured {
         "not_started"
+    } else if stream_timeout_recent {
+        // Healthy system output cannot clear a timeout on a current microphone.
+        "active_no_data"
     } else if global_audio_active {
         "ok"
     } else if last_audio_ts == 0 {
@@ -1598,13 +1602,17 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     // from. The old global timestamp let a healthy output stream mask a dead
     // mic, while the older cumulative counter pinned recovered devices forever.
     let now_ts = now.timestamp().max(0) as u64;
-    let failed_capture_devices = state.audio_manager.capture_failure_devices().await;
-    let capture_failed = !failed_capture_devices.is_empty()
-        || has_unrecovered_recent_stream_timeout(
-            &state.audio_metrics.per_device_stream_timeouts_snapshot(),
-            &current_device_capture_at,
-            now_ts,
-        );
+    let mut failed_capture_devices = state.audio_manager.capture_failure_devices().await;
+    // A built-in microphone is intentionally unavailable in clamshell mode.
+    failed_capture_devices.retain(|device| {
+        let name = device.to_string();
+        !name.contains("(input)") || input_device_is_available(&name, clamshell_mode)
+    });
+    let stream_timeout_recent = has_unrecovered_recent_stream_timeout(
+        &state.audio_metrics.per_device_stream_timeouts_snapshot(),
+        &current_device_capture_at,
+        now_ts,
+    );
 
     // Only report the intentional pause after the manager has actually
     // released every stream. During the short teardown transition (or if a
@@ -1619,11 +1627,12 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         audio_waiting_for_meeting,
         audio_never_captured,
         has_input_device,
-        capture_failed,
+        stream_timeout_recent,
         global_audio_active,
         last_audio_ts,
         now_ts,
         threshold_secs,
+        !failed_capture_devices.is_empty(),
     )
     .to_string();
 
@@ -3228,6 +3237,7 @@ mod tests {
             1_000, // last_audio_ts
             1_010, // now_ts
             60,    // threshold_secs
+            false,
         )
     }
 
@@ -3237,14 +3247,14 @@ mod tests {
         // still stuck. Fresh system output must not make the mic loss benign.
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, false, false, true, true, 999, 1000, 60,
+                false, false, false, false, false, false, false, true, 999, 1000, 60, true,
             ),
             "active_no_data"
         );
         // A real machine without a mic and without a failure remains healthy.
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, false, false, false, true, 999, 1000, 60,
+                false, false, false, false, false, false, false, true, 999, 1000, 60, false,
             ),
             "no_input_device"
         );
@@ -3429,29 +3439,35 @@ mod tests {
         // Guard the unrelated branches against accidental regressions.
         assert_eq!(
             classify_audio_status(
-                true, true, false, false, false, true, true, true, 1000, 1010, 60
+                true, true, false, false, false, true, true, true, 1000, 1010, 60, false,
             ),
             "disabled"
         );
         // intentional lock pause wins over stale/not-started signals
         assert_eq!(
-            classify_audio_status(false, true, false, false, true, true, false, false, 0, 1010, 60),
+            classify_audio_status(
+                false, true, false, false, true, true, false, false, 0, 1010, 60, false
+            ),
             "ok"
         );
         // a missing prerequisite fails closed and is visible, not benign idle
         assert_eq!(
-            classify_audio_status(false, false, true, false, true, true, false, false, 0, 1010, 60),
+            classify_audio_status(
+                false, false, true, false, true, true, false, false, 0, 1010, 60, false
+            ),
             "meeting_detector_unavailable"
         );
         // intentional meetings-only idle is distinct and benign
         assert_eq!(
-            classify_audio_status(false, false, false, true, true, true, false, false, 0, 1010, 60),
+            classify_audio_status(
+                false, false, false, true, true, true, false, false, 0, 1010, 60, false
+            ),
             "waiting_for_meeting"
         );
         // never captured + no mic -> benign no_input_device (stays 200)
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, true, false, false, false, 0, 1010, 60
+                false, false, false, false, true, false, false, false, 0, 1010, 60, false,
             ),
             "no_input_device"
         );
@@ -3459,28 +3475,28 @@ mod tests {
         // remains the same benign state instead of degrading to stale.
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, false, false, true, false, 1000, 2000, 60
+                false, false, false, false, false, false, true, false, 1000, 2000, 60, false,
             ),
             "no_input_device"
         );
         // never captured but a mic exists -> not_started
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, true, true, false, false, 0, 1010, 60
+                false, false, false, false, true, true, false, false, 0, 1010, 60, false,
             ),
             "not_started"
         );
         // not active, last audio within threshold -> ok
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, false, true, false, false, 1000, 1030, 60
+                false, false, false, false, false, true, false, false, 1000, 1030, 60, false,
             ),
             "ok"
         );
         // not active, last audio stale -> stale
         assert_eq!(
             classify_audio_status(
-                false, false, false, false, false, true, false, false, 1000, 2000, 60
+                false, false, false, false, false, true, false, false, 1000, 2000, 60, false,
             ),
             "stale"
         );
