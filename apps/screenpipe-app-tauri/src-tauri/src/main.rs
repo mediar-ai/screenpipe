@@ -1751,14 +1751,12 @@ async fn main() {
             // setup is backgrounded and idempotent: it installs missing MCP +
             // skill entries, refreshes stale screenpipe launchers, and leaves
             // unrelated tool settings alone.
-            if !app_ui_hidden {
-                let local_api = recording::local_api_context_from_app(&app.handle());
-                skills::connect_detected_ai_tools_in_background(
-                    app.handle().clone(),
-                    store.recording.api_auth,
-                    local_api.port,
-                );
-            }
+            let local_api = recording::local_api_context_from_app(&app.handle());
+            skills::connect_detected_ai_tools_in_background(
+                app.handle().clone(),
+                store.recording.api_auth,
+                local_api.port,
+            );
 
             // Enterprise hidden-UI deployments always run headless with the
             // recorder only, regardless of user settings or onboarding state.

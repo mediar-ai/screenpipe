@@ -42,6 +42,10 @@ static IMMUTABLE_DEPLOYMENT_TRAY_HIDDEN: Lazy<bool> =
 static PERSISTED_TRAY_HIDDEN: Lazy<bool> = Lazy::new(user_enterprise_config_hides_tray);
 static ENFORCE_AUTO_START: Lazy<AtomicBool> =
     Lazy::new(|| AtomicBool::new(read_persisted_enforce_auto_start()));
+// Missing policy preserves automatic setup, including managed hidden installs.
+static AUTO_CONNECT_AI_TOOLS: Lazy<AtomicBool> = Lazy::new(|| {
+    AtomicBool::new(read_auto_connect_ai_tools_at(&user_enterprise_config_path()))
+});
 static POLICY_UPDATE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 /// Per-stream sync policy. Established streams preserve their historical
@@ -292,6 +296,36 @@ fn persist_enforce_auto_start(enabled: bool) {
     }
 }
 
+/// The control plane serializes select values as strings; accept JSON booleans
+/// too. Only an explicit false disables automatic MCP and skill installation.
+pub(crate) fn auto_connect_ai_tools_value(value: Option<&serde_json::Value>) -> bool {
+    !matches!(value, Some(serde_json::Value::Bool(false)))
+        && !matches!(value, Some(serde_json::Value::String(value)) if value == "false")
+}
+
+fn read_auto_connect_ai_tools_at(path: &Path) -> bool {
+    let json = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    auto_connect_ai_tools_value(json.as_ref().and_then(|json| json.get("auto_connect_ai_tools")))
+}
+
+fn persist_auto_connect_ai_tools_at(path: &Path, enabled: bool) -> Result<bool, String> {
+    crate::enterprise_config_file::update(path, |object| {
+        object.insert(
+            "auto_connect_ai_tools".to_string(),
+            serde_json::Value::Bool(enabled),
+        );
+        Ok(())
+    })
+}
+
+/// Independent of UI visibility. Read on each background AI-tool scan so live
+/// policy changes take effect without launching a webview or restarting.
+pub fn auto_connect_ai_tools() -> bool {
+    AUTO_CONNECT_AI_TOOLS.load(Ordering::SeqCst)
+}
+
 fn enterprise_config_hides_app_ui(path: &std::path::Path) -> bool {
     let Ok(raw) = std::fs::read_to_string(path) else {
         return false;
@@ -405,7 +439,11 @@ fn resolve_tray_hidden(
 /// Called by the frontend after fetching the enterprise policy.
 #[tauri::command]
 #[specta::specta]
-pub fn set_enterprise_policy(hidden_sections: Vec<String>, enforce_auto_start: bool) {
+pub fn set_enterprise_policy(
+    hidden_sections: Vec<String>,
+    enforce_auto_start: bool,
+    auto_connect_ai_tools: Option<bool>,
+) {
     // The policy is currently defined only for macOS and Windows. Enterprise
     // Linux builds must not cache a setting they do not enforce.
     let enforce_auto_start =
@@ -416,6 +454,14 @@ pub fn set_enterprise_policy(hidden_sections: Vec<String>, enforce_auto_start: b
     let _update_guard = POLICY_UPDATE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // Authentication recovery only changes visibility, so None retains the last
+    // AI-tool policy. Authenticated responses always supply the resolved default.
+    if let Some(enabled) = auto_connect_ai_tools {
+        AUTO_CONNECT_AI_TOOLS.store(enabled, Ordering::SeqCst);
+        if let Err(error) = persist_auto_connect_ai_tools_at(&user_enterprise_config_path(), enabled) {
+            tracing::warn!("enterprise: failed to cache AI-tool policy: {error}");
+        }
+    }
     let previous_enforcement = ENFORCE_AUTO_START.load(Ordering::SeqCst);
     persist_enforce_auto_start(enforce_auto_start);
     ENFORCE_AUTO_START.store(enforce_auto_start, Ordering::SeqCst);
@@ -616,6 +662,24 @@ pub(crate) fn sync_streams_test_lock() -> std::sync::MutexGuard<'static, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ai_tool_policy_cache_preserves_false_and_unrelated_deployment_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("enterprise.json");
+        assert!(read_auto_connect_ai_tools_at(&path));
+        std::fs::write(&path, r#"{"hide_app":true,"license_key":"fixture"}"#).unwrap();
+        assert!(read_auto_connect_ai_tools_at(&path));
+        assert!(persist_auto_connect_ai_tools_at(&path, false).unwrap());
+        assert!(!read_auto_connect_ai_tools_at(&path));
+        assert!(!persist_auto_connect_ai_tools_at(&path, false).unwrap());
+        let cached: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(cached["hide_app"], true);
+        assert_eq!(cached["license_key"], "fixture");
+        assert!(persist_auto_connect_ai_tools_at(&path, true).unwrap());
+        assert!(read_auto_connect_ai_tools_at(&path));
+    }
 
     #[test]
     fn truthy_accepts_common_deployment_values() {

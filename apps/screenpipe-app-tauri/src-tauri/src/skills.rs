@@ -199,6 +199,7 @@ pub fn connect_detected_ai_tools_in_background(
             format!("http://localhost:{api_port}"),
             ai_tool_auto_connect_opt_out_dir(),
             AI_TOOL_CHECK_INTERVAL,
+            crate::enterprise_policy::auto_connect_ai_tools,
         )
         .await;
     });
@@ -211,11 +212,18 @@ async fn connect_detected_ai_tools_in(
     api_url: String,
     opt_out_dir: PathBuf,
     check_interval: Duration,
+    auto_connect_allowed: impl Fn() -> bool + Send + 'static,
 ) {
     let mut reconciler = screenpipe_engine::cli::agent::DesktopAgentReconciler::default();
     let mut previous_report = None;
     let mut attempt = 0;
     loop {
+        // Keep the watcher alive while disabled so the next policy refresh can
+        // enable setup, including on deployments with no webview.
+        if !auto_connect_allowed() {
+            tokio::time::sleep(check_interval).await;
+            continue;
+        }
         attempt = (attempt + 1).min(3);
         let home = home.clone();
         let bun_path = bun_path.clone();
@@ -228,6 +236,10 @@ async fn connect_detected_ai_tools_in(
         // returns, no older launch repair can still reconnect that target.
         let result = {
             let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+            if !auto_connect_allowed() {
+                reconciler = current;
+                continue;
+            }
             tokio::task::spawn_blocking(move || {
                 let opted_out = ai_tool_auto_connect_opt_outs_in(&opt_out_dir);
                 let report =
@@ -1746,6 +1758,7 @@ mod tests {
             "http://localhost:3137".into(),
             opt_out_dir.clone(),
             Duration::from_millis(20),
+            || true,
         ));
         let outcome = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1788,6 +1801,62 @@ mod tests {
         task.abort();
         let _ = task.await;
         outcome.expect("background poll did not connect later installs");
+    }
+
+    #[tokio::test]
+    async fn ai_tool_policy_pauses_and_resumes_background_setup() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let fixture = tempfile::tempdir().unwrap();
+        let home = fixture.path().join("home");
+        std::fs::create_dir_all(home.join(".cursor")).unwrap();
+        let enabled = Arc::new(AtomicBool::new(false));
+        let policy = enabled.clone();
+        let task = tokio::spawn(connect_detected_ai_tools_in(
+            home.clone(),
+            home.join("bun"),
+            Some("sp-fixture".into()),
+            "http://localhost:3137".into(),
+            fixture.path().join("opt-outs"),
+            Duration::from_millis(20),
+            move || policy.load(Ordering::SeqCst),
+        ));
+        let outcome = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            assert!(!home.join(".cursor/mcp.json").exists());
+            assert!(!home.join(".cursor/skills").exists());
+            enabled.store(true, Ordering::SeqCst);
+            while !home.join(".cursor/skills/screenpipe-api/SKILL.md").is_file()
+                || !home.join(".cursor/mcp.json").is_file()
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            assert!(home.join(".cursor/mcp.json").is_file());
+            enabled.store(false, Ordering::SeqCst);
+            // Drain an in-flight pass before introducing the next tool.
+            {
+                let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            std::fs::create_dir_all(home.join(".runner")).unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            assert!(!home.join(".runner/mcp.json").exists());
+            assert!(
+                home.join(".cursor/mcp.json").is_file(),
+                "policy preserves existing connections"
+            );
+            enabled.store(true, Ordering::SeqCst);
+            while !home.join(".runner/mcp.json").is_file() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+        task.abort();
+        let _ = task.await;
+        outcome.expect("AI-tool policy did not resume setup");
     }
 
     #[tokio::test]

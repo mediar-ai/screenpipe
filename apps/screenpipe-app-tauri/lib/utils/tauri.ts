@@ -2706,8 +2706,8 @@ async setEnhancedAiSuggestions(enabled: boolean, token: string) : Promise<Result
 /**
  * Called by the frontend after fetching the enterprise policy.
  */
-async setEnterprisePolicy(hiddenSections: string[], enforceAutoStart: boolean) : Promise<void> {
-    await TAURI_INVOKE("set_enterprise_policy", { hiddenSections, enforceAutoStart });
+async setEnterprisePolicy(hiddenSections: string[], enforceAutoStart: boolean, autoConnectAiTools: boolean | null) : Promise<void> {
+    await TAURI_INVOKE("set_enterprise_policy", { hiddenSections, enforceAutoStart, autoConnectAiTools });
 },
 /**
  * Request or revoke Enterprise recording access. A webview may always revoke

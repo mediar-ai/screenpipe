@@ -986,6 +986,7 @@ mod imp {
         hidden_sections: Vec<String>,
         locked_settings: HashMap<String, serde_json::Value>,
         enforce_auto_start: bool,
+        auto_connect_ai_tools: bool,
         require_account_login: bool,
         recording_allowed: bool,
         sync_streams: NativeSyncStreams,
@@ -1006,7 +1007,11 @@ mod imp {
                 .extend(self.locked_settings.keys().cloned());
             self.hidden_sections.sort();
             self.hidden_sections.dedup();
+            let auto_connect_ai_tools = crate::enterprise_policy::auto_connect_ai_tools_value(
+                self.locked_settings.get("autoConnectAiTools"),
+            );
             NativeEnterprisePolicy {
+                auto_connect_ai_tools,
                 hidden_sections: self.hidden_sections,
                 locked_settings: self.locked_settings,
                 enforce_auto_start,
@@ -1355,6 +1360,7 @@ mod imp {
                 crate::enterprise_policy::set_enterprise_policy(
                     policy.hidden_sections,
                     policy.enforce_auto_start,
+                    Some(policy.auto_connect_ai_tools),
                 );
                 crate::enterprise_policy::update_recording_authorized(true);
                 info!("enterprise: startup authentication completed");
@@ -1450,6 +1456,7 @@ mod imp {
                         crate::enterprise_policy::set_enterprise_policy(
                             policy.hidden_sections,
                             policy.enforce_auto_start,
+                            Some(policy.auto_connect_ai_tools),
                         );
                         Ok(())
                     }
@@ -1586,6 +1593,7 @@ mod imp {
                         crate::enterprise_policy::set_enterprise_policy(
                             policy.hidden_sections,
                             policy.enforce_auto_start,
+                            Some(policy.auto_connect_ai_tools),
                         );
                         if was_hidden
                             && !crate::commands::apply_enterprise_ui_visibility(app.clone())
@@ -1620,7 +1628,7 @@ mod imp {
                             // Authentication recovery must be visible. The Home
                             // webview will fetch and reapply the complete policy
                             // after the employee signs in.
-                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
+                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false, None);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
                         let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
@@ -1632,7 +1640,7 @@ mod imp {
                     NativeAuthorizationResult::Rejected
                     | NativeAuthorizationResult::NoCredential => {
                         if was_hidden {
-                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
+                            crate::enterprise_policy::set_enterprise_policy(Vec::new(), false, None);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
                         let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
@@ -2222,6 +2230,25 @@ mod imp {
             assert!(!policy.sync_streams.audio);
             assert_eq!(policy.sync_streams.feedback_mode(), "full");
             assert_eq!(policy.sync_streams.frame_images_mode(), "all");
+        }
+
+        #[test]
+        fn ai_tool_policy_defaults_on_even_with_hidden_ui() {
+            for (value, expected) in [
+                (serde_json::Value::Null, true),
+                (serde_json::json!(true), true),
+                (serde_json::json!("true"), true),
+                (serde_json::json!(false), false),
+                (serde_json::json!("false"), false),
+            ] {
+                let response: NativePolicyResponse = serde_json::from_value(serde_json::json!({
+                    "hiddenSections": ["app_ui"],
+                    "lockedSettings": {"autoConnectAiTools": value}
+                })).unwrap();
+                assert_eq!(response.into_native_policy().auto_connect_ai_tools, expected);
+            }
+            let response: NativePolicyResponse = serde_json::from_value(serde_json::json!({})).unwrap();
+            assert!(response.into_native_policy().auto_connect_ai_tools);
         }
 
         #[test]
