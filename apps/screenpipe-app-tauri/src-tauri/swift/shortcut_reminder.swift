@@ -179,6 +179,14 @@ struct OverlayNotification: Equatable {
     let body: String
     let actions: [OverlayNotificationAction]
     let autoDismissMs: Int?
+    let isMeetingJoin: Bool
+
+    func size(scale: CGFloat) -> NSSize {
+        NSSize(
+            width: (isMeetingJoin ? 460 : kBaseNotificationW) * scale,
+            height: (isMeetingJoin ? 124 : kBaseNotificationH) * scale
+        )
+    }
 
     static func parse(_ json: String) -> OverlayNotification? {
         guard let data = json.data(using: .utf8),
@@ -217,7 +225,8 @@ struct OverlayNotification: Equatable {
             title: title,
             body: (root["body"] as? String) ?? "",
             actions: actions,
-            autoDismissMs: autoDismiss
+            autoDismissMs: autoDismiss,
+            isMeetingJoin: rawActions.contains { $0["type"] as? String == "meeting_join" }
         )
     }
 }
@@ -1582,6 +1591,51 @@ private struct OverlayNotificationView: View {
     }
 
     var body: some View {
+        Group {
+            if notification.isMeetingJoin {
+                meetingJoinContent
+            } else {
+                compactContent
+            }
+        }
+        .frame(width: notification.size(scale: scale).width, height: notification.size(scale: scale).height)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: s(8)))
+        .overlay(RoundedRectangle(cornerRadius: s(8)).stroke(Color.white.opacity(0.42), lineWidth: 1))
+    }
+
+    private var meetingJoinContent: some View {
+        VStack(alignment: .leading, spacing: s(8)) {
+            HStack(alignment: .top, spacing: s(10)) {
+                Image(systemName: "video.fill")
+                    .font(.system(size: 16 * scale, weight: .medium))
+                    .foregroundColor(.white.opacity(0.75))
+                    .frame(height: s(24))
+                VStack(alignment: .leading, spacing: s(4)) {
+                    Text(notification.title)
+                        .font(Brand.swiftUIMonoFont(size: 14 * scale, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.95))
+                        .lineLimit(1)
+                    if !notification.body.isEmpty {
+                        Text(notification.body)
+                            .font(Brand.swiftUIMonoFont(size: 12 * scale))
+                            .foregroundColor(.white.opacity(0.60))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                dismissButton
+            }
+            HStack(spacing: s(8)) {
+                Spacer(minLength: 0)
+                actionButtons
+            }
+        }
+        .padding(s(14))
+    }
+
+    private var compactContent: some View {
         HStack(spacing: s(8)) {
             Image(systemName: "video.fill")
                 .font(.system(size: 10 * scale, weight: .medium))
@@ -1601,44 +1655,44 @@ private struct OverlayNotificationView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            ForEach(orderedActions) { action in
-                Button(action: { onAction(action) }) {
-                    Text(action.label)
-                        .font(Brand.swiftUIMonoFont(size: 9 * scale, weight: .medium))
-                        .foregroundColor(action.primary ? .black : .white.opacity(0.88))
-                        .lineLimit(1)
-                        .padding(.horizontal, s(8))
-                        .frame(height: s(22))
-                        .background(
-                            action.primary
-                                ? Color.white.opacity(0.92)
-                                : Color.white.opacity(0.10)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: s(6)))
-                        .contentShape(RoundedRectangle(cornerRadius: s(6)))
-                }
-                .buttonStyle(.plain)
-                .fixedSize()
-            }
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8 * scale, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.55))
-                    .frame(width: s(14), height: s(22))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(uiText("dismiss notification"))
+            actionButtons
+            dismissButton
         }
         .padding(.horizontal, s(10))
-        .frame(
-            width: kBaseNotificationW * scale,
-            height: kBaseNotificationH * scale
-        )
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: s(8)))
-        .overlay(RoundedRectangle(cornerRadius: s(8)).stroke(Color.white.opacity(0.42), lineWidth: 1))
+    }
+
+    private var actionButtons: some View {
+        ForEach(orderedActions) { action in
+            Button(action: { onAction(action) }) {
+                Text(action.label)
+                    .font(Brand.swiftUIMonoFont(size: (notification.isMeetingJoin ? 13 : 9) * scale, weight: .medium))
+                    .foregroundColor(action.primary ? .black : .white.opacity(0.88))
+                    .lineLimit(1)
+                    .padding(.horizontal, s(notification.isMeetingJoin ? 12 : 8))
+                    .frame(height: s(notification.isMeetingJoin ? 34 : 22))
+                    .background(
+                        action.primary
+                            ? Color.white.opacity(0.92)
+                            : Color.white.opacity(0.10)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: s(6)))
+                    .contentShape(RoundedRectangle(cornerRadius: s(6)))
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+        }
+    }
+
+    private var dismissButton: some View {
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .font(.system(size: (notification.isMeetingJoin ? 11 : 8) * scale, weight: .semibold))
+                .foregroundColor(.white.opacity(0.55))
+                .frame(width: s(notification.isMeetingJoin ? 24 : 14), height: s(notification.isMeetingJoin ? 24 : 22))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(uiText("dismiss notification"))
     }
 }
 
@@ -3211,8 +3265,10 @@ class ShortcutReminderController: NSObject, NSWindowDelegate {
 
     private func ensureNotificationPanel() {
         guard notificationPanel == nil else { return }
-        let w = kBaseNotificationW * gOverlayScale
-        let h = kBaseNotificationH * gOverlayScale
+        guard let notification = activeNotification else { return }
+        let size = notification.size(scale: gOverlayScale)
+        let w = size.width
+        let h = size.height
         let toast = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: Int(w), height: Int(h)),
             styleMask: [.nonactivatingPanel, .borderless],
@@ -3245,6 +3301,8 @@ class ShortcutReminderController: NSObject, NSWindowDelegate {
     private func updateNotificationContent() {
         guard let contentView = notificationPanel?.contentView,
               let notification = activeNotification else { return }
+        // The same panel is reused for compact alerts and larger join cards.
+        notificationPanel?.setContentSize(notification.size(scale: gOverlayScale))
         let view = OverlayNotificationView(
             notification: notification,
             scale: gOverlayScale,

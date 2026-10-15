@@ -547,6 +547,32 @@ private func testLocalizedDisclosure() {
     expect(brand?.1 == "localized right-click", "right-click hint was not translated")
 }
 
+/// Layout follows the typed action, including localized labels. It must not
+/// enlarge unrelated notifications or change the payload sent back to Rust.
+private func testMeetingJoinNotification() {
+    let json = """
+    {"id":"calendar","title":"localized title","body":"Weekly sync","autoDismissMs":30000,"actions":[{"id":"join","label":"Rejoindre et prendre des notes","type":"meeting_join","url":"https://meet.google.com/example","primary":true},{"id":"hd","label":"+ HD","type":"api"}]}
+    """
+    guard let meeting = OverlayNotification.parse(json) else {
+        expect(false, "valid join notification was rejected")
+        return
+    }
+    expect(meeting.isMeetingJoin, "localized join action needs the larger card")
+    expect(meeting.autoDismissMs == 30000, "join timeout must be preserved")
+    let action = try! JSONSerialization.jsonObject(with: Data(meeting.actions[0].payload.utf8)) as! [String: Any]
+    expect(action["type"] as? String == "meeting_join", "join action type changed")
+    expect(action["url"] as? String == "https://meet.google.com/example", "join URL changed")
+    let ordinary = OverlayNotification.parse(json.replacingOccurrences(of: "meeting_join", with: "deeplink"))!
+    expect(!ordinary.isMeetingJoin, "non-join alert must remain compact")
+    for scale: CGFloat in [1, 1.5, 2] {
+        let size = meeting.size(scale: scale)
+        expect(size.width > ordinary.size(scale: scale).width, "join card needs more text width")
+        expect(size.height >= 3 * ordinary.size(scale: scale).height, "join card needs room for separate actions")
+        let y = overlayAttachmentY(pill: NSRect(x: 500, y: 1030, width: 22, height: 16), height: size.height, gap: 4, stacked: 150, disclosureDown: true, visible: visible, edgeInset: 4)
+        expect(y >= visible.minY && y + size.height <= visible.maxY, "join card must stay on screen at scale \(scale)")
+    }
+}
+
 @main
 struct ShortcutReminderTests {
     static func main() {
@@ -566,6 +592,7 @@ struct ShortcutReminderTests {
         testTieBreaksToCurrent()
         testAttachmentStacking()
         testAttachmentStaysOnScreen()
+        testMeetingJoinNotification()
         testWireContract()
         testShortcutGlyphs()
         testLocalizedDisclosure()
