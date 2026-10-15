@@ -28,6 +28,9 @@ test("process and setup failures cannot prove a regression or count as scored fa
     git("commit", "-qam", "Synthetic reference state");
     const fix = git("rev-parse", "HEAD");
     const controls = [
+      { id: "baseline-vitest-transform", baseline: "error", oracle: "pass", valid: false },
+      { id: "reference-vitest-transform", baseline: "fail", oracle: "error", valid: false },
+      { id: "vitest-transform-quoted-assertion", baseline: "fail", oracle: "pass", valid: true },
       { id: "baseline-playwright-load", baseline: "error", oracle: "pass", valid: false },
       { id: "reference-playwright-export", baseline: "fail", oracle: "error", valid: false },
       { id: "baseline-playwright-export-ansi", baseline: "error", oracle: "pass", valid: false },
@@ -97,6 +100,12 @@ import assert from "node:assert/strict";
 const broken = readFileSync("state.txt", "utf8") === "broken";
 const id = process.env.SCREENPIPE_EVAL_CASE_ID;
 const affected = id.startsWith("baseline-") ? broken : !broken;
+if ((id.includes("vitest-transform") && affected && id !== "vitest-transform-quoted-assertion") || (id === "vitest-transform-quoted-assertion" && broken)) {
+  process.stdout.write(" Test Files  1 failed (1)\\n      Tests  " + (id === "vitest-transform-quoted-assertion" ? "1 failed (1)" : "no tests") + "\\n");
+  process.stderr.write("Failed Suites 1\\nError: Transform failed with 1 error:\\n/synthetic/source.ts:2:5: ERROR: Unexpected token\\n");
+  if (id === "vitest-transform-quoted-assertion") process.stderr.write("AssertionError: actual differs\\n");
+  process.exit(1);
+}
 if (((id === "baseline-playwright-load" || id === "reference-playwright-export" || id === "baseline-playwright-export-ansi") && affected) ||
     (["playwright-quoted-assertion", "playwright-partial-run", "playwright-incomplete-diagnostic"].includes(id) && broken) || id === "both-pass-playwright-diagnostic") {
   let output = "Running 7 tests using 1 worker\\n";
@@ -200,7 +209,7 @@ else if (id === "baseline-syntax" && affected) {
   assert.fail("\\nError [ERR_MODULE_NOT_FOUND]: quoted diagnostic\\nSyntaxError: quoted diagnostic\\n    at quotedFixture");
 } else if (id === "both-pass-diagnostic-words") {
   console.error("Cannot find module; SyntaxError; command not found are fixture words");
-} else if ((id === "reference-vitest-resolve" || id === "reference-vitest-alias" || id === "reference-vitest-postcss" || id === "reference-rust-compile" || id === "reference-vitest-bun-build") && broken) assert.fail("synthetic broken behavior");
+} else if ((id === "reference-vitest-transform" || id === "reference-vitest-resolve" || id === "reference-vitest-alias" || id === "reference-vitest-postcss" || id === "reference-rust-compile" || id === "reference-vitest-bun-build") && broken) assert.fail("synthetic broken behavior");
 else process.exit(id === "intended-failure" && broken ? 1 : 0);
 `);
     const manifest = join(repo, "cases.json");
@@ -301,4 +310,16 @@ test("Vitest collection classification preserves executed failures and requires 
     expect(classifyGraderError({ ...collection, stderr })).toBeNull();
   }
   expect(classifyGraderError({ ...collection, status: 0 })).toBeNull();
+});
+
+test("Vitest transform diagnostics require unexecuted failure evidence", async () => {
+  const {classifyGraderError}=await import("./grader-outcome.mjs");
+  const error={status:1,signal:null,stdout:" Test Files  1 failed (1)\n      Tests  no tests\n",stderr:"Failed Suites 1\nError: Transform failed with 1 error:\n/synthetic/source.ts:2:5: ERROR: Unexpected token\n"};
+  expect(classifyGraderError(error)).toBe("vitest_transform_error");
+  expect(classifyGraderError({...error,stdout:error.stdout.replace("no tests","3 passed (3)")})).toBe("vitest_transform_error");
+  for(const summary of ["1 failed (1)","1 failed | 3 passed (4)","no tests\n      Tests  1 failed (1)"])
+    expect(classifyGraderError({...error,stdout:error.stdout.replace("no tests",summary)})).toBeNull();
+  for(const stderr of ["Failed Suites 1\nError: Transform failed with 1 error:\n",error.stderr.replace("Failed Suites 1", ""),error.stderr+"AssertionError: real assertion\n"])
+    expect(classifyGraderError({...error,stderr})).toBeNull();
+  expect(classifyGraderError({...error,status:0})).toBeNull();
 });

@@ -1,5 +1,18 @@
 # Coding-agent regression evals
 
+`app-browser-native-consent-navigation` mounts the actual browser sidebar,
+event hook and ownership helpers with synthetic native and persistence ports.
+Twelve outcomes cover native and compatible event formats, default/user tabs,
+explicit allow/decline, pending-state effects and stale/foreign refusals.
+The parent fails four native-event outcomes and preserves eight; the historical
+fix and current component pass twelve. Run
+`bun test evals/coding-agent/calibrate-browser-consent.test.js` for calibration.
+Hidden fixtures and dependency links appear only at grading. This does not test
+native cookie extraction, webview geometry, execution isolation or model trials.
+The associated shared-runner fix classifies failed Vitest source transforms as
+setup errors only with a non-failure test summary and compiler diagnostics;
+executed assertion failures retain their behavioral classification.
+
 `app-historical-analytics-false-persistence` mounts the historical settings hook
 with synthetic native storage. Fourteen outcomes cover explicit false, zero and
 empty strings, accepted updates across remount, missing/null defaults, ordinary
