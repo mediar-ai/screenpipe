@@ -36,7 +36,8 @@ pub fn stage(name: &str) -> Option<usize> {
 }
 pub fn task_at(path: &Path) -> Option<&str> {
     path.file_name().and_then(|n| n.to_str()).filter(|n| {
-        (stage(n).is_some() || super::workspace::is_task(n) || *n == "workflow-share") && path.join("pipe.md").is_file()
+        (stage(n).is_some() || super::workspace::is_task(n) || *n == "workflow-share")
+            && path.join("pipe.md").is_file()
     })
 }
 
