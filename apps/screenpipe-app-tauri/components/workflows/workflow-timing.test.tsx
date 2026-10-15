@@ -38,7 +38,7 @@ describe("workflow elapsed timing", () => {
   it("keeps step timing tied to its source on reorder and hides stale timing while editing", async () => {
     sessionStorage.clear();
     render(<WorkflowEditor workflow={workflow} save={() => new Promise(() => {})} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "Move step 1" }), { key: "ArrowDown", altKey: true });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Step 1 actions" }), { key: "ArrowDown", altKey: true });
     const moved = screen.getByRole("button", { name: "Timing for step 2" });
     fireEvent.mouseEnter(moved);
     expect(screen.getByRole("tooltip")).toHaveTextContent("5m on average");
