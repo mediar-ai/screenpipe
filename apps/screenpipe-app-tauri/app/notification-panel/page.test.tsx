@@ -15,6 +15,8 @@ const bridge = vi.hoisted(() => ({
   receive: (_event: { payload: string }) => {},
   copy: vi.fn().mockResolvedValue(undefined),
   hide: vi.fn().mockResolvedValue(undefined),
+  show: vi.fn().mockResolvedValue(undefined),
+  execute: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn((_name, callback) => {
@@ -27,6 +29,7 @@ vi.mock("@/lib/utils/tauri", () => ({
   commands: {
     copyTextToClipboard: bridge.copy,
     hideNotificationPanel: bridge.hide,
+    showNotificationPanel: bridge.show,
   },
 }));
 vi.mock("posthog-js", () => ({ default: { capture: vi.fn() } }));
@@ -42,7 +45,7 @@ vi.mock("@/components/markdown", () => ({
   screenpipeViewerPathFromHref: vi.fn(),
 }));
 vi.mock("@/lib/notifications/actions", () => ({
-  executeNotificationAction: vi.fn(),
+  executeNotificationAction: bridge.execute,
 }));
 
 const payload = {
@@ -146,5 +149,33 @@ describe("compact notification panel", () => {
     );
     act(() => vi.advanceTimersByTime(1200));
     expect(bridge.hide).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("meeting join notification delivery", () => {
+  const meeting = {
+    ...payload, type: "meeting", title: "meeting starting in 1 min",
+    actions: [
+      { type: "meeting_join", id: "join", label: "join and take notes", url: "https://meet.google.com/example", primary: true },
+      { type: "api", id: "hd", label: "+ HD", url: "/capture/hd/start", method: "POST", body: { boundTo: "prewarm_pending" } },
+    ],
+  };
+  it("renders the split card and dispatches join + HD from the incoming notification", async () => {
+    render(<NotificationPanelPage />);
+    await deliver(meeting);
+    fireEvent.click(screen.getByRole("button", { name: "Join and take notes with HD screen recording" }));
+    await waitFor(() => expect(bridge.hide).toHaveBeenCalledTimes(1));
+    expect(bridge.execute).toHaveBeenCalledWith(expect.objectContaining({ type: "meeting_join", url: meeting.actions[0].url, screen_detail: { boundTo: "prewarm_pending" } }), expect.anything());
+    expect(screen.queryByRole("button", { name: "Notification options" })).toBeNull();
+  });
+  it("shows capture failure only after closing the join card", async () => {
+    bridge.execute.mockImplementationOnce(async (_action, context) => context.onScreenDetailError());
+    render(<NotificationPanelPage />);
+    await deliver(meeting);
+    fireEvent.click(screen.getByRole("button", { name: "Join and take notes with HD screen recording" }));
+    await waitFor(() => expect(bridge.show).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(bridge.show.mock.calls[0][0])).toMatchObject({ type: "warning", title: "Screen detail could not start" });
+    expect(bridge.hide.mock.invocationCallOrder[0]).toBeLessThan(bridge.show.mock.invocationCallOrder[0]);
   });
 });
