@@ -327,7 +327,7 @@ impl AudioStream {
                 let original_rate = config.sample_rate().0;
                 info!(
                     device = %device,
-                    "screenpipe-audio: enabling VoiceProcessingIO (AEC) on default microphone"
+                    "screenpipe-audio: requesting VoiceProcessingIO (AEC) on default microphone"
                 );
                 config = cpal_audio_device.default_input_config().map_err(|e| {
                     anyhow!(
@@ -394,12 +394,32 @@ impl AudioStream {
         macos_input_vpio: bool,
     ) -> Result<tokio::task::JoinHandle<()>> {
         let device_name = device.name()?;
-        #[cfg(target_os = "macos")]
-        let mut use_vpio = macos_input_vpio;
         #[cfg(target_os = "windows")]
         let use_aec = windows_input_aec;
 
         Ok(tokio::task::spawn_blocking(move || {
+            // Own the process-wide VPIO slot on the native worker, before
+            // construction and until after pause/drop. An async timeout cannot
+            // cancel native work or allow another VPIO unit to overlap it.
+            #[cfg(target_os = "macos")]
+            let _vpio_lease = macos_input_vpio
+                .then(|| {
+                    super::vpio_lifecycle::VpioLease::try_acquire(
+                        &super::vpio_lifecycle::VPIO_OWNER,
+                    )
+                })
+                .flatten();
+            #[cfg(target_os = "macos")]
+            let macos_input_vpio = {
+                if macos_input_vpio && _vpio_lease.is_none() {
+                    warn!(device = %device_name,
+                        "another VoiceProcessingIO worker still owns native audio; using HAL for this microphone");
+                }
+                _vpio_lease.is_some()
+            };
+            #[cfg(target_os = "macos")]
+            let mut use_vpio = macos_input_vpio;
+
             // Primary attempt: the "best" config get_cpal_device_and_config
             // picked (highest sample rate × most channels from
             // supported_input_configs). On Windows 11 24H2 WASAPI sometimes
@@ -684,6 +704,29 @@ impl AudioStream {
             is_sck_backed: false,
         };
         (stream, tx_arc)
+    }
+
+    #[cfg(all(test, not(all(target_os = "linux", feature = "pulseaudio"))))]
+    pub(crate) fn with_blocked_teardown_for_test(
+        device: Arc<AudioDevice>,
+    ) -> (Self, mpsc::Sender<()>) {
+        let (mut stream, _tx) = Self::from_sender_for_test(device, 48_000, 1);
+        let (control_tx, control_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        stream.stream_control = control_tx;
+        stream.stream_thread = Some(Arc::new(tokio::sync::Mutex::new(Some(
+            tokio::task::spawn_blocking(move || {
+                let _ = release_rx.recv();
+                if let Ok(StreamControl::Stop {
+                    _response: response,
+                    ..
+                }) = control_rx.recv()
+                {
+                    let _ = response.send(());
+                }
+            }),
+        ))));
+        (stream, release_tx)
     }
 
     /// Build an AudioStream that plays back a wav (or any symphonia-decodable)

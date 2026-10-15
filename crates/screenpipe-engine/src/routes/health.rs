@@ -523,9 +523,9 @@ fn input_device_is_available(device_name: &str, clamshell_mode: bool) -> bool {
 }
 
 /// Classify the raw audio capture status from health signals. Pure so it can be
-/// unit-tested in isolation. `stream_timeout_recent` must mean a recent timeout
-/// that the same current device has not recovered from, NOT a cumulative count
-/// or aggregate activity from some other stream.
+/// unit-tested in isolation. `capture_failed` means a recent unrecovered timeout
+/// or a retained native teardown failure for a selected device, never a
+/// cumulative error count or aggregate activity from some other stream.
 #[allow(clippy::too_many_arguments)]
 fn classify_audio_status(
     audio_disabled: bool,
@@ -534,7 +534,7 @@ fn classify_audio_status(
     audio_waiting_for_meeting: bool,
     audio_never_captured: bool,
     has_input_device: bool,
-    stream_timeout_recent: bool,
+    capture_failed: bool,
     global_audio_active: bool,
     last_audio_ts: u64,
     now_ts: u64,
@@ -552,6 +552,11 @@ fn classify_audio_status(
         "meeting_detector_unavailable"
     } else if audio_waiting_for_meeting {
         "waiting_for_meeting"
+    } else if capture_failed {
+        // Includes a selected stream whose native teardown is still stuck.
+        // Its recording handle may already be gone. Neither that absence nor
+        // a healthy output stream turns the capture failure into benign idle.
+        "active_no_data"
     } else if !has_input_device {
         // Audio is on but there is no microphone to capture from — expected
         // idle, not a failure. Distinct from "not_started" so /health stays 200
@@ -561,11 +566,6 @@ fn classify_audio_status(
         "no_input_device"
     } else if audio_never_captured {
         "not_started"
-    } else if stream_timeout_recent {
-        // The watchdog fired on a current device and that same device has not
-        // produced usable audio since. This remains a failure even if another
-        // microphone or system-output stream is healthy.
-        "active_no_data"
     } else if global_audio_active {
         "ok"
     } else if last_audio_ts == 0 {
@@ -1598,11 +1598,13 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     // from. The old global timestamp let a healthy output stream mask a dead
     // mic, while the older cumulative counter pinned recovered devices forever.
     let now_ts = now.timestamp().max(0) as u64;
-    let stream_timeout_recent = has_unrecovered_recent_stream_timeout(
-        &state.audio_metrics.per_device_stream_timeouts_snapshot(),
-        &current_device_capture_at,
-        now_ts,
-    );
+    let failed_capture_devices = state.audio_manager.capture_failure_devices().await;
+    let capture_failed = !failed_capture_devices.is_empty()
+        || has_unrecovered_recent_stream_timeout(
+            &state.audio_metrics.per_device_stream_timeouts_snapshot(),
+            &current_device_capture_at,
+            now_ts,
+        );
 
     // Only report the intentional pause after the manager has actually
     // released every stream. During the short teardown transition (or if a
@@ -1617,7 +1619,7 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         audio_waiting_for_meeting,
         audio_never_captured,
         has_input_device,
-        stream_timeout_recent,
+        capture_failed,
         global_audio_active,
         last_audio_ts,
         now_ts,
@@ -1662,9 +1664,10 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     );
 
     // Format device statuses as a string for a more detailed view
-    let device_status_details = if !device_statuses.is_empty() {
+    let device_status_details = if !device_statuses.is_empty() || !failed_capture_devices.is_empty()
+    {
         let now_secs = now.timestamp() as u64;
-        let device_details: Vec<String> = device_statuses
+        let mut device_details: Vec<String> = device_statuses
             .iter()
             .map(|(name, active, last_capture)| {
                 format!(
@@ -1676,6 +1679,12 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
             })
             .collect();
 
+        device_details.extend(failed_capture_devices.iter().map(|device| {
+            format!(
+                "{}: capture failed (native teardown did not finish)",
+                device
+            )
+        }));
         Some(device_details.join(", "))
     } else {
         None
@@ -3220,6 +3229,25 @@ mod tests {
             1_010, // now_ts
             60,    // threshold_secs
         )
+    }
+
+    #[test]
+    fn failed_mic_with_live_output_is_not_healthy() {
+        // The recording handle was removed, but the selected native worker is
+        // still stuck. Fresh system output must not make the mic loss benign.
+        assert_eq!(
+            classify_audio_status(
+                false, false, false, false, false, false, true, true, 999, 1000, 60,
+            ),
+            "active_no_data"
+        );
+        // A real machine without a mic and without a failure remains healthy.
+        assert_eq!(
+            classify_audio_status(
+                false, false, false, false, false, false, false, true, 999, 1000, 60,
+            ),
+            "no_input_device"
+        );
     }
 
     #[test]
