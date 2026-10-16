@@ -3761,7 +3761,6 @@ pub(crate) mod tests {
             }
         }
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
-        let _mode = UploadModeEnvGuard::clear();
         let dir = TempDir::new().unwrap();
         let server = wiremock::MockServer::start().await;
         let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
@@ -3786,14 +3785,13 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn privacy_derived_streams_upload_ready_records_and_keep_failed_ack_pending() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
-        let _mode = UploadModeEnvGuard::clear();
         crate::enterprise_policy::set_sync_streams(
-            false,
             true,
-            false,
-            false,
-            false,
-            false,
+            true,
+            true,
+            true,
+            true,
+            true,
             "full".into(),
             "off".into(),
         );
@@ -4504,6 +4502,7 @@ pub(crate) mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn sync_diagnostic_reports_failed_tick_independently_and_retries_after_restart() {
         let _env_lock = ENV_LOCK.lock().unwrap();
+        let _policy_guard = crate::enterprise_policy::sync_streams_test_lock();
         let _mode_env = UploadModeEnvGuard::clear();
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("GET"))
