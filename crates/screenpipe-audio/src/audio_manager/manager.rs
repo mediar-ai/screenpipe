@@ -2633,8 +2633,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn idle_audio_handlers_cancel_and_restart_without_stealing_queued_capture() {
         let tmp = tempfile::tempdir().unwrap();
+        // Match the recorder's file-backed WAL database: a shared in-memory
+        // database can reject this concurrent polling reader with SQLITE_LOCKED.
+        let db_path = tmp.path().join("index.sqlite");
         let db = Arc::new(
-            DatabaseManager::new("sqlite::memory:", Default::default())
+            DatabaseManager::new(db_path.to_str().unwrap(), Default::default())
                 .await
                 .unwrap(),
         );
