@@ -193,6 +193,23 @@ mod imp {
         updated_at: String,
     }
 
+    async fn local_api_error(response: reqwest::Response, url: &str) -> EnterpriseSyncError {
+        let status = response.status();
+        let cause = response
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|body| {
+                body.get("error")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            });
+        EnterpriseSyncError::LocalApi(match cause {
+            Some(cause) => format!("GET {url} -> {status}: {cause}"),
+            None => format!("GET {url} -> {status}"),
+        })
+    }
+
     struct StorageExport {
         db: Arc<screenpipe_db::DatabaseManager>,
         token: screenpipe_db::storage::StorageReadToken,
@@ -214,17 +231,33 @@ mod imp {
     }
 
     #[async_trait::async_trait]
-    impl crate::enterprise::sync::ExportAdmission for StorageExport {
-        async fn admit(
+    impl crate::enterprise::sync::ExportFilter for StorageExport {
+        async fn filter(
             &self,
-        ) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, EnterpriseSyncError> {
-            self.token
-                .admit(&self.db.pool)
-                .await
-                .map_err(|error| EnterpriseSyncError::Storage {
-                    operation: "admit export",
+            rows: &mut ee_sync::ExportRows<'_>,
+            local: &dyn LocalApiClient,
+        ) -> Result<ee_sync::ExportFilterReport, EnterpriseSyncError> {
+            // SQLite has no hybrid revocation counter. Validate its selected
+            // rows directly instead of treating a no-op token as freshness.
+            if self.db.storage_mode() == screenpipe_db::storage::StorageMode::Sqlite {
+                return rows.refresh(local).await;
+            }
+            match self.token.admit(&self.db.pool).await {
+                Ok(guard) => {
+                    drop(guard);
+                    Ok(Default::default())
+                }
+                Err(error) if screenpipe_db::storage::is_revision_change(&error) => {
+                    // A changed revision is a request to filter the selected
+                    // rows, not an upload failure. Reads return the current
+                    // contents of survivors, including applied redactions.
+                    rows.refresh(local).await
+                }
+                Err(error) => Err(EnterpriseSyncError::Storage {
+                    operation: "filter export",
                     cause: error.to_string(),
-                })
+                }),
+            }
         }
     }
 
@@ -232,7 +265,7 @@ mod imp {
     impl LocalApiClient for ScreenpipeLocalClient {
         async fn begin_export(
             &self,
-        ) -> Result<Option<Box<dyn crate::enterprise::sync::ExportAdmission>>, EnterpriseSyncError>
+        ) -> Result<Option<Box<dyn crate::enterprise::sync::ExportFilter>>, EnterpriseSyncError>
         {
             let state = self.app.state::<crate::recording::RecordingState>();
             let db = state
@@ -352,11 +385,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -424,11 +453,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -469,11 +494,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -554,11 +575,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -629,11 +646,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    search_url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &search_url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -738,11 +751,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalMemoriesResponse = resp
                 .json()
@@ -787,11 +796,7 @@ mod imp {
                 .await
                 .map_err(|error| EnterpriseSyncError::LocalApi(error.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalFeedbackResponse = resp
                 .json()
@@ -2026,19 +2031,35 @@ mod imp {
         }
 
         #[tokio::test]
-        async fn export_upload_proceeds_during_capture_and_rejects_deleted_data() {
+        async fn export_local_read_change_preserves_the_source_cause() {
+            let server = wiremock::MockServer::start().await;
+            wiremock::Mock::given(wiremock::matchers::path("/search"))
+                .respond_with(wiremock::ResponseTemplate::new(503).set_body_json(
+                    serde_json::json!({"error":"frame storage: read revision changed; retry the complete query"})
+                )).mount(&server).await;
+            let url = format!("{}/search", server.uri());
+            let response = reqwest::Client::new().get(&url).send().await.unwrap();
+            let error = super::local_api_error(response, &url).await;
+            assert!(screenpipe_db::storage::is_revision_change_message(
+                &error.to_string()
+            ));
+        }
+
+        #[tokio::test]
+        async fn export_upload_filters_deleted_rows_and_refreshes_redactions() {
             use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
-            use crate::enterprise::sync::{self, ExportAdmission};
+            use crate::enterprise::sync::{self, ExportFilter};
             use std::sync::Arc;
             struct CapturingLocal {
                 db: Arc<screenpipe_db::DatabaseManager>,
-                delete_selected: bool,
+                change: u8,
+                selected: std::sync::atomic::AtomicBool,
             }
             #[async_trait::async_trait]
             impl LocalApiClient for CapturingLocal {
                 async fn begin_export(
                     &self,
-                ) -> Result<Option<Box<dyn ExportAdmission>>, EnterpriseSyncError> {
+                ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
                     Ok(Some(Box::new(StorageExport::begin(self.db.clone()).await?)))
                 }
                 async fn fetch_frames_since(
@@ -2047,30 +2068,52 @@ mod imp {
                     _: u32,
                     _: u32,
                 ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    let first = !self
+                        .selected
+                        .swap(true, std::sync::atomic::Ordering::SeqCst);
+                    let ids = if first { vec![1, 2] } else { vec![1, 2, 3] };
                     let payloads = self
                         .db
-                        .frame_payloads(&[1], screenpipe_db::storage::Projection::All)
+                        .frame_payloads(&ids, screenpipe_db::storage::Projection::All)
                         .await
                         .unwrap();
-                    let text = payloads.get(&1).unwrap().full_text.clone();
-                    // Capture continues after selecting the outgoing page.
-                    self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-09','new capture')").await.unwrap();
-                    if self.delete_selected {
-                        self.db
-                            .execute_raw_sql_write("DELETE FROM frames WHERE id=1")
-                            .await
-                            .unwrap();
+                    let rows = payloads
+                        .into_iter()
+                        .map(|(id, payload)| FrameRow {
+                            accessibility_tree: None,
+                            frame_id: id,
+                            timestamp: "2026-10-09T00:00:00Z".into(),
+                            app_name: None,
+                            window_name: None,
+                            browser_url: None,
+                            text: payload.full_text,
+                        })
+                        .collect();
+                    if first {
+                        // Recording remains durable while this outgoing page is selected.
+                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2026-10-09','new capture')").await.unwrap();
+                        match self.change {
+                            1 => {
+                                self.db
+                                    .execute_raw_sql_write("DELETE FROM frames WHERE id=1")
+                                    .await
+                                    .unwrap();
+                            }
+                            2 => {
+                                self.db.execute_raw_sql_write("UPDATE frames SET full_text='[REDACTED]',full_text_redacted_at=1 WHERE id=1").await.unwrap();
+                            }
+                            3 => {
+                                self.db
+                                    .execute_raw_sql_write("DELETE FROM frames WHERE id IN (1,2)")
+                                    .await
+                                    .unwrap();
+                            }
+                            _ => {}
+                        }
                     }
-                    Ok(vec![FrameRow {
-                        accessibility_tree: None,
-                        frame_id: 1,
-                        timestamp: "2026-10-09T00:00:00Z".into(),
-                        app_name: None,
-                        window_name: None,
-                        browser_url: None,
-                        text,
-                    }])
+                    Ok(rows)
                 }
+
                 async fn fetch_audio_since(
                     &self,
                     _: Option<&str>,
@@ -2080,64 +2123,74 @@ mod imp {
                     Ok(Vec::new())
                 }
             }
-            for delete_selected in [false, true] {
+            for (change, hybrid) in (0..4).flat_map(|change| [(change, false), (change, true)]) {
                 let dir = tempfile::tempdir().unwrap();
-                let db = Arc::new(
+                let db = Arc::new(if hybrid {
+                    // Synthetic export fixture; disk admission is covered by
+                    // the DB tests, independently of developer disk capacity.
+                    let mut options = screenpipe_db::storage::MigrationOptions::default();
+                    options.budget.disk_reserve_bytes = 0;
                     screenpipe_db::DatabaseManager::new_hybrid(
                         dir.path(),
                         Default::default(),
+                        options,
+                    )
+                    .await
+                    .unwrap()
+                } else {
+                    screenpipe_db::DatabaseManager::new(
+                        dir.path().join("db.sqlite").to_str().unwrap(),
                         Default::default(),
                     )
                     .await
-                    .unwrap(),
-                );
-                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload')").await.unwrap();
+                    .unwrap()
+                });
+                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload'),(2,'2026-10-09','surviving record')").await.unwrap();
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
                     .respond_with(wiremock::ResponseTemplate::new(200))
-                    .expect(if delete_selected { 0 } else { 1 })
+                    .expect(if change == 3 { 0 } else { 1 })
                     .mount(&server)
                     .await;
                 let cfg = sync::tests::test_cfg(&dir, format!("{}/ingest", server.uri()));
                 let mut cursor = sync::Cursor::default();
                 let local = CapturingLocal {
                     db: db.clone(),
-                    delete_selected,
+                    change,
+                    selected: std::sync::atomic::AtomicBool::new(false),
                 };
                 let result =
                     sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new()).await;
-                if delete_selected {
-                    let error = result.unwrap_err();
-                    assert!(matches!(
-                        &error,
-                        EnterpriseSyncError::Storage {
-                            operation: "admit export",
-                            ..
-                        }
-                    ));
-                    assert!(error.to_string().contains("read revision changed"));
+                let expected = match change {
+                    1 => 1,
+                    3 => 0,
+                    _ => 2,
+                };
+                assert_eq!(result.unwrap().frames, expected);
+                assert_eq!(
+                    sync::Cursor::load(&cfg.cursor_path)
+                        .last_frame_ts
+                        .as_deref(),
+                    Some("2026-10-09T00:00:00Z")
+                );
+                let requests = server.received_requests().await.unwrap();
+                if change != 3 {
+                    let body = String::from_utf8_lossy(&requests[0].body);
+                    assert!(body.contains("surviving record"));
                     assert!(
-                        !cfg.cursor_path.exists(),
-                        "revoked data must not be checkpointed"
+                        !body.contains("new capture"),
+                        "new rows belong to the next page"
                     );
-                } else {
-                    assert_eq!(result.unwrap().frames, 1);
-                    assert_eq!(
-                        sync::Cursor::load(&cfg.cursor_path)
-                            .last_frame_ts
-                            .as_deref(),
-                        Some("2026-10-09T00:00:00Z")
-                    );
-                    let requests = server.received_requests().await.unwrap();
-                    assert!(String::from_utf8_lossy(&requests[0].body).contains("pending upload"));
+                    assert_eq!(body.contains("pending upload"), change == 0);
+                    assert_eq!(body.contains("[REDACTED]"), change == 2);
                 }
                 server.verify().await;
                 let captured = db
-                    .frame_payloads(&[2], screenpipe_db::storage::Projection::All)
+                    .frame_payloads(&[3], screenpipe_db::storage::Projection::All)
                     .await
                     .unwrap();
                 assert_eq!(
-                    captured.get(&2).unwrap().full_text.as_deref(),
+                    captured.get(&3).unwrap().full_text.as_deref(),
                     Some("new capture"),
                     "upload admission must preserve the new recording"
                 );

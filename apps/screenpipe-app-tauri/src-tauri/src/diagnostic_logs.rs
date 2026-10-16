@@ -302,8 +302,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let report = crate::enterprise::sync::tests::check_sync_retry_failure(dir.path()).await;
         assert!(report.contains("enterprise upload storage prepare export failed"));
+        assert!(report.contains("enterprise upload storage filter export failed"));
         assert!(report.contains("frame storage: payload read deadline exceeded"));
-        assert!(report.contains("frame storage: read revision changed"));
+        assert!(report.contains("database disk image is malformed"));
         assert!(report.contains("pending work retained, retrying in 300s"));
         assert!(!report.contains("backing off 3600s"));
     }

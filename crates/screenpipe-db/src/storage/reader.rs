@@ -123,6 +123,9 @@ impl DatabaseManager {
     /// the duration of a network upload. Final admission still rejects any
     /// deletion/privacy change committed since this single-statement read.
     pub async fn storage_export_token(&self) -> Result<StorageReadToken, sqlx::Error> {
+        if self.pool.is_closed() {
+            return Err(sqlx::Error::PoolClosed);
+        }
         let Some(storage) = &self.storage else {
             return self.storage_read_token().await;
         };
@@ -287,8 +290,15 @@ impl DatabaseManager {
     }
 }
 
-fn is_revision_change(error: &sqlx::Error) -> bool {
-    matches!(error, sqlx::Error::Protocol(message) if message.starts_with("frame storage: read revision changed;"))
+const REVISION_CHANGE_PREFIX: &str = "frame storage: read revision changed;";
+
+/// Recognize invalidated reads after the cause crosses an API/error wrapper.
+pub fn is_revision_change_message(message: &str) -> bool {
+    message.contains(REVISION_CHANGE_PREFIX)
+}
+
+pub fn is_revision_change(error: &sqlx::Error) -> bool {
+    matches!(error, sqlx::Error::Protocol(message) if message.starts_with(REVISION_CHANGE_PREFIX))
 }
 
 impl HybridStorage {
