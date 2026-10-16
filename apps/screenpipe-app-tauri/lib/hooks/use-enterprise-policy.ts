@@ -917,9 +917,8 @@ export function useEnterprisePolicyRuntime() {
       }
 
       // Push per-stream sync toggles to Rust so the enterprise sync task
-      // gates each upload kind. Existing text/event streams default on.
-      // Parsed app data is a new, richer data class and fails closed when an
-      // older server does not return the flag.
+      // gates each upload kind. Text/event streams and parsed app data default
+      // on, including when an older server omits the flag. Preserve opt-outs.
       try {
         const streams = (data.syncStreams ?? {}) as Record<string, unknown>;
         const pickBool = (key: string): boolean =>
@@ -944,7 +943,7 @@ export function useEnterprisePolicyRuntime() {
           "enterprise setSyncStreams",
           commands.setSyncStreams(
             pickBool("frames"),
-            streams.parsed === true,
+            pickBool("parsed"),
             pickBool("audio"),
             pickBool("ui_events"),
             pickBool("memories"),
