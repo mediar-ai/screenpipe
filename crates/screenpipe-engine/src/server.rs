@@ -612,6 +612,7 @@ impl SCServer {
     async fn create_router_inner(&self) -> Router {
         let api_request_count = Arc::new(AtomicUsize::new(0));
         let analytics_enabled = analytics::is_enabled();
+        let mut telemetry_tasks = crate::telemetry_tasks::TelemetryTasks::default();
         let api_usage_counter = analytics_enabled.then(|| api_request_count.clone());
 
         // Recording-coverage sampler: accumulates working-time-vs-healthy-capture
@@ -648,7 +649,7 @@ impl SCServer {
 
             // Spawn periodic vision pipeline metrics reporter (every 60 seconds)
             let metrics_for_posthog = self.vision_metrics.clone();
-            tokio::spawn(async move {
+            telemetry_tasks.spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(60));
                 loop {
                     interval.tick().await;
@@ -703,7 +704,7 @@ impl SCServer {
             // Spawn periodic audio pipeline metrics reporter (every 60 seconds)
             let audio_metrics_for_posthog = self.audio_metrics.clone();
             let audio_manager_for_posthog = self.audio_manager.clone();
-            tokio::spawn(async move {
+            telemetry_tasks.spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(60));
                 loop {
                     interval.tick().await;
@@ -1540,6 +1541,9 @@ impl SCServer {
                 }),
             )
             .layer(Extension(crate::routes::workflows::WorkflowCatalogSource(self.workflow_catalog_dir.clone())))
+            // Router clones keep this generation alive; the last drop cancels
+            // its reporters, including on failed startup or server restart.
+            .layer(Extension(Arc::new(telemetry_tasks)))
             .with_state(app_state.clone())
             .layer(axum::middleware::from_fn(crate::search_only::history_only))
             .layer(axum::middleware::from_fn_with_state(
