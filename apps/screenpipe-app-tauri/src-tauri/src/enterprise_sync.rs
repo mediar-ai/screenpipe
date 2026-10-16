@@ -1212,9 +1212,8 @@ mod imp {
             let response = api
                 .apply_auth(http.get(api.url("/health")))
                 .header("Cache-Control", "no-cache")
-                // Reuse the frontend heartbeat's existing two-second local
-                // health budget. Failure must not prevent seat enrollment.
-                .timeout(std::time::Duration::from_secs(2))
+                // Use the watcher's existing HTTP deadline. A failed health
+                // read must not prevent the following seat enrollment.
                 .send()
                 .await
                 .map_err(|error| format!("local health request: {error:?}"))?;
