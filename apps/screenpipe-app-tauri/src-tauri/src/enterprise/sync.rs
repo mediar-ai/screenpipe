@@ -1054,6 +1054,14 @@ async fn run_one_sync_inner(
         privacy_more |= local.prepare_release_exports(&cutoffs, PAGE_LIMIT).await?;
     }
     let export = local.begin_export().await?;
+    // Preparation can replace old copies, so admission starts afterward. Check
+    // the selected read mode again under that token: enabling protection before
+    // token creation must not leave this tick on the raw activity-store path.
+    if local.privacy_release_required().await? != protected {
+        return Err(EnterpriseSyncError::Configuration(
+            "privacy policy changed during export preparation; retry pending".into(),
+        ));
+    }
     if protected {
         for (kind, enabled) in protected_streams {
             if !enabled {
@@ -1285,6 +1293,14 @@ async fn run_one_sync_inner(
         request.retain_in_range(&mut feedback, |r| &r.updated_at)?;
     }
 
+    // A server restart/database replacement during the reads must not label a
+    // mixed batch with the old source's identity or advance its cursor.
+    if cursor.source_id.is_some() && local.upload_source_id().await? != cfg.device_id {
+        return Err(EnterpriseSyncError::Configuration(
+            "database changed during sync; retrying".into(),
+        ));
+    }
+
     if frames.is_empty()
         && audio.is_empty()
         && ui.is_empty()
@@ -1307,14 +1323,6 @@ async fn run_one_sync_inner(
             privacy_more,
             ..Default::default()
         });
-    }
-
-    // A server restart/database replacement during the reads must not label a
-    // mixed batch with the old source's identity or advance its cursor.
-    if cursor.source_id.is_some() && local.upload_source_id().await? != cfg.device_id {
-        return Err(EnterpriseSyncError::Configuration(
-            "database changed during sync; retrying".into(),
-        ));
     }
 
     let mut body = screenpipe_telemetry_wire::build_jsonl_with_semantic_streams(
@@ -3718,6 +3726,60 @@ pub(crate) mod tests {
             true,
             "off".into(),
             "all".into(),
+        );
+    }
+
+    #[tokio::test]
+    async fn privacy_enabled_during_export_preparation_retries_before_raw_reads() {
+        struct PolicyFlipLocal(std::sync::atomic::AtomicBool);
+        #[async_trait::async_trait]
+        impl LocalApiClient for PolicyFlipLocal {
+            async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                Ok(self.0.load(Ordering::SeqCst))
+            }
+            async fn begin_export(
+                &self,
+            ) -> Result<Option<Box<dyn ExportAdmission>>, EnterpriseSyncError> {
+                self.0.store(true, Ordering::SeqCst);
+                Ok(None)
+            }
+            async fn fetch_frames_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                panic!("raw reads must not start after protection turns on")
+            }
+            async fn fetch_audio_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                panic!("raw reads must not start after protection turns on")
+            }
+        }
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _mode = UploadModeEnvGuard::clear();
+        let dir = TempDir::new().unwrap();
+        let server = wiremock::MockServer::start().await;
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let error = run_one_sync(
+            &cfg,
+            &mut Cursor::default(),
+            &PolicyFlipLocal(Default::default()),
+            &reqwest::Client::new(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("privacy policy changed during export preparation"));
+        assert!(server.received_requests().await.unwrap().is_empty());
+        assert!(
+            !cfg.cursor_path.exists(),
+            "no delivery progress may be saved"
         );
     }
 
