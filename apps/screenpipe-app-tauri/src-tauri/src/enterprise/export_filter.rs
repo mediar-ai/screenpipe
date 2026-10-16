@@ -612,6 +612,7 @@ mod snapshot_refusal_tests {
                 memories: &mut vec![],
                 parsed: &mut vec![],
                 activities: &mut vec![],
+                starred: &mut vec![],
                 feedback: &mut vec![],
             }
             .refresh(&local)
