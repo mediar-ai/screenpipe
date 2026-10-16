@@ -39,12 +39,9 @@ pub(crate) async fn hydrate_frame_trees(
     .await
     .map_err(|e| EnterpriseSyncError::LocalApi(format!("prepare frame AX payloads: {e}")))??;
     for frame in frames {
-        frame.accessibility_tree = trees.remove(&frame.frame_id).ok_or_else(|| {
-            EnterpriseSyncError::LocalApi(format!(
-                "frame {} disappeared during AX export",
-                frame.frame_id
-            ))
-        })?;
+        // Keep the selected ID and scan boundary even if retention removed its
+        // payload. The final export filter drops it before serialization.
+        frame.accessibility_tree = trees.remove(&frame.frame_id).flatten();
     }
     Ok(())
 }
@@ -98,11 +95,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retained_tree_reaches_wire_and_missing_frames_fail() {
+    async fn retained_tree_reaches_wire_and_missing_frames_are_left_for_filtering() {
         for archived in [false, true] {
             let dir = tempfile::tempdir().unwrap();
             let db = if archived {
-                DatabaseManager::new_hybrid(dir.path(), Default::default(), Default::default())
+                // This tiny synthetic fixture tests export contents, not disk
+                // admission. Match the DB suite's fixture configuration.
+                let mut options = screenpipe_db::storage::MigrationOptions::default();
+                options.budget.disk_reserve_bytes = 0;
+                DatabaseManager::new_hybrid(dir.path(), Default::default(), options)
                     .await
                     .unwrap()
             } else {
@@ -144,9 +145,9 @@ mod tests {
                 "search"
             );
             assert!(frames[1].accessibility_tree.is_none());
-            assert!(hydrate_frame_trees(&db, &mut [row(3)], false)
-                .await
-                .is_err());
+            let mut missing = vec![row(3)];
+            hydrate_frame_trees(&db, &mut missing, false).await.unwrap();
+            assert!(missing[0].accessibility_tree.is_none());
             db.close().await;
         }
     }

@@ -19,7 +19,7 @@
 //!
 //! # Edge cases handled
 //!
-//! - **Empty batch** — skip POST, advance no cursor, retry next tick
+//! - **Empty batch** — skip POST; confirmed deletions still advance the scan boundary
 //! - **Network failure** — retain the cursor and retry on the normal sync cycle
 //! - **4xx auth failure** — use the signed-in employee account to fetch the
 //!   rotated device key, then retry without advancing the cursor
@@ -313,13 +313,23 @@ impl Cursor {
 /// inject a mock without spinning up the real server. Implemented in the
 /// desktop crate against `LocalApiContext`.
 #[async_trait::async_trait]
-pub trait ExportAdmission: Send + Sync {
-    async fn admit(&self) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, EnterpriseSyncError>;
+pub trait ExportFilter: Send + Sync {
+    /// Filter the selected records against their current source state before
+    /// serialization. A deletion removes that record, never the whole batch.
+    async fn filter(
+        &self,
+        rows: &mut ExportRows<'_>,
+        local: &dyn LocalApiClient,
+    ) -> Result<ExportFilterReport, EnterpriseSyncError>;
 }
+
+#[path = "export_filter.rs"]
+mod export_filter;
+pub use export_filter::{ExportFilterReport, ExportRows};
 
 #[async_trait::async_trait]
 pub trait LocalApiClient: Send + Sync {
-    async fn begin_export(&self) -> Result<Option<Box<dyn ExportAdmission>>, EnterpriseSyncError> {
+    async fn begin_export(&self) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
         Ok(None)
     }
 
@@ -576,6 +586,28 @@ pub enum EnterpriseSyncError {
     Io(#[from] std::io::Error),
 }
 
+impl EnterpriseSyncError {
+    fn is_read_refresh(&self) -> bool {
+        let (operation, cause) = match self {
+            Self::Storage { operation, cause } => (*operation, cause),
+            Self::LocalApi(cause) => ("local read", cause),
+            _ => return false,
+        };
+        let pending = screenpipe_db::storage::is_revision_change_message(cause);
+        if pending {
+            // Normal support logs explain pending work without reporting an
+            // upload error or claiming that this stream was acknowledged.
+            info!(
+                operation,
+                cause,
+                retry_seconds = SYNC_INTERVAL.as_secs(),
+                "enterprise sync: selection refresh pending; checkpoint retained"
+            );
+        }
+        pending
+    }
+}
+
 // ─── Pure logic: UTF-8-safe truncation ──────────────────────────────────────
 
 /// Truncate `s` to at most `max_bytes`, rounding the cut DOWN to the nearest
@@ -609,7 +641,7 @@ pub use screenpipe_telemetry_wire::{build_jsonl, build_jsonl_with_parsed};
 /// Split JSONL on record boundaries for hosted ingest. Concatenating the
 /// returned chunks always reproduces `body` byte-for-byte; no record is
 /// truncated or discarded. A single record larger than the target travels in
-/// its own request.
+/// its own ticketed storage transfer.
 pub fn split_jsonl_requests(body: Vec<u8>, target_bytes: usize) -> Vec<Vec<u8>> {
     if body.is_empty() {
         return Vec::new();
@@ -657,6 +689,42 @@ async fn post_jsonl_with_identity(
     stable_device_id: Option<&str>,
     backfill: bool,
 ) -> Result<(), EnterpriseSyncError> {
+    // A single retained AX record can exceed the hosted HTTP body limit even
+    // after splitting the page. Keep every byte and use the same ticketed
+    // storage transport as full-quality screenshots. Cursor advancement still
+    // waits for completion (policy/source/checksum validation and durable ingest).
+    if body.len() > HOSTED_INGEST_REQUEST_BYTES {
+        use reqwest::header::HeaderMap;
+        use screenpipe_sync::pipeline::{TicketedConfig, TicketedPipeline};
+        #[derive(serde::Deserialize)]
+        struct Source { device_id: String }
+        let source: Source = serde_json::from_slice(
+            body.split(|byte| *byte == b'\n').next().unwrap_or_default(),
+        ).map_err(|_| EnterpriseSyncError::Ingest("invalid hosted telemetry source".into()))?;
+        // Preserve the identity contract used by inline ingest: manually
+        // assigned IDs and safe deferred migrations have no stable header.
+        let mut identity_headers = vec![("x-license-key", license_key)];
+        if let Some(stable) = stable_device_id {
+            identity_headers.push(("x-screenpipe-stable-device-id", stable));
+        }
+        let mut headers = HeaderMap::new();
+        for (key, value) in identity_headers {
+            headers.insert(key, value.parse().map_err(|_| EnterpriseSyncError::Configuration(
+                "invalid hosted upload identity header".into(),
+            ))?);
+        }
+        headers.insert("x-screenpipe-ingest-transfer", "1".parse().unwrap());
+        if backfill { headers.insert("x-screenpipe-backfill", "1".parse().unwrap()); }
+        let ticket = serde_json::json!({"action": "ticket", "device_id": source.device_id,
+            "content_length": body.len(), "sha256": screenpipe_core::sync::crypto::compute_checksum(&body)});
+        let mut complete = ticket.clone();
+        complete["action"] = serde_json::json!("complete");
+        TicketedPipeline::new(TicketedConfig::new(url, url)
+            .with_http(client.clone()).with_control_headers(headers)
+            .with_pinned_upload_hosts(enterprise_upload::pinned_hosts_from_env()))
+            .upload(&body, "application/x-ndjson", &ticket, &complete).await?;
+        return Ok(());
+    }
     let mut request = client
         .post(url)
         .header("X-License-Key", license_key)
@@ -865,6 +933,26 @@ async fn run_one_sync_inner(
     include_snapshot: bool,
     backfill: Option<&backfill::BackfillRequest>,
 ) -> Result<SyncTickReport, EnterpriseSyncError> {
+    match run_one_sync_page(cfg, cursor, local, http, include_snapshot, backfill).await {
+        Err(error) if error.is_read_refresh() => {
+            debug!("enterprise sync: source changed during read; checkpoint retained for the next cycle");
+            Ok(SyncTickReport {
+                pending_read: true,
+                ..Default::default()
+            })
+        }
+        result => result,
+    }
+}
+
+async fn run_one_sync_page(
+    cfg: &EnterpriseSyncConfig,
+    cursor: &mut Cursor,
+    local: &dyn LocalApiClient,
+    http: &reqwest::Client,
+    include_snapshot: bool,
+    backfill: Option<&backfill::BackfillRequest>,
+) -> Result<SyncTickReport, EnterpriseSyncError> {
     if let EnterpriseUploadMode::Blocked(reason) = &cfg.upload_mode {
         return Err(EnterpriseSyncError::Configuration(reason.clone()));
     }
@@ -967,25 +1055,42 @@ async fn run_one_sync_inner(
         streams = request.restrict_streams(streams)?;
     }
 
+    let mut pending_read = false;
     let mut frames = if streams.frames {
-        local
+        match local
             .fetch_frames_since(
                 cursor.last_frame_ts.as_deref(),
                 cursor.boundary.frames,
                 FRAME_PAGE_LIMIT,
             )
-            .await?
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) if error.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
+            Err(error) => return Err(error),
+        }
     } else {
         Vec::new()
     };
     let mut audio = if streams.audio {
-        local
+        match local
             .fetch_audio_since(
                 cursor.last_audio_ts.as_deref(),
                 cursor.boundary.audio,
                 PAGE_LIMIT,
             )
-            .await?
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) if error.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
+            Err(error) => return Err(error),
+        }
     } else {
         Vec::new()
     };
@@ -998,6 +1103,10 @@ async fn run_one_sync_inner(
             .await
         {
             Ok(rows) => rows,
+            Err(e) if e.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
             Err(e) => {
                 if backfill.is_some() {
                     return Err(e);
@@ -1013,7 +1122,7 @@ async fn run_one_sync_inner(
     // not also send the legacy thumbnail stream, even when a cached policy
     // enables it. Write-only archives cannot use that image channel; retain
     // one original-quality snapshot in their direct-to-storage JSONL instead.
-    let snapshots: Vec<SnapshotRow> = if streams.snapshots
+    let mut snapshots: Vec<SnapshotRow> = if streams.snapshots
         && streams.frame_images == crate::enterprise_policy::FrameImagesMode::All
         && include_snapshot
         && matches!(cfg.upload_mode, EnterpriseUploadMode::DirectWriteOnly(_))
@@ -1021,6 +1130,10 @@ async fn run_one_sync_inner(
         match local.fetch_latest_snapshot().await {
             Ok(Some(s)) => vec![s],
             Ok(None) => Vec::new(),
+            Err(e) if e.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
             Err(e) => {
                 warn!("enterprise sync: snapshot fetch failed (skipping): {}", e);
                 Vec::new()
@@ -1042,6 +1155,10 @@ async fn run_one_sync_inner(
             .await
         {
             Ok(rows) => rows,
+            Err(e) if e.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
             Err(e) => {
                 if backfill.is_some() {
                     return Err(e);
@@ -1063,6 +1180,10 @@ async fn run_one_sync_inner(
             .await
         {
             Ok(rows) => rows,
+            Err(error) if error.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
             Err(error) => {
                 if backfill.is_some() {
                     return Err(error);
@@ -1077,13 +1198,6 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    if streams.feedback == crate::enterprise_policy::FeedbackSyncMode::Ratings {
-        for row in &mut feedback {
-            row.comment = None;
-            row.snapshot = None;
-            row.context = serde_json::json!({});
-        }
-    }
     // Parsed app data is a separate privacy-sensitive stream. It is best
     // effort because parser support is optional and older local servers do
     // not expose content_type=parsed.
@@ -1097,6 +1211,10 @@ async fn run_one_sync_inner(
             .await
         {
             Ok(rows) => rows,
+            Err(e) if e.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
             Err(e) => {
                 if backfill.is_some() {
                     return Err(e);
@@ -1108,12 +1226,16 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    let activities = if streams.activities {
+    let mut activities = if streams.activities {
         match local
             .fetch_activities_since(cursor.boundary.activity_ts.as_deref())
             .await
         {
             Ok(rows) => rows,
+            Err(error) if error.is_read_refresh() => {
+                pending_read = true;
+                Vec::new()
+            }
             Err(error) => {
                 warn!(
                     "enterprise sync: activity fetch failed (skipping): {}",
@@ -1145,7 +1267,10 @@ async fn run_one_sync_inner(
         && feedback.is_empty()
     {
         debug!("enterprise sync: nothing new since last tick");
-        return Ok(SyncTickReport::default());
+        return Ok(SyncTickReport {
+            pending_read,
+            ..Default::default()
+        });
     }
 
     // A server restart/database replacement during the reads must not label a
@@ -1155,24 +1280,6 @@ async fn run_one_sync_inner(
             "database changed during sync; retrying".into(),
         ));
     }
-
-    let mut body = screenpipe_telemetry_wire::build_jsonl_with_semantic_streams(
-        &cfg.device_id,
-        &cfg.device_label,
-        &frames,
-        &parsed,
-        &activities,
-        &audio,
-        &ui,
-        &snapshots,
-        &memories,
-    );
-    body.extend_from_slice(&screenpipe_telemetry_wire::build_feedback_jsonl(
-        &cfg.device_id,
-        &cfg.device_label,
-        &feedback,
-    ));
-    let bytes = body.len();
 
     // The history cursor is the retry checkpoint for images as well as text.
     // Store this page's images first: the existing server sees them as already
@@ -1228,25 +1335,123 @@ async fn run_one_sync_inner(
         |row| &row.timestamp,
     );
 
-    if !backfill.is_some_and(|request| request.images_only) {
+    let selected = SyncTickReport {
+        frames: frames.len(),
+        audio: audio.len(),
+        ui: ui.len(),
+        memories: memories.len(),
+        parsed: parsed.len(),
+        feedback: feedback.len(),
+        ..Default::default()
+    };
+    // Keep the original scan boundary when its tail is deleted, and recompute
+    // timestamp offsets against the current rows rather than stale positions.
+    if let Some(export) = export
+        .as_ref()
+        .filter(|_| !matches!(cfg.upload_mode, EnterpriseUploadMode::HostedIngest))
+    {
+        let filtered = export
+            .filter(
+                &mut ExportRows {
+                    frames: &mut frames,
+                    audio: &mut audio,
+                    ui: &mut ui,
+                    snapshots: &mut snapshots,
+                    memories: &mut memories,
+                    parsed: &mut parsed,
+                    activities: &mut activities,
+                    feedback: &mut feedback,
+                },
+                local,
+            )
+            .await?;
+        filtered.apply(&mut next_cursor);
+    }
+
+    if streams.feedback == crate::enterprise_policy::FeedbackSyncMode::Ratings {
+        for row in &mut feedback {
+            row.comment = None;
+            row.snapshot = None;
+            row.context = serde_json::json!({});
+        }
+    }
+    // Filtering may read the running local server again. Preserve the source
+    // identity check across that extra read boundary as well.
+    if cursor.source_id.is_some() && local.upload_source_id().await? != cfg.device_id {
+        return Err(EnterpriseSyncError::Configuration(
+            "database changed during export filtering; retrying".into(),
+        ));
+    }
+
+    let mut body = screenpipe_telemetry_wire::build_jsonl_with_semantic_streams(
+        &cfg.device_id,
+        &cfg.device_label,
+        &frames,
+        &parsed,
+        &activities,
+        &audio,
+        &ui,
+        &snapshots,
+        &memories,
+    );
+    body.extend_from_slice(&screenpipe_telemetry_wire::build_feedback_jsonl(
+        &cfg.device_id,
+        &cfg.device_label,
+        &feedback,
+    ));
+    let bytes = body.len();
+
+    let mut uploaded = None;
+    if !body.is_empty() && !backfill.is_some_and(|request| request.images_only) {
         match &cfg.upload_mode {
             EnterpriseUploadMode::HostedIngest => {
-                for request_body in split_jsonl_requests(body, HOSTED_INGEST_REQUEST_BYTES) {
-                    let admission = match &export {
-                        Some(token) => token.admit().await?,
-                        None => None,
-                    };
-                    let upload = post_jsonl_with_identity(
-                        http,
-                        &cfg.ingest_url,
-                        &cfg.license_key,
+                let mut sent = SyncTickReport::default();
+                let mut pending = std::collections::VecDeque::from(split_jsonl_requests(
+                    body,
+                    HOSTED_INGEST_REQUEST_BYTES,
+                ));
+                while let Some(request_body) = pending.pop_front() {
+                    let (request_body, report) = export_filter::filter_request(
+                        cfg,
+                        export.as_deref(),
+                        local,
                         request_body,
-                        cfg.stable_device_id.as_deref(),
-                        backfill.is_some(),
-                    );
-                    drop(admission);
-                    upload.await?;
+                        &mut next_cursor,
+                        streams.feedback == crate::enterprise_policy::FeedbackSyncMode::Ratings,
+                    )
+                    .await?;
+                    if cursor.source_id.is_some()
+                        && local.upload_source_id().await? != cfg.device_id
+                    {
+                        return Err(EnterpriseSyncError::Configuration(
+                            "database changed during export filtering; retrying".into(),
+                        ));
+                    }
+                    // Refreshed contents can grow. Queue the smaller pieces
+                    // through this same filter so every actual HTTP request
+                    // has a current selection, including after a network wait.
+                    let mut pieces =
+                        split_jsonl_requests(request_body, HOSTED_INGEST_REQUEST_BYTES);
+                    if pieces.len() > 1 {
+                        for piece in pieces.into_iter().rev() {
+                            pending.push_front(piece);
+                        }
+                        continue;
+                    }
+                    if let Some(request_body) = pieces.pop() {
+                        post_jsonl_with_identity(
+                            http,
+                            &cfg.ingest_url,
+                            &cfg.license_key,
+                            request_body,
+                            cfg.stable_device_id.as_deref(),
+                            backfill.is_some(),
+                        )
+                        .await?;
+                    }
+                    sent.add_assign(&report);
                 }
+                uploaded = Some(sent);
             }
             EnterpriseUploadMode::DirectWriteOnly(direct) => {
                 let counts = DirectUploadRecordCounts {
@@ -1259,10 +1464,6 @@ async fn run_one_sync_inner(
                     memories: memories.len(),
                     feedback: feedback.len(),
                 };
-                let admission = match &export {
-                    Some(token) => token.admit().await?,
-                    None => None,
-                };
                 let upload = upload_direct_write_only_batch(
                     http,
                     cfg,
@@ -1271,7 +1472,6 @@ async fn run_one_sync_inner(
                     counts,
                     enterprise_upload::direct_upload_cursors(&next_cursor),
                 );
-                drop(admission);
                 upload.await?;
             }
             EnterpriseUploadMode::DirectReadable(direct) => {
@@ -1285,10 +1485,6 @@ async fn run_one_sync_inner(
                     memories: memories.len(),
                     feedback: feedback.len(),
                 };
-                let admission = match &export {
-                    Some(token) => token.admit().await?,
-                    None => None,
-                };
                 let upload = upload_direct_readable_batch(
                     http,
                     cfg,
@@ -1298,7 +1494,6 @@ async fn run_one_sync_inner(
                     enterprise_upload::direct_upload_cursors(&next_cursor),
                     backfill.is_some(),
                 );
-                drop(admission);
                 upload.await?;
             }
             EnterpriseUploadMode::Blocked(reason) => {
@@ -1306,9 +1501,27 @@ async fn run_one_sync_inner(
             }
         }
     }
+    let mut report = uploaded.unwrap_or(SyncTickReport {
+        frames: frames.len(),
+        parsed: parsed.len(),
+        activities: activities.len(),
+        audio: audio.len(),
+        ui: ui.len(),
+        snapshots: snapshots.len(),
+        memories: memories.len(),
+        feedback: feedback.len(),
+        bytes,
+        ..Default::default()
+    });
+    report.scanned_full_page = selected.may_have_more();
+    report.pending_read = pending_read;
     if backfill.is_some() {
-        let records =
-            frames.len() + audio.len() + ui.len() + parsed.len() + memories.len() + feedback.len();
+        let records = report.frames
+            + report.audio
+            + report.ui
+            + report.parsed
+            + report.memories
+            + report.feedback;
         next_cursor.boundary.backfill_records =
             Some(cursor.boundary.backfill_records.unwrap_or(0) + records as u64);
         if let Some(images) = images {
@@ -1322,17 +1535,7 @@ async fn run_one_sync_inner(
     *cursor = next_cursor;
     cursor.save(&cfg.cursor_path)?;
 
-    Ok(SyncTickReport {
-        frames: frames.len(),
-        parsed: parsed.len(),
-        activities: activities.len(),
-        audio: audio.len(),
-        ui: ui.len(),
-        snapshots: snapshots.len(),
-        memories: memories.len(),
-        feedback: feedback.len(),
-        bytes,
-    })
+    Ok(report)
 }
 
 fn advance_timestamp_boundary<T>(
@@ -1370,6 +1573,10 @@ pub struct SyncTickReport {
     pub memories: usize,
     pub feedback: usize,
     pub bytes: usize,
+    /// Filtering must not make a full scanned page look like the end of history.
+    pub scanned_full_page: bool,
+    /// At least one source read is pending; retain its checkpoint for a later cycle.
+    pub pending_read: bool,
 }
 
 impl SyncTickReport {
@@ -1377,7 +1584,9 @@ impl SyncTickReport {
     /// behind it. Point-in-time snapshots are deliberately excluded.
     pub fn may_have_more(&self) -> bool {
         let limit = PAGE_LIMIT as usize;
-        self.frames >= FRAME_PAGE_LIMIT as usize
+        self.pending_read
+            || self.scanned_full_page
+            || self.frames >= FRAME_PAGE_LIMIT as usize
             || self.parsed >= limit
             || self.audio >= limit
             || self.ui >= limit
@@ -1388,12 +1597,15 @@ impl SyncTickReport {
     fn add_assign(&mut self, other: &Self) {
         self.frames += other.frames;
         self.parsed += other.parsed;
+        self.activities += other.activities;
         self.audio += other.audio;
         self.ui += other.ui;
         self.snapshots += other.snapshots;
         self.memories += other.memories;
         self.feedback += other.feedback;
         self.bytes += other.bytes;
+        self.scanned_full_page |= other.scanned_full_page;
+        self.pending_read |= other.pending_read;
     }
 }
 
@@ -1430,7 +1642,7 @@ pub async fn run_sync_burst(
         burst.total.add_assign(&page);
         burst.pages += 1;
 
-        if !more_pending {
+        if !more_pending || page.pending_read {
             break;
         }
     }
@@ -3012,6 +3224,79 @@ pub(crate) mod tests {
         assert!(body.is_empty());
     }
 
+    #[tokio::test]
+    async fn hosted_large_record_retries_each_phase_without_advancing_or_losing_bytes() {
+        use std::sync::atomic::AtomicBool;
+        let _policy = crate::enterprise_policy::sync_streams_test_lock();
+        struct RetainedFrame(FrameRow);
+        #[async_trait::async_trait]
+        impl LocalApiClient for RetainedFrame {
+            async fn upload_source_id(&self) -> Result<String, EnterpriseSyncError> {
+                Ok("dev-1".into())
+            }
+            async fn fetch_frames_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Ok(vec![self.0.clone(), frame(26, "2026-10-16T15:21:00Z", "Fixture", "later normal marker")])
+            }
+            async fn fetch_audio_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<AudioRow>, EnterpriseSyncError> { Ok(vec![]) }
+        }
+        // Operator-assigned identities and safe deferred migrations keep the
+        // legacy namespace. Their full records must also make progress.
+        for stable_identity in [Some("stable-device"), None] {
+            for (phase, status) in [("ticket", 401), ("ticket", 403), ("ticket", 429), ("ticket", 503), ("put", 400), ("complete", 503)] {
+                let control = wiremock::MockServer::start().await;
+                let storage = wiremock::MockServer::start().await;
+                let failing = Arc::new(AtomicBool::new(true));
+                let fail = failing.clone();
+                let target = format!("{}/blob", storage.uri());
+                wiremock::Mock::given(wiremock::matchers::method("POST"))
+                    .respond_with(move |request: &wiremock::Request| {
+                        let json: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+                        let action = json["action"].as_str().unwrap_or("inline");
+                        if fail.load(Ordering::SeqCst) && action == phase {
+                            return wiremock::ResponseTemplate::new(status);
+                        }
+                        if action == "ticket" {
+                            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                                "ok": true, "method": "PUT", "upload_url": target,
+                                "headers": {"Content-Type": "application/x-ndjson"}
+                            }))
+                        } else { wiremock::ResponseTemplate::new(200) }
+                    }).mount(&control).await;
+                let fail = failing.clone();
+                wiremock::Mock::given(wiremock::matchers::method("PUT"))
+                    .respond_with(move |_: &wiremock::Request| wiremock::ResponseTemplate::new(
+                        if phase == "put" && fail.load(Ordering::SeqCst) { status } else { 201 }
+                    )).mount(&storage).await;
+                let mut row = frame(25, "2026-10-16T15:20:00Z", "Fixture", "flattened preview");
+                row.accessibility_tree = Some(serde_json::json!({"role": "Edit", "text": "界".repeat(2_100_000)}));
+                let local = RetainedFrame(row);
+                let dir = TempDir::new().unwrap();
+                let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", control.uri()));
+                cfg.stable_device_id = stable_identity.map(str::to_string);
+                let mut cursor = Cursor { source_id: Some("dev-1".into()),
+                    last_frame_ts: Some("2026-10-16T15:00:00Z".into()), ..Cursor::default() };
+                let http = enterprise_http_client();
+                assert!(run_one_sync(&cfg, &mut cursor, &local, &http).await.is_err(), "{phase}/{status}");
+                assert_eq!(cursor.last_frame_ts.as_deref(), Some("2026-10-16T15:00:00Z"));
+                assert!(!cfg.cursor_path.exists());
+                failing.store(false, Ordering::SeqCst);
+                let report = run_one_sync(&cfg, &mut cursor, &local, &http).await.unwrap();
+                assert_eq!(report.frames, 2);
+                assert_eq!(Cursor::load(&cfg.cursor_path).last_frame_ts.as_deref(), Some("2026-10-16T15:21:00Z"));
+                let expected = build_jsonl("dev-1", &cfg.device_label, &[local.0.clone()], &[], &[], &[], &[]);
+                assert!(expected.len() > 5 * 1024 * 1024);
+                for request in storage.received_requests().await.unwrap() {
+                    assert_eq!(request.body, expected, "storage must get the complete original JSONL");
+                    assert!(!request.headers.contains_key("x-license-key"));
+                }
+                let requests = control.received_requests().await.unwrap();
+                assert!(requests.iter().all(|r| r.body.len() < HOSTED_INGEST_REQUEST_BYTES));
+                assert!(requests.iter().all(|r| r.headers.contains_key("x-screenpipe-stable-device-id") == stable_identity.is_some()));
+                assert!(requests.iter().any(|r| String::from_utf8_lossy(&r.body).contains("later normal marker")));
+            }
+        }
+    }
+
     #[test]
     fn hosted_ingest_split_is_byte_for_byte_lossless() {
         let body = b"one\ntwo-two\nthree\n".to_vec();
@@ -3730,6 +4015,226 @@ pub(crate) mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn later_upload_requests_filter_deletions_and_redactions_after_an_earlier_ack() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        struct CurrentRows(Arc<Mutex<Vec<FrameRow>>>);
+        struct CurrentFilter;
+        #[async_trait::async_trait]
+        impl ExportFilter for CurrentFilter {
+            async fn filter(
+                &self,
+                rows: &mut ExportRows<'_>,
+                local: &dyn LocalApiClient,
+            ) -> Result<ExportFilterReport, EnterpriseSyncError> {
+                rows.refresh(local).await
+            }
+        }
+        #[async_trait::async_trait]
+        impl LocalApiClient for CurrentRows {
+            async fn begin_export(
+                &self,
+            ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
+                Ok(Some(Box::new(CurrentFilter)))
+            }
+            async fn fetch_frames_since(
+                &self,
+                since: Option<&str>,
+                offset: u32,
+                limit: u32,
+            ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Ok(self
+                    .0
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|row| since.is_none_or(|since| row.timestamp.as_str() >= since))
+                    .skip(offset as usize)
+                    .take(limit as usize)
+                    .cloned()
+                    .collect())
+            }
+            async fn fetch_audio_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                Ok(Vec::new())
+            }
+        }
+        let ts = "2026-08-04T00:01:00Z";
+        // Two records exceed the actual transport target, so each selected
+        // record initially occupies its own HTTP request.
+        let text = "x".repeat(HOSTED_INGEST_REQUEST_BYTES / 2);
+        let rows = Arc::new(Mutex::new(
+            (1..=3)
+                .map(|id| frame(id, ts, "Arc", &text))
+                .collect::<Vec<_>>(),
+        ));
+        let server = wiremock::MockServer::start().await;
+        let changed = rows.clone();
+        let responses = Arc::new(AtomicUsize::new(0));
+        wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+            .respond_with(move |_: &wiremock::Request| {
+                if responses.fetch_add(1, Ordering::SeqCst) == 0 {
+                    let mut rows = changed.lock().unwrap();
+                    rows.retain(|row| row.frame_id != 2);
+                    rows.iter_mut().find(|row| row.frame_id == 3).unwrap().text =
+                        Some("[REDACTED]".into());
+                    rows.push(frame(4, ts, "Arc", "new capture"));
+                }
+                wiremock::ResponseTemplate::new(200)
+            })
+            .expect(3)
+            .mount(&server)
+            .await;
+        let dir = TempDir::new().unwrap();
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let mut cursor = initialized_cursor();
+        let local = CurrentRows(rows);
+        let http = reqwest::Client::new();
+        let report = run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .unwrap();
+        assert_eq!(report.frames, 2);
+        assert_eq!(cursor.boundary.frames, 2);
+        let mut restarted = Cursor::load(&cfg.cursor_path);
+        assert_eq!(
+            run_one_sync(&cfg, &mut restarted, &local, &http)
+                .await
+                .unwrap()
+                .frames,
+            1
+        );
+        let requests = server.received_requests().await.unwrap();
+        let records: Vec<serde_json::Value> = requests
+            .iter()
+            .map(|request| serde_json::from_slice(&request.body).unwrap())
+            .collect();
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record["frame_id"].as_i64().unwrap())
+                .collect::<Vec<_>>(),
+            vec![1, 3, 4]
+        );
+        assert_eq!(records[1]["text"], "[REDACTED]");
+        assert_eq!(records[2]["text"], "new capture");
+        server.verify().await;
+    }
+
+    #[tokio::test]
+    async fn changed_read_keeps_only_that_stream_pending_and_recovers_after_restart() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        struct ChangingLocal(AtomicUsize);
+        #[async_trait::async_trait]
+        impl LocalApiClient for ChangingLocal {
+            async fn fetch_frames_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                if self.0.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err(EnterpriseSyncError::LocalApi(
+                        "read frame AX payloads: frame storage: read revision changed; retry the complete query".into()));
+                }
+                Ok(vec![FrameRow {
+                    frame_id: 1,
+                    timestamp: "2026-08-04T00:01:00Z".into(),
+                    app_name: None,
+                    window_name: None,
+                    browser_url: None,
+                    text: Some("retained frame".into()),
+                    accessibility_tree: None,
+                }])
+            }
+            async fn fetch_audio_since(
+                &self,
+                _: Option<&str>,
+                offset: u32,
+                _: u32,
+            ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                if offset > 0 {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![AudioRow {
+                    transcription_id: 1,
+                    timestamp: "2026-08-04T00:01:00Z".into(),
+                    transcription: "unaffected audio".into(),
+                    speaker: None,
+                    device: None,
+                }])
+            }
+        }
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .expect(2)
+            .mount(&server)
+            .await;
+        let dir = TempDir::new().unwrap();
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let mut cursor = initialized_cursor();
+        cursor.save(&cfg.cursor_path).unwrap();
+        let before_frames = cursor.last_frame_ts.clone();
+        let local = ChangingLocal(AtomicUsize::new(0));
+        let http = reqwest::Client::new();
+        let report = run_sync_burst(&cfg, &mut cursor, &local, &http)
+            .await
+            .unwrap();
+        assert!(report.total.pending_read);
+        assert!(
+            report.total.may_have_more(),
+            "pending history must not be marked complete"
+        );
+        assert_eq!(report.total.audio, 1);
+        assert_eq!(cursor.last_frame_ts, before_frames);
+        assert_eq!(
+            cursor.last_audio_ts.as_deref(),
+            Some("2026-08-04T00:01:00Z")
+        );
+        assert!(!cfg
+            .cursor_path
+            .with_file_name(diagnostics::LOG_NAME)
+            .exists());
+        let mut restarted = Cursor::load(&cfg.cursor_path);
+        let report = run_one_sync(&cfg, &mut restarted, &local, &http)
+            .await
+            .unwrap();
+        assert!(!report.pending_read);
+        assert_eq!(report.frames, 1);
+        assert_eq!(report.audio, 0, "acknowledged audio must not be replayed");
+        assert_eq!(
+            Cursor::load(&cfg.cursor_path).last_frame_ts.as_deref(),
+            Some("2026-08-04T00:01:00Z")
+        );
+        server.verify().await;
+    }
+
     /// Exercise the production worker, including its actual sleeps and
     /// persisted checkpoint, rather than only checking a delay constant.
     #[tokio::test(flavor = "current_thread")]
@@ -3741,24 +4246,6 @@ pub(crate) mod tests {
     pub(crate) async fn check_sync_retry_failure(log_dir: &std::path::Path) -> String {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _mode_env = UploadModeEnvGuard::clear();
-        // Keep the originating database revocation in the actual worker's
-        // retained diagnostic and the collected/redacted support upload.
-        let storage_dir = TempDir::new().unwrap();
-        let db = screenpipe_db::DatabaseManager::new_hybrid(
-            storage_dir.path(),
-            Default::default(),
-            Default::default(),
-        )
-        .await
-        .unwrap();
-        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','private-person@example.com')").await.unwrap();
-        let export = db.storage_export_token().await.unwrap();
-        db.execute_raw_sql_write("DELETE FROM frames WHERE id=1")
-            .await
-            .unwrap();
-        let revocation = export.admit(&db.pool).await.unwrap_err().to_string();
-        drop(export);
-        db.close().await;
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::path(
             "/api/enterprise/storage-binding/mode",
@@ -3837,12 +4324,12 @@ pub(crate) mod tests {
             reply
                 .send(Err(EnterpriseSyncError::Storage {
                     operation: if attempt % 2 == 0 {
-                        "admit export"
+                        "filter export"
                     } else {
                         "prepare export"
                     },
                     cause: if attempt % 2 == 0 {
-                        &revocation
+                        "database disk image is malformed"
                     } else {
                         "frame storage: payload read deadline exceeded"
                     }
@@ -3926,8 +4413,7 @@ pub(crate) mod tests {
         let logged = std::fs::read_to_string(log_path).unwrap();
         assert!(logged.contains("enterprise upload storage prepare export failed"));
         assert!(logged.contains("frame storage: payload read deadline exceeded"));
-        assert!(logged.contains("frame storage: read revision changed"));
-        assert!(logged.contains("cause=hybrid_read_revoke_delete_frames"));
+        assert!(logged.contains("database disk image is malformed"));
         assert!(logged.contains("pending work retained, retrying in 300s"));
         assert!(!logged.contains("backing off 3600s"));
         String::from_utf8(diagnostic.body.clone()).unwrap()
@@ -4484,10 +4970,22 @@ pub(crate) mod tests {
         struct UnavailableTree;
         #[async_trait::async_trait]
         impl LocalApiClient for UnavailableTree {
-            async fn fetch_frames_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
-                Err(EnterpriseSyncError::LocalApi("read frame AX payloads: unavailable".into()))
+            async fn fetch_frames_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Err(EnterpriseSyncError::LocalApi(
+                    "read frame AX payloads: unavailable".into(),
+                ))
             }
-            async fn fetch_audio_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+            async fn fetch_audio_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
                 panic!("failed frame read must abort before other streams")
             }
         }
@@ -4653,6 +5151,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn catch_up_failure_keeps_last_acknowledged_page_for_restart() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         let calls = Arc::new(AtomicUsize::new(0));

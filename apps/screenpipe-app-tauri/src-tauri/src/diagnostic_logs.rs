@@ -275,6 +275,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn storage_revocation_cause_survives_support_rotation_and_redaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = screenpipe_db::DatabaseManager::new_hybrid(
+            dir.path(),
+            Default::default(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','private-person@example.com')").await.unwrap();
+        let export = db.storage_export_token().await.unwrap();
+        db.execute_raw_sql_write("DELETE FROM frames WHERE id=1")
+            .await
+            .unwrap();
+        let error = export.admit(&db.pool).await.unwrap_err();
+        let current = dir.path().join("screenpipe-app.2026-10-16.log");
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(
+                std::fs::File::create(&current).unwrap(),
+            ))
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(%error, "storage read failed; query remains pending");
+            tracing::info!("contact=private-person@example.com");
+        });
+        drop(export);
+        db.close().await;
+        tokio::fs::rename(&current, dir.path().join("screenpipe-app.2026-10-16.1.log"))
+            .await
+            .unwrap();
+        tokio::fs::write(&current, "INFO recorder restarted\n")
+            .await
+            .unwrap();
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("frame storage: read revision changed"));
+        assert!(report.contains("cause=hybrid_read_revoke_delete_frames"));
+        assert!(report.contains("expected_revocation="));
+        assert!(report.contains("current_revocation="));
+        assert!(report.contains("query remains pending"));
+        assert!(report.contains("recorder restarted"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
+    #[tokio::test]
     async fn installer_failure_reaches_redacted_support_bundle() {
         let dir = tempfile::tempdir().unwrap();
         tokio::fs::write(
@@ -302,12 +349,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let report = crate::enterprise::sync::tests::check_sync_retry_failure(dir.path()).await;
         assert!(report.contains("enterprise upload storage prepare export failed"));
+        assert!(report.contains("enterprise upload storage filter export failed"));
         assert!(report.contains("frame storage: payload read deadline exceeded"));
-        assert!(report.contains("frame storage: read revision changed"));
-        assert!(report.contains("cause=hybrid_read_revoke_delete_frames"));
-        assert!(report.contains("expected_revocation="));
-        assert!(report.contains("current_revocation="));
-        assert!(!report.contains("private-person@example.com"));
+        assert!(report.contains("database disk image is malformed"));
         assert!(report.contains("pending work retained, retrying in 300s"));
         assert!(!report.contains("backing off 3600s"));
     }

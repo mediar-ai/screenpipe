@@ -193,6 +193,23 @@ mod imp {
         updated_at: String,
     }
 
+    async fn local_api_error(response: reqwest::Response, url: &str) -> EnterpriseSyncError {
+        let status = response.status();
+        let cause = response
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|body| {
+                body.get("error")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            });
+        EnterpriseSyncError::LocalApi(match cause {
+            Some(cause) => format!("GET {url} -> {status}: {cause}"),
+            None => format!("GET {url} -> {status}"),
+        })
+    }
+
     struct StorageExport {
         db: Arc<screenpipe_db::DatabaseManager>,
         token: screenpipe_db::storage::StorageReadToken,
@@ -214,17 +231,33 @@ mod imp {
     }
 
     #[async_trait::async_trait]
-    impl crate::enterprise::sync::ExportAdmission for StorageExport {
-        async fn admit(
+    impl crate::enterprise::sync::ExportFilter for StorageExport {
+        async fn filter(
             &self,
-        ) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, EnterpriseSyncError> {
-            self.token
-                .admit(&self.db.pool)
-                .await
-                .map_err(|error| EnterpriseSyncError::Storage {
-                    operation: "admit export",
+            rows: &mut ee_sync::ExportRows<'_>,
+            local: &dyn LocalApiClient,
+        ) -> Result<ee_sync::ExportFilterReport, EnterpriseSyncError> {
+            // SQLite has no hybrid revocation counter. Validate its selected
+            // rows directly instead of treating a no-op token as freshness.
+            if self.db.storage_mode() == screenpipe_db::storage::StorageMode::Sqlite {
+                return rows.refresh(local).await;
+            }
+            match self.token.admit(&self.db.pool).await {
+                Ok(guard) => {
+                    drop(guard);
+                    Ok(Default::default())
+                }
+                Err(error) if screenpipe_db::storage::is_revision_change(&error) => {
+                    // A changed revision is a request to filter the selected
+                    // rows, not an upload failure. Reads return the current
+                    // contents of survivors, including applied redactions.
+                    rows.refresh(local).await
+                }
+                Err(error) => Err(EnterpriseSyncError::Storage {
+                    operation: "filter export",
                     cause: error.to_string(),
-                })
+                }),
+            }
         }
     }
 
@@ -232,7 +265,7 @@ mod imp {
     impl LocalApiClient for ScreenpipeLocalClient {
         async fn begin_export(
             &self,
-        ) -> Result<Option<Box<dyn crate::enterprise::sync::ExportAdmission>>, EnterpriseSyncError>
+        ) -> Result<Option<Box<dyn crate::enterprise::sync::ExportFilter>>, EnterpriseSyncError>
         {
             let state = self.app.state::<crate::recording::RecordingState>();
             let db = state
@@ -352,11 +385,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -424,11 +453,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -469,11 +494,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -554,11 +575,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -629,11 +646,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    search_url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &search_url).await);
             }
             let body: LocalSearchResponse = resp
                 .json()
@@ -738,11 +751,7 @@ mod imp {
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalMemoriesResponse = resp
                 .json()
@@ -787,11 +796,7 @@ mod imp {
                 .await
                 .map_err(|error| EnterpriseSyncError::LocalApi(error.to_string()))?;
             if !resp.status().is_success() {
-                return Err(EnterpriseSyncError::LocalApi(format!(
-                    "GET {} -> {}",
-                    url,
-                    resp.status()
-                )));
+                return Err(local_api_error(resp, &url).await);
             }
             let body: LocalFeedbackResponse = resp
                 .json()
@@ -1194,11 +1199,78 @@ mod imp {
         Ok(policy)
     }
 
+    #[derive(Default, Deserialize)]
+    struct RecordingMeasurement {
+        frame_status: Option<String>,
+        audio_status: Option<String>,
+    }
+
+    // The recurring native watcher owns this measurement even when Home has
+    // been destroyed. Enrollment during startup/IPC remains measurement-free:
+    // the recorder cannot start until its seat has been authorized.
+    async fn measure_recording(
+        http: &reqwest::Client,
+        api: &crate::recording::LocalApiContext,
+        logs: Option<&std::path::Path>,
+    ) -> RecordingMeasurement {
+        let result = async {
+            let response = api
+                .apply_auth(http.get(api.url("/health")))
+                .header("Cache-Control", "no-cache")
+                // Use the watcher's existing HTTP deadline. A failed health
+                // read must not prevent the following seat enrollment.
+                .send()
+                .await
+                .map_err(|error| format!("local health request: {error:?}"))?;
+            let status = response.status();
+            // /health returns 503 with real channel measurements when degraded.
+            // Auth failures and unrelated error responses are not measurements.
+            if !status.is_success() && status != reqwest::StatusCode::SERVICE_UNAVAILABLE {
+                return Err(format!("local health HTTP {status}"));
+            }
+            let measured = response
+                .json::<RecordingMeasurement>()
+                .await
+                .map_err(|error| format!("local health HTTP {status}: {error:?}"))?;
+            if ![&measured.frame_status, &measured.audio_status]
+                .iter()
+                .any(|channel| {
+                    channel.as_deref().is_some_and(|value| {
+                        !value.trim().is_empty() && !value.trim().eq_ignore_ascii_case("unknown")
+                    })
+                })
+            {
+                return Err(format!(
+                    "local health HTTP {status}: missing channel measurements"
+                ));
+            }
+            Ok(measured)
+        }
+        .await;
+        match result {
+            Ok(measured) => measured,
+            Err(cause) => {
+                warn!(
+                    "enterprise: recording measurement unavailable; enrollment continues: {cause}"
+                );
+                if let Some(logs) = logs {
+                    crate::recording::recovery_log::append(
+                        logs,
+                        "enterprise_recording_measurement_failed",
+                        &format!("cause={cause}; outcome=enrollment_only; previous_measurement_not_refreshed"),
+                    );
+                }
+                RecordingMeasurement::default()
+            }
+        }
+    }
+
     async fn send_enrollment_heartbeat(
         http: &reqwest::Client,
         heartbeat_url: &str,
         device_id: &str,
         credential: &EnterprisePolicyCredential,
+        measurement: Option<&RecordingMeasurement>,
     ) -> Result<(), NativePolicyFetchError> {
         let request = http.post(heartbeat_url).json(&serde_json::json!({
             "device_id": device_id,
@@ -1207,8 +1279,8 @@ mod imp {
             "app_version": env!("CARGO_PKG_VERSION"),
             "recording_lifecycle": crate::search_only::recording_lifecycle(),
             "recording_status": {
-                "frame_status": "unknown",
-                "audio_status": "unknown",
+                "frame_status": measurement.and_then(|value| value.frame_status.as_deref()).unwrap_or("unknown"),
+                "audio_status": measurement.and_then(|value| value.audio_status.as_deref()).unwrap_or("unknown"),
             },
         }));
         let request = apply_enterprise_credential(request, credential);
@@ -1240,6 +1312,7 @@ mod imp {
         policy_url: &str,
         heartbeat_url: &str,
         device_id: &str,
+        measurement: Option<&RecordingMeasurement>,
     ) -> NativeAuthorizationResult {
         let credentials = current_policy_credentials();
         if credentials.is_empty() {
@@ -1269,8 +1342,14 @@ mod imp {
                         policy.require_account_login,
                     ) =>
                 {
-                    match send_enrollment_heartbeat(http, heartbeat_url, device_id, &credential)
-                        .await
+                    match send_enrollment_heartbeat(
+                        http,
+                        heartbeat_url,
+                        device_id,
+                        &credential,
+                        measurement,
+                    )
+                    .await
                     {
                         Ok(()) => return NativeAuthorizationResult::Authorized(policy),
                         Err(NativePolicyFetchError::RecordingDisabled) => {
@@ -1362,6 +1441,7 @@ mod imp {
                             &policy_url,
                             &heartbeat_url,
                             &device_id,
+                            None,
                         ),
                     )
                     .await
@@ -1476,8 +1556,14 @@ mod imp {
                     policy.require_account_login,
                 ) && policy.recording_allowed =>
             {
-                match send_enrollment_heartbeat(&http, &heartbeat_url, &device_id, &credential)
-                    .await
+                match send_enrollment_heartbeat(
+                    &http,
+                    &heartbeat_url,
+                    &device_id,
+                    &credential,
+                    None,
+                )
+                .await
                 {
                     Ok(()) => {
                         // Save native settings before the UI can start capture;
@@ -1590,9 +1676,19 @@ mod imp {
             loop {
                 let was_hidden = crate::enterprise_policy::is_app_ui_hidden();
                 let device_id = settings_device_id(&app).unwrap_or_else(|| "unknown".to_string());
-                let authorization =
-                    resolve_native_authorization(&http, &policy_url, &heartbeat_url, &device_id)
-                        .await;
+                // Re-resolve the live instance port and auth key each turn:
+                // startup/restart may replace either after this task starts.
+                let api = local_api_context_from_app(&app);
+                let logs = crate::log_files::get_screenpipe_data_dir(&app).ok();
+                let measurement = measure_recording(&http, &api, logs.as_deref()).await;
+                let authorization = resolve_native_authorization(
+                    &http,
+                    &policy_url,
+                    &heartbeat_url,
+                    &device_id,
+                    Some(&measurement),
+                )
+                .await;
                 // Also release the first-pass barrier after an offline/rejected
                 // response; an unknown policy keeps its documented default,
                 // while a cached disable remains disabled.
@@ -1984,6 +2080,205 @@ mod imp {
         };
         use std::collections::HashMap;
 
+        async fn native_health_fixture(
+            status: axum::http::StatusCode,
+            body: &str,
+            heartbeat_status: axum::http::StatusCode,
+        ) -> (
+            crate::recording::LocalApiContext,
+            String,
+            std::sync::Arc<std::sync::Mutex<Option<serde_json::Value>>>,
+            tokio::task::JoinHandle<()>,
+        ) {
+            use axum::{
+                http::HeaderMap,
+                routing::{get, post},
+                Json, Router,
+            };
+            let received = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let output = received.clone();
+            let health_body = body.to_string();
+            let router = Router::new()
+                .route(
+                    "/health",
+                    get(move |headers: HeaderMap| async move {
+                        assert_eq!(headers["authorization"], "Bearer local-test-key");
+                        assert_eq!(headers["cache-control"], "no-cache");
+                        (status, health_body)
+                    }),
+                )
+                .route(
+                    "/heartbeat",
+                    post(
+                        move |headers: HeaderMap, Json(body): Json<serde_json::Value>| async move {
+                            assert_eq!(headers["x-license-key"], "test-key");
+                            assert!(
+                                !headers.contains_key("authorization"),
+                                "local credentials must stay local"
+                            );
+                            *output.lock().unwrap() = Some(body);
+                            (
+                                heartbeat_status,
+                                Json(serde_json::json!({"ok": heartbeat_status.is_success()})),
+                            )
+                        },
+                    ),
+                );
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = tokio::spawn(async move {
+                axum::Server::from_tcp(listener)
+                    .unwrap()
+                    .serve(router.into_make_service())
+                    .await
+                    .unwrap();
+            });
+            (
+                crate::recording::LocalApiContext {
+                    api_key: Some("local-test-key".into()),
+                    port,
+                },
+                format!("http://127.0.0.1:{port}/heartbeat"),
+                received,
+                server,
+            )
+        }
+
+        #[tokio::test]
+        async fn native_health_reports_actual_channels_without_a_webview() {
+            use axum::http::StatusCode;
+            let http = reqwest::Client::new();
+            // Exercise the real authenticated HTTP read and enrollment writer,
+            // with no AppHandle, renderer, recording uploads or UI timer.
+            for (status, frame, audio) in [
+                (StatusCode::OK, "ok", "ok"),
+                (StatusCode::SERVICE_UNAVAILABLE, "stale", "error"),
+                (StatusCode::OK, "disabled", "disabled"),
+                (StatusCode::OK, "permission_denied", "no_data"),
+            ] {
+                let body = serde_json::json!({"frame_status": frame, "audio_status": audio,
+                    "observed_at": "1999-01-01T00:00:00Z", "message": "private recording content"})
+                .to_string();
+                let (api, url, received, server) =
+                    native_health_fixture(status, &body, StatusCode::OK).await;
+                let measurement = super::measure_recording(&http, &api, None).await;
+                super::send_enrollment_heartbeat(
+                    &http,
+                    &url,
+                    "test-device",
+                    &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                    Some(&measurement),
+                )
+                .await
+                .unwrap();
+                let sent = received.lock().unwrap().take().unwrap();
+                assert_eq!(
+                    sent["recording_status"],
+                    serde_json::json!({"frame_status": frame, "audio_status": audio})
+                );
+                assert!(!sent.to_string().contains("private recording content"));
+                assert!(!sent.to_string().contains("1999-01-01"));
+                server.abort();
+            }
+        }
+
+        #[tokio::test]
+        async fn native_health_failures_keep_enrollment_and_retained_support_evidence() {
+            use axum::http::StatusCode;
+            let http = reqwest::Client::new();
+            for (status, body, cause) in [
+                (
+                    StatusCode::UNAUTHORIZED,
+                    r#"{"frame_status":"ok","audio_status":"ok"}"#,
+                    "HTTP 401",
+                ),
+                (StatusCode::SERVICE_UNAVAILABLE, "not JSON", "HTTP 503"),
+                (StatusCode::OK, "{}", "missing channel measurements"),
+                (
+                    StatusCode::OK,
+                    r#"{"frame_status":"unknown","audio_status":"UNKNOWN"}"#,
+                    "missing channel measurements",
+                ),
+            ] {
+                let logs = tempfile::tempdir().unwrap();
+                let (api, url, received, server) =
+                    native_health_fixture(status, body, StatusCode::OK).await;
+                let measurement = super::measure_recording(&http, &api, Some(logs.path())).await;
+                super::send_enrollment_heartbeat(
+                    &http,
+                    &url,
+                    "test-device",
+                    &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                    Some(&measurement),
+                )
+                .await
+                .unwrap();
+                let sent = received.lock().unwrap().take().unwrap();
+                assert_eq!(
+                    sent["recording_status"],
+                    serde_json::json!({"frame_status":"unknown","audio_status":"unknown"})
+                );
+                // Collection after ordinary log rotation/restart retains the
+                // original failure through the actual support redaction path.
+                for day in 1..=7 {
+                    std::fs::write(
+                        logs.path()
+                            .join(format!("screenpipe-app.2026-10-{day:02}.log")),
+                        "app restarted\n",
+                    )
+                    .unwrap();
+                }
+                let report =
+                    crate::diagnostic_logs::collect_redacted_from_dirs(&[logs.path().into()])
+                        .await
+                        .unwrap();
+                assert!(report.contains("enterprise_recording_measurement_failed"));
+                assert!(report.contains(cause), "{report}");
+                assert!(report.contains("enrollment_only"));
+                assert!(report.contains("previous_measurement_not_refreshed"));
+                assert!(!report.contains("local-test-key"));
+                server.abort();
+            }
+        }
+
+        #[tokio::test]
+        async fn native_health_connection_failure_and_seat_rejection_stay_independent() {
+            use axum::http::StatusCode;
+            let http = reqwest::Client::new();
+            let (mut api, url, received, server) =
+                native_health_fixture(StatusCode::OK, "{}", StatusCode::FORBIDDEN).await;
+            // A bound but non-listening socket gives a deterministic refusal
+            // without racing another test for a just-released ephemeral port.
+            let socket = tokio::net::TcpSocket::new_v4().unwrap();
+            socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+            api.port = socket.local_addr().unwrap().port();
+            let logs = tempfile::tempdir().unwrap();
+            let measurement = super::measure_recording(&http, &api, Some(logs.path())).await;
+            let result = super::send_enrollment_heartbeat(
+                &http,
+                &url,
+                "test-device",
+                &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                Some(&measurement),
+            )
+            .await;
+            assert!(matches!(
+                result,
+                Err(super::NativePolicyFetchError::CredentialRejected(_))
+            ));
+            assert_eq!(
+                received.lock().unwrap().take().unwrap()["recording_status"]["frame_status"],
+                "unknown"
+            );
+            let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[logs.path().into()])
+                .await
+                .unwrap();
+            assert!(report.contains("local health request"));
+            assert!(report.contains("enrollment_only"));
+            server.abort();
+        }
+
         #[tokio::test]
         async fn search_only_lifecycle_uses_native_enrollment_without_claiming_capture_health() {
             use axum::{routing::post, Json, Router};
@@ -2012,6 +2307,7 @@ mod imp {
                 &url,
                 "test-device",
                 &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                None,
             )
             .await;
             server.abort();
@@ -2026,20 +2322,35 @@ mod imp {
         }
 
         #[tokio::test]
-        async fn export_upload_proceeds_during_capture_and_rejects_deleted_data() {
+        async fn export_local_read_change_preserves_the_source_cause() {
+            let server = wiremock::MockServer::start().await;
+            wiremock::Mock::given(wiremock::matchers::path("/search"))
+                .respond_with(wiremock::ResponseTemplate::new(503).set_body_json(
+                    serde_json::json!({"error":"frame storage: read revision changed; retry the complete query"})
+                )).mount(&server).await;
+            let url = format!("{}/search", server.uri());
+            let response = reqwest::Client::new().get(&url).send().await.unwrap();
+            let error = super::local_api_error(response, &url).await;
+            assert!(screenpipe_db::storage::is_revision_change_message(
+                &error.to_string()
+            ));
+        }
+
+        #[tokio::test]
+        async fn export_upload_filters_deleted_rows_and_refreshes_redactions() {
             use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
-            use crate::enterprise::sync::{self, ExportAdmission};
+            use crate::enterprise::sync::{self, ExportFilter};
             use std::sync::Arc;
             struct CapturingLocal {
                 db: Arc<screenpipe_db::DatabaseManager>,
-                delete_selected: bool,
-                compact_selected: bool,
+                change: u8,
+                reads: std::sync::atomic::AtomicUsize,
             }
             #[async_trait::async_trait]
             impl LocalApiClient for CapturingLocal {
                 async fn begin_export(
                     &self,
-                ) -> Result<Option<Box<dyn ExportAdmission>>, EnterpriseSyncError> {
+                ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
                     Ok(Some(Box::new(StorageExport::begin(self.db.clone()).await?)))
                 }
                 async fn fetch_frames_since(
@@ -2048,41 +2359,61 @@ mod imp {
                     _: u32,
                     _: u32,
                 ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    let first = self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+                    let ids = if first { vec![1, 2] } else { vec![1, 2, 3] };
                     let payloads = self
                         .db
-                        .frame_payloads(&[1], screenpipe_db::storage::Projection::All)
+                        .frame_payloads(&ids, screenpipe_db::storage::Projection::All)
                         .await
                         .unwrap();
-                    let text = payloads.get(&1).unwrap().full_text.clone();
-                    // Capture continues after selecting the outgoing page.
-                    self.db.execute_raw_sql_write("INSERT OR IGNORE INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-09','new capture')").await.unwrap();
-                    if self.compact_selected {
-                        let chunk = self
-                            .db
-                            .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
-                            .await
-                            .unwrap();
-                        self.db
-                            .compact_snapshots_queued(chunk, vec![(1, 0)])
-                            .await
-                            .unwrap();
+                    let rows = payloads
+                        .into_iter()
+                        .map(|(id, payload)| FrameRow {
+                            accessibility_tree: None,
+                            frame_id: id,
+                            timestamp: "2026-10-09T00:00:00Z".into(),
+                            app_name: None,
+                            window_name: None,
+                            browser_url: None,
+                            text: payload.full_text,
+                        })
+                        .collect();
+                    if first {
+                        // Recording remains durable while this outgoing page is selected.
+                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2026-10-09','new capture')").await.unwrap();
+                        match self.change {
+                            1 => {
+                                self.db
+                                    .execute_raw_sql_write("DELETE FROM frames WHERE id=1")
+                                    .await
+                                    .unwrap();
+                            }
+                            2 => {
+                                self.db.execute_raw_sql_write("UPDATE frames SET full_text='[REDACTED]',full_text_redacted_at=1 WHERE id=1").await.unwrap();
+                            }
+                            3 => {
+                                self.db
+                                    .execute_raw_sql_write("DELETE FROM frames WHERE id IN (1,2)")
+                                    .await
+                                    .unwrap();
+                            }
+                            4 => {
+                                let chunk = self
+                                    .db
+                                    .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
+                                    .await
+                                    .unwrap();
+                                self.db
+                                    .compact_snapshots_queued(chunk, vec![(1, 0)])
+                                    .await
+                                    .unwrap();
+                            }
+                            _ => {}
+                        }
                     }
-                    if self.delete_selected {
-                        self.db
-                            .execute_raw_sql_write("DELETE FROM frames WHERE id=1")
-                            .await
-                            .unwrap();
-                    }
-                    Ok(vec![FrameRow {
-                        accessibility_tree: None,
-                        frame_id: 1,
-                        timestamp: "2026-10-09T00:00:00Z".into(),
-                        app_name: None,
-                        window_name: None,
-                        browser_url: None,
-                        text,
-                    }])
+                    Ok(rows)
                 }
+
                 async fn fetch_audio_since(
                     &self,
                     _: Option<&str>,
@@ -2092,75 +2423,89 @@ mod imp {
                     Ok(Vec::new())
                 }
             }
-            for (delete_selected, compact_selected) in
-                [(false, false), (false, true), (true, false)]
-            {
+            for (change, hybrid) in (0..5).flat_map(|change| [(change, false), (change, true)]) {
                 let dir = tempfile::tempdir().unwrap();
-                let db = Arc::new(
+                let db = Arc::new(if hybrid {
+                    // Synthetic export fixture; disk admission is covered by
+                    // the DB tests, independently of developer disk capacity.
+                    let mut options = screenpipe_db::storage::MigrationOptions::default();
+                    options.budget.disk_reserve_bytes = 0;
                     screenpipe_db::DatabaseManager::new_hybrid(
                         dir.path(),
                         Default::default(),
+                        options,
+                    )
+                    .await
+                    .unwrap()
+                } else {
+                    screenpipe_db::DatabaseManager::new(
+                        dir.path().join("db.sqlite").to_str().unwrap(),
                         Default::default(),
                     )
                     .await
-                    .unwrap(),
-                );
-                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,snapshot_path) VALUES(1,'2026-10-09','pending upload','redacted.jpg'); UPDATE frames SET full_text_redacted_at=1,image_redacted_at=1 WHERE id=1").await.unwrap();
+                    .unwrap()
+                });
+                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload'),(2,'2026-10-09','surviving record')").await.unwrap();
+                if change == 4 {
+                    db.execute_raw_sql_write("UPDATE frames SET snapshot_path='redacted.jpg',full_text_redacted_at=1,image_redacted_at=1 WHERE id=1").await.unwrap();
+                }
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
                     .respond_with(wiremock::ResponseTemplate::new(200))
-                    .expect(if delete_selected { 0 } else { 1 })
+                    .expect(if change == 3 { 0 } else { 1 })
                     .mount(&server)
                     .await;
                 let cfg = sync::tests::test_cfg(&dir, format!("{}/ingest", server.uri()));
                 let mut cursor = sync::Cursor::default();
                 let local = CapturingLocal {
                     db: db.clone(),
-                    delete_selected,
-                    compact_selected,
+                    change,
+                    reads: std::sync::atomic::AtomicUsize::new(0),
                 };
                 let result =
                     sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new()).await;
-                if delete_selected {
-                    let error = result.unwrap_err();
-                    assert!(matches!(
-                        &error,
-                        EnterpriseSyncError::Storage {
-                            operation: "admit export",
-                            ..
-                        }
-                    ));
-                    assert!(error.to_string().contains("read revision changed"));
-                    assert!(error
-                        .to_string()
-                        .contains("cause=hybrid_read_revoke_delete_frames"));
+                let expected = match change {
+                    1 => 1,
+                    3 => 0,
+                    _ => 2,
+                };
+                assert_eq!(result.unwrap().frames, expected);
+                assert_eq!(
+                    sync::Cursor::load(&cfg.cursor_path)
+                        .last_frame_ts
+                        .as_deref(),
+                    Some("2026-10-09T00:00:00Z")
+                );
+                let requests = server.received_requests().await.unwrap();
+                if change != 3 {
+                    let body = String::from_utf8_lossy(&requests[0].body);
+                    assert!(body.contains("surviving record"));
                     assert!(
-                        !cfg.cursor_path.exists(),
-                        "revoked data must not be checkpointed"
+                        !body.contains("new capture"),
+                        "new rows belong to the next page"
                     );
-                } else {
-                    assert_eq!(result.unwrap().frames, 1);
+                    assert_eq!(body.contains("pending upload"), matches!(change, 0 | 4));
+                    assert_eq!(body.contains("[REDACTED]"), change == 2);
+                }
+                if hybrid && change == 4 {
                     assert_eq!(
-                        sync::Cursor::load(&cfg.cursor_path)
-                            .last_frame_ts
-                            .as_deref(),
-                        Some("2026-10-09T00:00:00Z")
+                        local.reads.load(std::sync::atomic::Ordering::SeqCst),
+                        1,
+                        "physical compaction must not force an export refresh"
                     );
-                    let requests = server.received_requests().await.unwrap();
-                    assert!(String::from_utf8_lossy(&requests[0].body).contains("pending upload"));
                 }
                 server.verify().await;
                 let captured = db
-                    .frame_payloads(&[2], screenpipe_db::storage::Projection::All)
+                    .frame_payloads(&[3], screenpipe_db::storage::Projection::All)
                     .await
                     .unwrap();
                 assert_eq!(
-                    captured.get(&2).unwrap().full_text.as_deref(),
+                    captured.get(&3).unwrap().full_text.as_deref(),
                     Some("new capture"),
                     "upload admission must preserve the new recording"
                 );
                 db.close().await;
-                let error = StorageExport::begin(db.clone())
+                let error = StorageExport::begin(db)
                     .await
                     .err()
                     .expect("closed storage refused");
@@ -2171,46 +2516,6 @@ mod imp {
                         ..
                     }
                 ));
-                if delete_selected {
-                    // Restart from the durable, unacknowledged checkpoint.
-                    // Only newly recorded replacement content may now upload.
-                    let db = Arc::new(
-                        screenpipe_db::DatabaseManager::new(
-                            dir.path().join("db.sqlite").to_str().unwrap(),
-                            Default::default(),
-                        )
-                        .await
-                        .unwrap(),
-                    );
-                    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','fresh after revocation')").await.unwrap();
-                    server.reset().await;
-                    wiremock::Mock::given(wiremock::matchers::path("/ingest"))
-                        .respond_with(wiremock::ResponseTemplate::new(200))
-                        .expect(1)
-                        .mount(&server)
-                        .await;
-                    let local = CapturingLocal {
-                        db: db.clone(),
-                        delete_selected: false,
-                        compact_selected: false,
-                    };
-                    sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new())
-                        .await
-                        .unwrap();
-                    assert_eq!(
-                        sync::Cursor::load(&cfg.cursor_path)
-                            .last_frame_ts
-                            .as_deref(),
-                        Some("2026-10-09T00:00:00Z")
-                    );
-                    let requests = server.received_requests().await.unwrap();
-                    assert_eq!(requests.len(), 1);
-                    assert!(String::from_utf8_lossy(&requests[0].body)
-                        .contains("fresh after revocation"));
-                    assert!(!String::from_utf8_lossy(&requests[0].body).contains("pending upload"));
-                    db.close().await;
-                    server.verify().await;
-                }
             }
         }
 
