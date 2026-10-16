@@ -178,3 +178,9 @@ pub(crate) async fn upgrade_recording(conn: &mut SqliteConnection) -> Result<(),
     }
     Ok(())
 }
+
+pub(crate) async fn ensure_cleanup_indexes(
+    conn: &mut SqliteConnection,
+) -> Result<bool, sqlx::Error> {
+    super::elements::ensure_cleanup_index(conn).await
+}

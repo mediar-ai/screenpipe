@@ -549,6 +549,11 @@ impl DatabaseManager {
                 let upgraded =
                     crate::storage::schema::upgrade_recording(&mut conn, storage.has_bulk())
                         .await?;
+                // Keep this independent of versioned recording migrations:
+                // installed hybrid databases may already have migration v6.
+                let cleanup_indexes_changed =
+                    crate::storage::schema::ensure_cleanup_indexes(&mut conn, storage.has_bulk())
+                        .await?;
                 let read_hooks_changed =
                     crate::storage::read_schema::upgrade(&mut conn, storage).await?;
                 let resident_hooks_changed = crate::storage::schema::ensure_resident_table_hooks(
@@ -558,7 +563,11 @@ impl DatabaseManager {
                 .await?;
                 storage.verify_catalog(&db_manager.pool).await?;
                 drop(conn);
-                if upgraded || read_hooks_changed || resident_hooks_changed {
+                if upgraded
+                    || cleanup_indexes_changed
+                    || read_hooks_changed
+                    || resident_hooks_changed
+                {
                     // Connections opened before the trigger migration need a
                     // schema read before their first DML preparation. Refresh
                     // every existing writer while startup still owns admission.
