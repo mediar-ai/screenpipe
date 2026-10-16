@@ -17,6 +17,7 @@ use tracing::debug;
 use tracing::trace;
 use tracing::{error, info, warn};
 
+use crate::telemetry_budget::{HealthReportGate, ResourceReportWindow, HEALTH_REPORT_INTERVAL};
 use crate::telemetry_context::TelemetryContext;
 
 const RESOURCE_PROCESS_GROUPS: [(&str, &str); 5] = [
@@ -525,6 +526,7 @@ impl ResourceTelemetryReporter {
         snapshot: &ResourceSnapshot,
         runtime: Duration,
         mem_trend: Option<&LeakStats>,
+        window: &ResourceReportWindow,
     ) {
         let Some(client) = &self.posthog_client else {
             return;
@@ -532,6 +534,27 @@ impl ResourceTelemetryReporter {
 
         // Avoid unnecessary cloning by using references
         let mut properties = Map::new();
+        properties.insert(
+            "telemetry_sampling".to_string(),
+            json!("hourly_or_pressure_transition"),
+        );
+        properties.insert(
+            "telemetry_min_heartbeat_seconds".to_string(),
+            json!(HEALTH_REPORT_INTERVAL.as_secs()),
+        );
+        properties.insert(
+            "telemetry_resource_pressure".to_string(),
+            json!(snapshot.process_breakdown.should_warn()),
+        );
+        properties.insert(
+            "telemetry_window_samples".to_string(),
+            json!(window.samples),
+        );
+        properties.insert("window_cpu_percent_mean".to_string(), json!(window.cpu_mean()));
+        properties.insert("window_cpu_percent_max".to_string(), json!(window.cpu_max));
+        properties.insert("window_memory_gb_mean".to_string(), json!(window.memory_mean()));
+        properties.insert("window_memory_gb_max".to_string(), json!(window.memory_max));
+        properties.insert("window_phys_footprint_gb_max".to_string(), json!(window.footprint_max));
         properties.insert("distinct_id".to_string(), json!(&self.distinct_id));
         properties.insert("$lib".to_string(), json!("rust-reqwest"));
         properties.insert(
@@ -743,7 +766,7 @@ impl ResourceTelemetryReporter {
         Self::log_process_breakdown(&snapshot.process_breakdown);
     }
 
-    async fn log_status(&self, snapshot: &ResourceSnapshot) {
+    async fn log_status(&self, snapshot: &ResourceSnapshot, window: &ResourceReportWindow) {
         let runtime = self.start_time.elapsed();
         self.log_snapshot(snapshot, runtime);
 
@@ -755,7 +778,7 @@ impl ResourceTelemetryReporter {
         // Send to PostHog if enabled
         if self.posthog_enabled {
             tokio::select! {
-                _ = self.send_to_posthog(snapshot, runtime, mem_trend.as_ref()) => {},
+                _ = self.send_to_posthog(snapshot, runtime, mem_trend.as_ref(), window) => {},
                 _ = tokio::time::sleep(Duration::from_secs(5)) => {
                     warn!("PostHog request timed out");
                 }
@@ -771,8 +794,11 @@ impl ResourceTelemetryReporter {
         // Always run locally so resource-pressure warnings still fire when
         // analytics/debug/file logging are disabled.
         let monitor = Arc::clone(self);
-        let posthog_interval = posthog_interval.unwrap_or(interval);
-        let mut last_posthog_update = Instant::now();
+        let posthog_interval = posthog_interval
+            .unwrap_or(HEALTH_REPORT_INTERVAL)
+            .max(HEALTH_REPORT_INTERVAL);
+        let mut reports = HealthReportGate::new(posthog_interval);
+        let mut window = ResourceReportWindow::default();
 
         tokio::spawn(async move {
             let mut sampler = ResourceSampler::new();
@@ -807,13 +833,19 @@ impl ResourceTelemetryReporter {
                             }
                             unsafe { malloc_trim(0) };
                         }
-                        let now = Instant::now();
-                        let should_send_to_posthog = now.duration_since(last_posthog_update) >= posthog_interval;
                         let snapshot = sampler.snapshot();
+                        window.observe(
+                            f64::from(snapshot.total_cpu_percent),
+                            snapshot.total_memory_gb,
+                            snapshot.phys_footprint_gb,
+                        );
+                        let should_send_to_posthog = reports.should_report(
+                            monitor.start_time.elapsed(),
+                            snapshot.process_breakdown.should_warn(),
+                        );
 
                         if should_send_to_posthog {
-                            last_posthog_update = now;
-                            monitor.log_status(&snapshot).await;
+                            monitor.log_status(&snapshot, &std::mem::take(&mut window)).await;
                         } else {
                             monitor.log_status_local(&snapshot).await;
                         }

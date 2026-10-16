@@ -576,8 +576,8 @@ fn build_search_cache_entry(response: &SearchResponse) -> Option<SearchCacheEntr
 
 fn capture_direct_api_search_value(client: &ExplicitApiClient, result_count: usize) {
     if client.is_direct_api() && result_count > 0 {
-        analytics::capture_event_nonblocking(
-            "qualified_value_event",
+        analytics::capture_api_search_value(
+            client.sample_search_diagnostics(),
             crate::qualified_value::api_outcome_properties(
                 crate::qualified_value::ApiOutcomeKind::SearchResult,
                 client.agent_client(),

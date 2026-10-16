@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tracing::{debug, trace};
 
+use crate::telemetry_budget::{ApiValueBudget, API_SEARCH_VALUES_PER_MINUTE};
 use crate::telemetry_context::TelemetryContext;
 
 #[cfg(target_os = "macos")]
@@ -27,6 +28,29 @@ pub(crate) const SEARCH_REPORT_INTERVAL: Duration = Duration::from_secs(60);
 
 static SEARCH_REPORT_START: Lazy<Instant> = Lazy::new(Instant::now);
 static SEARCH_REPORTS: SearchReportLimiter = SearchReportLimiter::new();
+static API_VALUE_BUDGET: ApiValueBudget = ApiValueBudget::new();
+
+/// Named agents retain exact outcomes. Unattributed API traffic retains the
+/// first five successes per minute, with explicit sampling metadata. This also
+/// covers cache hits, which do not enter the search diagnostic reporting path.
+pub(crate) fn capture_api_search_value(sampled: bool, mut properties: Value) {
+    if !is_enabled() {
+        return;
+    }
+    if sampled {
+        let window = search_report_window(
+            SEARCH_REPORT_START.elapsed(),
+            chrono::Utc::now().timestamp(),
+        );
+        if !API_VALUE_BUDGET.claim(window) {
+            return;
+        }
+        properties["telemetry_sampling"] = json!("first_five_per_minute");
+        properties["telemetry_sample_interval_seconds"] = json!(SEARCH_REPORT_INTERVAL.as_secs());
+        properties["telemetry_max_events_per_interval"] = json!(API_SEARCH_VALUES_PER_MINUTE);
+    }
+    capture_event_nonblocking("qualified_value_event", properties);
+}
 
 /// Only unattributed, explicitly API-originated searches share a report budget.
 /// Empty/non-empty and parsed/ordinary results have separate slots so an empty
