@@ -6614,6 +6614,50 @@
         ],
         "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/pipe-watch-switch.config.mjs"
       }
+    },
+    {
+      "id": "app-telemetry-full-ax-wire",
+      "name": "Preserve complete accessibility trees through the telemetry wire format",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "449156e009be5580b0235d52c8543c56e29e37be",
+        "pull_request": "https://github.com/screenpipe/screenpipe/pull/7659"
+      },
+      "base_ref": "ada8f2fab2f78ea6a9ac8d59f97c932063418a24",
+      "oracle_ref": "449156e009be5580b0235d52c8543c56e29e37be",
+      "oracle_paths": [
+        "crates/screenpipe-telemetry-wire/src/records.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-telemetry-wire/src/records.rs"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "telemetry",
+        "preserved-behavior"
+      ],
+      "prompt": "Enterprise frame telemetry loses retained accessibility evidence while encoding or decoding a batch. Repair the existing telemetry wire boundary so an optional accessibility_tree survives JSON input, the public batch encoder and the public batch decoder without losing nodes, order, empty text, nested or unknown properties, false/zero/null values, Unicode, multiline text or long values. An empty tree must remain distinct from an absent tree. Older frames without a tree must remain readable; missing and null trees must be omitted from encoded output. Preserve the existing flattened frame fields, timestamps, device identity and labels, visible summary and nullable browser URL. Mixed frame/audio batches must retain both records and speech. Repeated frame IDs must retain input order and distinct payloads; device identities must not merge. Keep tolerant parsing: blank lines are ignored, each malformed or unknown-kind nonblank line is counted and skipped, and valid neighboring records survive. Empty batches remain empty. Use existing public wire interfaces; no particular implementation is required. Grading compiles the complete records module with synthetic inputs. This task does not require native capture, PII redaction, upload authorization, database hydration or persistence, live services, customer data or execution-isolation changes.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/telemetry-ax.fixture.rs",
+            "destination_path": ".eval-telemetry-ax/outcomes.rs"
+          },
+          {
+            "local_path": "graders/telemetry-ax.lib.rs",
+            "destination_path": ".eval-telemetry-ax/lib.rs"
+          },
+          {
+            "local_path": "graders/telemetry-ax.Cargo.toml.txt",
+            "destination_path": ".eval-telemetry-ax/Cargo.toml"
+          }
+        ],
+        "command": "cargo test --offline --manifest-path .eval-telemetry-ax/Cargo.toml --test outcomes -- --nocapture"
+      }
     }
   ]
 }
