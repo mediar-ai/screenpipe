@@ -1220,7 +1220,7 @@ pub(super) async fn fulfill_requests(
                 .await?;
                 // JPEG pages are heavier than telemetry pages. Yield to live
                 // sync after one acknowledged image page, retaining its cursor.
-                if complete || cursor.boundary.backfill_images.is_some() {
+                if complete || page.pending_read || cursor.boundary.backfill_images.is_some() {
                     break;
                 }
             }
