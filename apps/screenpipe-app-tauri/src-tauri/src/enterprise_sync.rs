@@ -2344,7 +2344,7 @@ mod imp {
             struct CapturingLocal {
                 db: Arc<screenpipe_db::DatabaseManager>,
                 change: u8,
-                selected: std::sync::atomic::AtomicBool,
+                reads: std::sync::atomic::AtomicUsize,
             }
             #[async_trait::async_trait]
             impl LocalApiClient for CapturingLocal {
@@ -2359,9 +2359,7 @@ mod imp {
                     _: u32,
                     _: u32,
                 ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
-                    let first = !self
-                        .selected
-                        .swap(true, std::sync::atomic::Ordering::SeqCst);
+                    let first = self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
                     let ids = if first { vec![1, 2] } else { vec![1, 2, 3] };
                     let payloads = self
                         .db
@@ -2399,6 +2397,17 @@ mod imp {
                                     .await
                                     .unwrap();
                             }
+                            4 => {
+                                let chunk = self
+                                    .db
+                                    .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
+                                    .await
+                                    .unwrap();
+                                self.db
+                                    .compact_snapshots_queued(chunk, vec![(1, 0)])
+                                    .await
+                                    .unwrap();
+                            }
                             _ => {}
                         }
                     }
@@ -2414,7 +2423,7 @@ mod imp {
                     Ok(Vec::new())
                 }
             }
-            for (change, hybrid) in (0..4).flat_map(|change| [(change, false), (change, true)]) {
+            for (change, hybrid) in (0..5).flat_map(|change| [(change, false), (change, true)]) {
                 let dir = tempfile::tempdir().unwrap();
                 let db = Arc::new(if hybrid {
                     // Synthetic export fixture; disk admission is covered by
@@ -2437,6 +2446,9 @@ mod imp {
                     .unwrap()
                 });
                 db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload'),(2,'2026-10-09','surviving record')").await.unwrap();
+                if change == 4 {
+                    db.execute_raw_sql_write("UPDATE frames SET snapshot_path='redacted.jpg',full_text_redacted_at=1,image_redacted_at=1 WHERE id=1").await.unwrap();
+                }
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
                     .respond_with(wiremock::ResponseTemplate::new(200))
@@ -2448,7 +2460,7 @@ mod imp {
                 let local = CapturingLocal {
                     db: db.clone(),
                     change,
-                    selected: std::sync::atomic::AtomicBool::new(false),
+                    reads: std::sync::atomic::AtomicUsize::new(0),
                 };
                 let result =
                     sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new()).await;
@@ -2472,8 +2484,15 @@ mod imp {
                         !body.contains("new capture"),
                         "new rows belong to the next page"
                     );
-                    assert_eq!(body.contains("pending upload"), change == 0);
+                    assert_eq!(body.contains("pending upload"), matches!(change, 0 | 4));
                     assert_eq!(body.contains("[REDACTED]"), change == 2);
+                }
+                if hybrid && change == 4 {
+                    assert_eq!(
+                        local.reads.load(std::sync::atomic::Ordering::SeqCst),
+                        1,
+                        "physical compaction must not force an export refresh"
+                    );
                 }
                 server.verify().await;
                 let captured = db

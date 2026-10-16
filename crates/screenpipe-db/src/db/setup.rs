@@ -554,7 +554,8 @@ impl DatabaseManager {
                 let cleanup_indexes_changed =
                     crate::storage::schema::ensure_cleanup_indexes(&mut conn, storage.has_bulk())
                         .await?;
-                crate::storage::read_schema::upgrade(&mut conn, storage).await?;
+                let read_hooks_changed =
+                    crate::storage::read_schema::upgrade(&mut conn, storage).await?;
                 let resident_hooks_changed = crate::storage::schema::ensure_resident_table_hooks(
                     &mut conn,
                     storage.has_bulk(),
@@ -562,7 +563,11 @@ impl DatabaseManager {
                 .await?;
                 storage.verify_catalog(&db_manager.pool).await?;
                 drop(conn);
-                if upgraded || cleanup_indexes_changed || resident_hooks_changed {
+                if upgraded
+                    || cleanup_indexes_changed
+                    || read_hooks_changed
+                    || resident_hooks_changed
+                {
                     // Connections opened before the trigger migration need a
                     // schema read before their first DML preparation. Refresh
                     // every existing writer while startup still owns admission.

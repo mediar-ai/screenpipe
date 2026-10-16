@@ -133,7 +133,7 @@ bun run coverage:core -- --llvm-cov-summary ../../docs/coverage/core-llvm-cov-su
 | audio-windows-parakeet-provider | screenpipe-audio | windows | audio, transcription | audio-record-transcribe | high | partial | unit | 1 | 6 | 0 | Registers existing CPU override, eligible adapter selection, DXGI ordinal, error fallback and adapter determinism tests. Windows-only; manifest registration does not verify execution on physical GPU hardware. |
 | db-accessibility-ui-events | screenpipe-db | windows, macos, linux | database, configuration, accessibility, ui-events, performance | settings-to-engine-config, accessibility-ui-events, performance-liveness | medium | partial | integration | 7 | 28 | 2 | Elements bulk insert, on-screen filtering, UI event batching, DB tier config, and ignored heavy-read real-DB probes. |
 | db-audio-meetings-speakers | screenpipe-db | windows, macos, linux | database, audio, meeting, speaker | audio-record-transcribe, audio-device-health, meeting-live-notes | high | strong | integration | 19 | 135 | 4 | Audio transcript dedupe, live meeting mirroring, end-generation and open-meeting invariants, liveness, and speaker reassignment coverage. |
-| db-runtime-reliability | screenpipe-db | windows, macos, linux | database, performance | performance-liveness | high | partial | mixed | 16 | 50 | 6 | SQLite hard-fault classification, failpoint VFS injection, fresh-identity recovery verification with integrity/FK/write canaries, query cancellation, close-severs-connections regressions, multi-pool WAL parity, runtime version pinning, and WAL chaos plus memory-pressure probes, plus read-only quarantine self-heal verification for transient IOERR faults. |
+| db-runtime-reliability | screenpipe-db | windows, macos, linux | database, performance | performance-liveness | high | partial | mixed | 17 | 51 | 6 | SQLite hard-fault classification, failpoint VFS injection, fresh-identity recovery verification with integrity/FK/write canaries, query cancellation, close-severs-connections regressions, multi-pool WAL parity, runtime version pinning, and WAL chaos plus memory-pressure probes, plus read-only quarantine self-heal verification for transient IOERR faults. |
 | db-search-indexing | screenpipe-db | windows, macos, linux | db-search, ocr, accessibility, performance | local-api-search, capture-ocr-pipeline, accessibility-ui-events, performance-liveness | high | strong | mixed | 14 | 106 | 4 | FTS, tokenizer, OCR snapshot search, query planning, ordering, accessibility search, and contention coverage. |
 | db-timeline-frames | screenpipe-db | windows, macos, linux | database, timeline, storage, performance | timeline-streaming, performance-liveness | high | strong | mixed | 39 | 307 | 15 | Frame/audio joins, timeline query shape, suggestions frames, write queue, DB primitives (src/db.rs split into src/db/ modules), feedback record upserts, media eviction anti-join regressions, SAF output registry, semantic storage, and timeline performance. |
 | engine-api-routes | screenpipe-engine | windows, macos, linux | local-api, timeline, meeting, transcription | local-api-search, timeline-streaming, meeting-live-notes, audio-record-transcribe | high | partial | mixed | 45 | 430 | 7 | Route/unit coverage for search, health, streaming, meetings, time/timezone, and transcription. Legacy endpoint/websocket tests require local data and remain ignored. |
@@ -295,6 +295,7 @@ bun run coverage:core -- --llvm-cov-summary ../../docs/coverage/core-llvm-cov-su
 | db-timeline-frames | screenpipe-db | src/storage/diagnostics.rs | source | 7 | 0 | 7 |
 | db-timeline-frames | screenpipe-db | src/storage/lifecycle.rs | source | 3 | 1 | 4 |
 | db-timeline-frames | screenpipe-db | src/storage/parity.rs | source | 2 | 0 | 2 |
+| db-runtime-reliability | screenpipe-db | src/storage/read_schema.rs | source | 1 | 0 | 1 |
 | db-runtime-reliability | screenpipe-db | src/storage/reader.rs | source | 7 | 0 | 7 |
 | db-timeline-frames | screenpipe-db | src/storage/reclaim.rs | source | 3 | 1 | 4 |
 | db-timeline-frames | screenpipe-db | src/storage/schema.rs | source | 3 | 1 | 4 |
@@ -350,7 +351,7 @@ bun run coverage:core -- --llvm-cov-summary ../../docs/coverage/core-llvm-cov-su
 | db-search-indexing | screenpipe-db | tests/search_ocr_snapshot_test.rs | integration | 4 | 0 | 4 |
 | db-timeline-frames | screenpipe-db | tests/semantic_storage_test.rs | integration | 13 | 0 | 13 |
 | db-audio-meetings-speakers | screenpipe-db | tests/single_open_meeting_invariant_test.rs | integration | 3 | 0 | 3 |
-| db-timeline-frames | screenpipe-db | tests/snapshot_compaction_test.rs | integration | 1 | 0 | 1 |
+| db-timeline-frames | screenpipe-db | tests/snapshot_compaction_test.rs | integration | 2 | 0 | 2 |
 | db-audio-meetings-speakers | screenpipe-db | tests/speaker_benchmark.rs | integration | 0 | 1 | 1 |
 | db-audio-meetings-speakers | screenpipe-db | tests/speaker_delete_test.rs | integration | 3 | 0 | 3 |
 | db-audio-meetings-speakers | screenpipe-db | tests/speaker_identity_eval.rs | integration | 4 | 0 | 4 |

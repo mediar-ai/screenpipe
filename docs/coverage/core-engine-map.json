@@ -748,6 +748,7 @@
         "src/failpoint_vfs.rs",
         "src/recovery.rs",
         "src/sqlite_error.rs",
+        "src/storage/read_schema.rs",
         "src/storage/reader.rs",
         "tests/cancellable_query_test.rs",
         "tests/cancellation_performance_bench.rs",
