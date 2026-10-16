@@ -248,6 +248,23 @@ describe("enterprise policy runtime manual activation", () => {
     vi.useRealTimers();
   });
 
+  it.each([
+    [undefined, true],
+    [{}, true],
+    [{ parsed: true }, true],
+    [{ parsed: false }, false],
+  ])("pushes the parsed-data default to native sync while preserving %j", async (streams, expected) => {
+    mocks.commands.getEnterpriseLicenseKey.mockResolvedValue(KEY);
+    mockEnterpriseApi({ policy: { syncStreams: streams } });
+    const hook = await renderEnterprisePolicy();
+    await waitFor(() => {
+      expect(mocks.commands.setSyncStreams).toHaveBeenCalledWith(
+        true, expected, true, true, true, true, "off", "off",
+      );
+    });
+    hook.unmount();
+  });
+
   it("shares one policy runtime across multiple consumers", async () => {
     mocks.commands.getEnterpriseLicenseKey.mockResolvedValue(KEY);
     mockEnterpriseApi({});

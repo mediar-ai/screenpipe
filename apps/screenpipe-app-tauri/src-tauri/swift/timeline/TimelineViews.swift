@@ -822,9 +822,11 @@ struct TimelineFilterRail: View {
             if expanded == id {
                 HStack(spacing: 4) {
                     ForEach(items.prefix(24), id: \.self) { item in
-                        dot(item, isSelected: selected == item, anySelected: selected != nil)
-                            .onTapGesture { model.applyFilter(keyPath, item) }
-                            .timelinePointerCursor()
+                        TimelineFilterDot(
+                            name: item,
+                            color: dotColor(item, isSelected: selected == item, anySelected: selected != nil),
+                            isSelected: selected == item
+                        ) { model.applyFilter(keyPath, item) }
                     }
                 }
                 .padding(.horizontal, 6)
@@ -832,6 +834,8 @@ struct TimelineFilterRail: View {
                 .background(TimelineTheme.chromeBackground)
             }
         }
+        .contentShape(Rectangle())
+        .zIndex(expanded == id ? 1 : 0)
         .onHover { hovering in
             expanded = hovering ? id : (expanded == id ? nil : expanded)
         }
@@ -839,20 +843,14 @@ struct TimelineFilterRail: View {
 
     /// Selected dots grow and saturate; unrelated dots in a filtered category
     /// fade, so the active facet is legible without relying on colour alone.
-    private func dot(_ name: String, isSelected: Bool, anySelected: Bool) -> some View {
-        let size: CGFloat = isSelected ? 8 : 6
-        let color: Color
+    private func dotColor(_ name: String, isSelected: Bool, anySelected: Bool) -> Color {
         if isSelected {
-            color = TimelineTheme.color(TimelineColors.dotColor(for: name))
+            return TimelineTheme.color(TimelineColors.dotColor(for: name))
         } else if anySelected {
-            color = TimelineTheme.foreground.opacity(0.15)
+            return TimelineTheme.foreground.opacity(0.15)
         } else {
-            color = TimelineTheme.color(TimelineColors.dotColor(for: name, alpha: 0.6))
+            return TimelineTheme.color(TimelineColors.dotColor(for: name, alpha: 0.6))
         }
-        return Circle()
-            .fill(color)
-            .frame(width: size, height: size)
-            .help(name)
     }
 
     private var meetingRow: some View {
@@ -870,15 +868,13 @@ struct TimelineFilterRail: View {
             if expanded == "calls" {
                 HStack(spacing: 4) {
                     ForEach(model.meetings) { meeting in
-                        Circle()
-                            .fill(model.filters.meetingId == meeting.id
-                                  ? TimelineTheme.phosphor
-                                  : TimelineTheme.foreground.opacity(0.4))
-                            .frame(width: model.filters.meetingId == meeting.id ? 8 : 6,
-                                   height: model.filters.meetingId == meeting.id ? 8 : 6)
-                            .help(meetingLabel(meeting))
-                            .onTapGesture { model.selectMeeting(meeting) }
-                            .timelinePointerCursor()
+                        TimelineFilterDot(
+                            name: meetingLabel(meeting),
+                            color: model.filters.meetingId == meeting.id
+                                ? TimelineTheme.phosphor
+                                : TimelineTheme.foreground.opacity(0.4),
+                            isSelected: model.filters.meetingId == meeting.id
+                        ) { model.selectMeeting(meeting) }
                     }
                 }
                 .padding(.horizontal, 6)
@@ -886,6 +882,8 @@ struct TimelineFilterRail: View {
                 .background(TimelineTheme.chromeBackground)
             }
         }
+        .contentShape(Rectangle())
+        .zIndex(expanded == "calls" ? 1 : 0)
         .onHover { hovering in expanded = hovering ? "calls" : (expanded == "calls" ? nil : expanded) }
     }
 
@@ -921,6 +919,56 @@ struct TimelineFilterRail: View {
             }
         }
         .onHover { hovering in expanded = hovering ? "zoom" : (expanded == "zoom" ? nil : expanded) }
+    }
+}
+
+/// A stable hit target and immediate label for the rail's otherwise anonymous dots.
+struct TimelineFilterDot: View {
+    let name: String
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(color)
+                .frame(width: isSelected ? 8 : 6, height: isSelected ? 8 : 6)
+                .frame(width: 22, height: 22)
+                .background(TimelineTheme.foreground.opacity(isHovered || isFocused ? 0.16 : 0))
+                .overlay(
+                    Rectangle().stroke(
+                        isSelected || isFocused ? TimelineTheme.foreground : .clear,
+                        lineWidth: 1
+                    )
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(TimelinePlainButtonStyle())
+        .focused($isFocused)
+        .accessibilityLabel(name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .onHover { isHovered = $0 }
+        .overlay(alignment: .topLeading) {
+            if isHovered || isFocused {
+                Text(name)
+                    .font(TimelineTheme.labelFont)
+                    .foregroundStyle(TimelineTheme.foreground)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minWidth: 22, maxWidth: 280, alignment: .leading)
+                    .background(TimelineTheme.ink)
+                    .overlay(Rectangle().stroke(TimelineTheme.border, lineWidth: 1))
+                    .fixedSize()
+                    .offset(y: 26)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .zIndex(isHovered || isFocused ? 1 : 0)
     }
 }
 

@@ -6,6 +6,7 @@
 
 import { useEffect, useRef } from "react";
 import posthog from "posthog-js";
+import { subscribeToFeatureFlagRefresh } from "@/lib/feature-flag-refresh";
 import { commands } from "@/lib/utils/tauri";
 import { useSettings, type Settings } from "@/lib/hooks/use-settings";
 import { isPrimaryWindow } from "@/lib/utils/is-primary-window";
@@ -20,7 +21,6 @@ import {
   trialActivationState,
 } from "@/lib/first-run/trial-activation";
 
-const REFRESH_INTERVAL_MS = 60_000;
 const RESTART_SETTLE_MS = 500;
 
 async function applyTrialActivationForceUnlock(): Promise<boolean> {
@@ -80,7 +80,6 @@ export function DesktopRemoteControl({ enabled }: { enabled: boolean }) {
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
-    let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
     const reconcile = () => {
       if (cancelled) return;
@@ -212,29 +211,12 @@ export function DesktopRemoteControl({ enabled }: { enabled: boolean }) {
       // PostHog is not initialized in debug, browser-dev, or E2E builds.
     }
 
-    const refresh = () => {
-      if (cancelled || document.visibilityState === "hidden") return;
-      try {
-        posthog.reloadFeatureFlags();
-      } catch {
-        // Keep the last persisted policy while offline or uninitialized.
-      }
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    refreshTimer = setInterval(refresh, REFRESH_INTERVAL_MS);
-    refresh();
+    const stopRefreshing = subscribeToFeatureFlagRefresh();
 
     return () => {
       cancelled = true;
       unsubscribe?.();
-      if (refreshTimer) clearInterval(refreshTimer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopRefreshing();
     };
   }, [allowRemoteAutoUpdate, enabled, isSettingsLoaded]);
 

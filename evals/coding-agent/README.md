@@ -2002,3 +2002,18 @@ unresponsive startup stop collection as setup errors. Calibrate with
 The Vertex upstream JSON case executes public JSON and streaming completion methods with synthetic OAuth and completion transport. Empty or malformed successful bodies must produce status 502 while valid content, reasoning fallback, client refusal and streaming remain intact. It does not prove gateway retry behavior, live provider reliability or agent isolation.
 
 `app-pipe-watch-switch-preservation` mounts the real conversation-switch hook and session store. It distinguishes equal-count stale pipe-watch text from normal panel ownership, preserves longer stored transcripts, and checks incoming chat identity. This is separate from saved terminal pipe transcripts and overlapping-load races. Run `bun test evals/coding-agent/calibrate-pipe-watch-switch.test.js` for calibration. Native delivery and disk durability are outside its scope.
+
+### HTTP MCP browser authority
+
+`app-mcp-browser-boundary` exercises the actual HTTP server and MCP transport
+with synthetic loopback requests. Foreign Host/Origin inputs must not initialize,
+list tools through, or delete a session without matching bearer credentials.
+Literal local clients, explicit bearer authorization, session accounting, health,
+preflight and route refusal remain usable. The parent fails five security
+outcomes and preserves four; the source-only historical reference passes nine.
+Run `bun test evals/coding-agent/calibrate-mcp-browser-boundary.test.js` for
+broken/correct, alternative implementation, partial-fix, disconnected-caller,
+blanket-denial, no-op-script and missing-source controls. Hidden fixtures and
+third-party dependencies appear only when grading starts. This is synthetic
+HTTP evidence, not a real browser/DNS exploit test, remote network validation,
+all header-parser ambiguities, model performance or enforced host isolation.

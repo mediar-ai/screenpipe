@@ -1,0 +1,100 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { beforeEach, afterEach, it, expect } from 'vitest';
+import { request } from 'node:http';
+import { buildHttpServer } from './http-server';
+let server: any, port: number;
+const token = 'synthetic-eval-token';
+const originalFetch = globalThis.fetch;
+beforeEach(async () => {
+  globalThis.fetch = (() => { throw new Error('Unexpected upstream access'); }) as typeof fetch;
+  server = buildHttpServer({ host: '127.0.0.1', mcpPort: 0, screenpipePort: 1, apiKey: token });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  port = server.address().port;
+});
+afterEach(async () => {
+  server?.closeAllConnections();
+  await new Promise<void>(resolve => server.close(() => resolve()));
+  globalThis.fetch = originalFetch;
+});
+function call(headers: Record<string, string> = {}, method = 'POST', path = '/mcp', rpc = 'initialize') {
+  return new Promise<{ status: number; session?: string; body: string }>((resolve, reject) => {
+    const req = request({ hostname: '127.0.0.1', port, path, method, headers: {
+      host: `127.0.0.1:${port}`, 'content-type': 'application/json',
+      accept: 'application/json, text/event-stream', ...headers,
+    } }, res => {
+      let body = ''; res.on('data', chunk => body += chunk);
+      res.on('end', () => resolve({ status: res.statusCode!, session: res.headers['mcp-session-id'] as string | undefined, body }));
+    });
+    req.setTimeout(3000, () => req.destroy(new Error('Synthetic HTTP timeout')));
+    req.on('error', reject);
+    req.end(method === 'POST' ? JSON.stringify({ jsonrpc: '2.0', id: 1, method: rpc,
+      params: rpc === 'initialize' ? { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-boundary', version: '1' } } : {} }) : undefined);
+  });
+}
+function payload(body: string) {
+  return JSON.parse(body.startsWith('event:') || body.startsWith('data:') ? body.split('\n').filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).join('\n') : body);
+}
+async function count(expected: number) {
+  const r = await call({}, 'GET', '/health'); expect(r.status).toBe(200);
+  expect(JSON.parse(r.body)).toEqual(expect.objectContaining({ status: 'ok', sessions: expected }));
+}
+async function init(headers: Record<string, string> = {}) {
+  const r = await call(headers); expect(r.status).toBe(200); expect(r.session).toBeTruthy();
+  expect(payload(r.body).result.capabilities.tools).toBeDefined(); return r.session!;
+}
+async function denied(headers: Record<string, string>, method = 'POST', path = '/mcp', rpc = 'initialize') {
+  const r = await call(headers, method, path, rpc); expect(r.status).toBe(401); expect(r.session).toBeUndefined();
+}
+it('refuses attacker authorities even when the TCP peer is loopback', async () => {
+  for (const host of [`rebind.invalid:${port}`, `localhost.evil.invalid:${port}`, `127.0.0.1.evil.invalid:${port}`, `2130706433:${port}`, `127.1:${port}`, `localhost@evil.invalid:${port}`]) {
+    await denied({ host }); await count(0);
+  }
+});
+it('refuses foreign, opaque and misleading origins before creating sessions', async () => {
+  for (const origin of ['https://evil.invalid', 'null', 'http://localhost@evil.invalid', 'http://localhost.evil.invalid', 'http://127.0.0.1.evil.invalid']) {
+    await denied({ origin }); await count(0);
+  }
+});
+it('checks reused sessions on tool listing and deletion, including query URLs', async () => {
+  const id = await init();
+  for (const headers of [{ host: 'rebind.invalid' }, { origin: 'https://evil.invalid' }]) {
+    await denied({ ...headers, 'mcp-session-id': id }, 'POST', '/mcp?probe=1', 'tools/list');
+    await denied({ ...headers, 'mcp-session-id': id }, 'DELETE'); await count(1);
+  }
+  const good = await call({ 'mcp-session-id': id }, 'POST', '/mcp', 'tools/list');
+  expect(good.status).toBe(200); expect(payload(good.body).result.tools.some((t: any) => t.name === 'search_content')).toBe(true);
+});
+it('wrong bearer credentials cannot rescue an untrusted browser', async () => {
+  for (const authorization of ['Bearer wrong', 'Basic synthetic', `Bearer ${token}x`]) {
+    await denied({ origin: 'https://evil.invalid', authorization }); await count(0);
+  }
+});
+it('preserves native clients using literal loopback authorities', async () => {
+  for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`, 'LOCALHOST']) await init({ host });
+  await count(4);
+});
+it('preserves trusted local browser origins', async () => {
+  for (const origin of [`http://localhost:${port}`, `https://127.0.0.1:${port}`, `http://[::1]:${port}`]) await init({ origin });
+  await count(3);
+});
+it('explicit matching bearer credentials authorize otherwise untrusted clients', async () => {
+  const id = await init({ host: 'remote.invalid', origin: 'https://remote.invalid', authorization: `Bearer ${token}` });
+  const r = await call({ host: 'remote.invalid', origin: 'https://remote.invalid', authorization: `Bearer ${token}`, 'mcp-session-id': id }, 'POST', '/mcp', 'tools/list');
+  expect(r.status).toBe(200); expect(payload(r.body).result.tools.length).toBeGreaterThan(0); await count(1);
+});
+it('preserves unauthenticated health and preflight and authorized route refusal', async () => {
+  const r = await call({ host: 'untrusted.invalid', origin: 'https://evil.invalid' }, 'GET', '/health');
+  expect(r.status).toBe(200); expect(JSON.parse(r.body)).toEqual({ status: 'ok', sessions: 0 });
+  expect((await call({ origin: 'https://evil.invalid' }, 'OPTIONS')).status).toBe(204);
+  expect((await call({}, 'GET', '/not-a-route')).status).toBe(404); await count(0);
+});
+
+it('protects the default deployment without an API key while retaining native access', async () => {
+  server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+  server = buildHttpServer({ host: '127.0.0.1', mcpPort: 0, screenpipePort: 1 });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve)); port = server.address().port;
+  await denied({ host: 'rebind.invalid' }); await denied({ origin: 'https://evil.invalid' });
+  await denied({ origin: 'https://evil.invalid', authorization: `Bearer ${token}` });
+  await count(0); await init(); await count(1);
+});

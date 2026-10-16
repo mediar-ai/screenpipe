@@ -2054,6 +2054,7 @@ pub fn remove_persistence() -> Result<()> {
         let state = state_dir(Path::new(&program_data));
         let _ = fs::remove_file(policy_disabled_path(Path::new(&program_data)));
         let _ = fs::remove_file(log_path(Path::new(&program_data)));
+        let _ = fs::remove_file(state.join(INSTALLED_STATE_FILE));
         let _ = fs::remove_file(state.join(RECOVERY_SUPERVISOR_FILE));
         let _ = fs::remove_dir_all(state.join(UPDATE_STAGING_DIR));
         let _ = fs::remove_dir(state);
