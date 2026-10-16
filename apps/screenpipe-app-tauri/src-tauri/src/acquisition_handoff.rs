@@ -1,0 +1,330 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+
+//! macOS download possession -> authenticated account. Best effort, off the
+//! recording/startup path. The server owns authorization and attribution rules.
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+use tauri::AppHandle;
+
+static WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
+static CANCEL: tokio::sync::Notify = tokio::sync::Notify::const_new();
+static STORAGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+static AUTH_EPOCH: AtomicU64 = AtomicU64::new(0);
+const SERVICE: &str = if cfg!(feature = "enterprise-build") {
+    "com.screenpipe.enterprise.acquisition.v1"
+} else { "com.screenpipe.acquisition.v1" };
+const PLACEHOLDER: &str = "00000000-0000-4000-8000-000000000000";
+
+#[derive(Clone, Serialize, Deserialize)]
+struct Pending {
+    grant: String,
+    request_id: String,
+    verifier: String,
+    created: i64,
+    account: Option<String>,
+    claimed: bool,
+    retired: bool,
+}
+
+fn uuid4(value: &str) -> bool {
+    uuid::Uuid::parse_str(value)
+        .map(|v| v.get_version_num() == 4 && v.to_string() == value && value != PLACEHOLDER)
+        .unwrap_or(false)
+}
+
+// This is only a local account boundary. The API verifies the JWT signature.
+pub(crate) fn subject(token: &str) -> Option<String> {
+    let bytes = URL_SAFE_NO_PAD.decode(token.split('.').nth(1)?).ok()?;
+    let json: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let sub = json.get("sub")?.as_str()?;
+    (sub.starts_with("user_") && sub.len() <= 105 && sub[5..].chars().all(|c| c.is_ascii_alphanumeric()))
+        .then(|| sub.to_string())
+}
+
+impl Pending {
+    fn new(grant: String) -> Self {
+        // Two independent v4 UUIDs provide 244 random bits. Hashing keeps the
+        // verifier at the API's fixed 32-byte/base64url width.
+        use sha2::{Digest, Sha256};
+        let entropy = format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+        Self { grant, request_id: uuid::Uuid::new_v4().to_string(),
+            verifier: URL_SAFE_NO_PAD.encode(Sha256::digest(entropy.as_bytes())),
+            created: chrono::Utc::now().timestamp(), account: None, claimed: false, retired: false }
+    }
+    fn expired(&self, now: i64) -> bool {
+        self.created > now || now - self.created >= 30 * 24 * 3600
+    }
+    fn crossed_account(&self, current: Option<&str>) -> bool {
+        self.account.as_deref().is_some_and(|pinned| Some(pinned) != current)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn carrier() -> Option<String> {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt};
+    let executable = std::env::current_exe().ok()?;
+    let bundle = executable.ancestors().find(|p| p.extension().is_some_and(|e| e == "app"))?;
+    let path = CString::new(bundle.as_os_str().as_bytes()).ok()?;
+    let name = CString::new("com.apple.application-instance").ok()?;
+    let mut bytes = [0u8; 36];
+    // Exact-size read; absent, truncated or oversized attributes are ignored.
+    let size = unsafe { libc::getxattr(path.as_ptr(), name.as_ptr(), bytes.as_mut_ptr().cast(), bytes.len(), 0, 0) };
+    if size != 36 { return None; }
+    let grant = String::from_utf8(bytes.to_vec()).ok()?.to_ascii_lowercase();
+    uuid4(&grant).then_some(grant)
+}
+
+fn storage_account(profile: &std::path::Path, origin: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("profile-{:x}", Sha256::digest(format!("{}\n{}", profile.display(), origin).as_bytes()))
+}
+
+fn current_storage_account() -> String {
+    storage_account(crate::config::app_data_dir(), &crate::web_base::screenpipe_web_base())
+}
+
+fn tombstone() -> std::path::PathBuf {
+    crate::config::app_data_dir().join(format!("acquisition-retired-{}", current_storage_account()))
+}
+
+#[cfg(target_os = "macos")]
+fn load_saved() -> Result<Option<Pending>, ()> {
+    match security_framework::passwords::get_generic_password(SERVICE, &current_storage_account()) {
+        Ok(bytes) => {
+            let mut p: Pending = serde_json::from_slice(&bytes).map_err(|_| ())?;
+            if !uuid4(&p.grant) || !uuid4(&p.request_id) || p.verifier.len() != 43 { return Err(()); }
+            if tombstone().exists() { p.retired = true; }
+            Ok(Some(p))
+        }
+        Err(e) if e.code() == -25300 => Ok(None),
+        Err(_) => Err(()), // A locked Keychain is not an empty one.
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn save(pending: &Pending) -> Result<(), ()> {
+    let bytes = serde_json::to_vec(pending).map_err(|_| ())?;
+    security_framework::passwords::set_generic_password(SERVICE, &current_storage_account(), &bytes).map_err(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+async fn persist(pending: &Pending) -> Result<(), ()> {
+    let _guard = STORAGE.lock().await;
+    let p = pending.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if (tombstone().exists() || load_saved()?.is_some_and(|old| old.retired || old.grant != p.grant)) && !p.retired { return Err(()); }
+        save(&p)
+    }).await.map_err(|_| ())?
+}
+
+// Logout invalidates in-flight work immediately. The worker persists a tombstone
+// before any future bind. A pinned account is also checked after process restart.
+pub fn wake() { WAKE.notify_one(); }
+
+pub async fn retire() {
+    AUTH_EPOCH.fetch_add(1, Ordering::SeqCst);
+    CANCEL.notify_waiters();
+    #[cfg(target_os = "macos")]
+    {
+        let _guard = STORAGE.lock().await;
+        let _ = tauri::async_runtime::spawn_blocking(|| {
+            // Retire this installation even when Keychain is locked and an
+            // update removed the original carrier. No secret is needed here.
+            std::fs::write(tombstone(), b"retired").map_err(|_| ())?;
+            let saved = load_saved().ok().flatten();
+            let grant = saved.as_ref().map(|p| p.grant.clone()).or_else(carrier).ok_or(())?;
+            let mut pending = saved.unwrap_or_else(|| Pending::new(grant));
+            pending.retired = true;
+            save(&pending)
+        }).await;
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn spawn(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        // Keychain/settings can be temporarily unavailable during startup.
+        for _ in 0..240 {
+            if run(app.clone()).await.is_ok() { return; }
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(30)) => {},
+                _ = WAKE.notified() => {},
+            }
+        }
+    });
+}
+#[cfg(not(target_os = "macos"))]
+pub fn spawn(_app: AppHandle) {}
+
+#[cfg(target_os = "macos")]
+async fn run(app: AppHandle) -> Result<(), ()> {
+    if tombstone().exists() { return Ok(()); }
+    let pending = tauri::async_runtime::spawn_blocking(|| {
+        if let Some(p) = load_saved()? { return Ok(Some(p)); }
+        let Some(grant) = carrier() else { return Ok(None); };
+        let mut p = Pending::new(grant);
+        p.retired = tombstone().exists();
+        Ok::<_, ()>(Some(p))
+    }).await.map_err(|_| ())??;
+    let Some(mut p) = pending else { return Ok(()); };
+    if p.retired { return Ok(()); }
+    // Persist proof BEFORE first claim, including when its HTTP response is lost.
+    persist(&p).await?;
+    let origin = reqwest::Url::parse(&crate::web_base::screenpipe_web_base()).map_err(|_| ())?;
+    if origin.scheme() != "https" || !origin.username().is_empty() || origin.password().is_some()
+        || origin.query().is_some() || origin.fragment().is_some() || origin.path() != "/" { return Err(()); }
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none()).build().map_err(|_| ())?;
+    let epoch = AUTH_EPOCH.load(Ordering::SeqCst);
+    let mut retry_seconds = 30;
+    loop {
+        let settings = crate::store::SettingsStore::get(&app).map_err(|_| ())?.ok_or(())?;
+        let token = crate::auth_token::cached_cloud_token();
+        let account = token.as_deref().and_then(subject);
+        let enabled = settings.recording.analytics_enabled && !screenpipe_engine::analytics::telemetry_disabled_by_env();
+        if !enabled || p.expired(chrono::Utc::now().timestamp()) || p.crossed_account(account.as_deref())
+            || AUTH_EPOCH.load(Ordering::SeqCst) != epoch {
+            p.retired = true;
+            persist(&p).await?;
+            // Retire locally first. Failed cancellation never authorizes reuse.
+            if p.claimed { let _ = send(&client, &origin, "cancel", &p, None).await; }
+            return Ok(());
+        }
+        if p.account.is_none() && account.is_some() {
+            p.account = account;
+            persist(&p).await?;
+        }
+        let action = if !p.claimed { Some("claim") } else if token.is_some() && p.account.is_some() { Some("bind") } else { None };
+        if let Some(action) = action {
+            // Pin and permission reads precede EVERY request; no logged proof/JWT.
+            if AUTH_EPOCH.load(Ordering::SeqCst) != epoch { continue; }
+            let latest = crate::store::SettingsStore::get(&app).map_err(|_| ())?.ok_or(())?;
+            let latest_token = crate::auth_token::cached_cloud_token();
+            if !latest.recording.analytics_enabled {
+                p.retired = true; persist(&p).await?; return Ok(());
+            }
+            if latest_token.as_deref().and_then(subject) != p.account {
+                // First login during persistence is progress, not an account
+                // switch. Loop to durably pin it before sending anything.
+                if p.account.is_none() { continue; }
+                p.retired = true; persist(&p).await?; return Ok(());
+            }
+            let cancellation = CANCEL.notified();
+            tokio::pin!(cancellation);
+            cancellation.as_mut().enable();
+            if AUTH_EPOCH.load(Ordering::SeqCst) != epoch { continue; }
+            let outcome = tokio::select! {
+                outcome = send(&client, &origin, action, &p, latest_token.as_deref()) => outcome,
+                _ = &mut cancellation => { continue; }
+            };
+            match outcome.as_deref() {
+                Some("redeemed") => { p.claimed = true; persist(&p).await?; retry_seconds = 30; continue; }
+                Some("bound" | "denied" | "expired" | "invalid_request") => {
+                    p.retired = true; persist(&p).await?; return Ok(());
+                }
+                _ => { retry_seconds = (retry_seconds * 2).min(900); } // Same proof, bounded backoff.
+            }
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(retry_seconds)) => {},
+            _ = CANCEL.notified() => {},
+            _ = WAKE.notified() => {},
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+async fn send(client: &reqwest::Client, origin: &reqwest::Url, action: &str, p: &Pending, token: Option<&str>) -> Option<String> {
+    let url = origin.join(&format!("/api/attribution/download-handoff/{action}")).ok()?;
+    let mut body = serde_json::json!({"request_id":p.request_id,"verifier":p.verifier});
+    if action == "claim" { body["grant"] = p.grant.clone().into(); }
+    let mut request = client.post(url).json(&body);
+    if action == "bind" { request = request.bearer_auth(token?); }
+    let mut response = request.send().await.ok()?;
+    let status = response.status();
+    if !status.is_success() && status.as_u16() != 409 { return None; }
+    // The API's fixed response is tiny. Don't accept an unbounded body.
+    if response.content_length().is_some_and(|n| n > 2048) { return None; }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if bytes.len() + chunk.len() > 2048 { return None; }
+        bytes.extend_from_slice(&chunk);
+    }
+    let data: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let outcome = data.get("outcome")?.as_str()?;
+    if !status.is_success() && matches!(outcome, "redeemed" | "bound") { return None; }
+    if matches!(outcome, "redeemed" | "bound") && data.get("request_id")?.as_str()? != p.request_id { return None; }
+    Some(outcome.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn dev_e2e_and_preview_profiles_cannot_share_production_proof() {
+        let prod = storage_account(std::path::Path::new("/profile/prod"), "https://screenpipe.com");
+        assert_ne!(prod, storage_account(std::path::Path::new("/profile/dev"), "https://screenpipe.com"));
+        assert_ne!(prod, storage_account(std::path::Path::new("/profile/e2e"), "https://screenpipe.com"));
+        assert_ne!(prod, storage_account(std::path::Path::new("/profile/prod"), "https://preview.example"));
+    }
+    #[test]
+    fn proof_survives_restart_without_rotation() {
+        let p = Pending::new(uuid::Uuid::new_v4().to_string());
+        let copy: Pending = serde_json::from_slice(&serde_json::to_vec(&p).unwrap()).unwrap();
+        assert_eq!(p.verifier, copy.verifier);
+        assert_eq!(p.request_id, copy.request_id);
+        assert_eq!(URL_SAFE_NO_PAD.decode(p.verifier).unwrap().len(), 32);
+    }
+    #[test]
+    fn account_switch_logout_and_clock_rollback_retire() {
+        let mut p = Pending::new(uuid::Uuid::new_v4().to_string());
+        assert!(!p.crossed_account(None));
+        p.account = Some("user_A".into());
+        assert!(!p.crossed_account(Some("user_A")));
+        assert!(p.crossed_account(Some("user_B")));
+        assert!(p.crossed_account(None));
+        assert!(p.expired(p.created - 1));
+        assert!(p.expired(p.created + 30 * 24 * 3600));
+    }
+    #[test]
+    fn no_placeholder_or_untrusted_subject() {
+        assert!(!uuid4(PLACEHOLDER));
+        assert!(!uuid4("not-a-grant"));
+        assert!(subject("not-a-token").is_none());
+    }
+    #[cfg(target_os = "macos")]
+    async fn response_server(response: String) -> (reqwest::Client, reqwest::Url) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 4096];
+            let _ = socket.read(&mut request).await;
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+        (reqwest::Client::new(), reqwest::Url::parse(&format!("http://{address}/")).unwrap())
+    }
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn retry_provisioning_and_reject_wrong_response_identity() {
+        let p = Pending::new(uuid::Uuid::new_v4().to_string());
+        let (client, origin) = response_server("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n".into()).await;
+        assert!(send(&client, &origin, "bind", &p, Some("synthetic")).await.is_none());
+        let body = r#"{"outcome":"bound","request_id":"wrong"}"#;
+        let (client, origin) = response_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)).await;
+        assert!(send(&client, &origin, "bind", &p, Some("synthetic")).await.is_none());
+    }
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn rejects_oversized_chunked_response() {
+        let p = Pending::new(uuid::Uuid::new_v4().to_string());
+        let response = format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1000\r\n{}\r\n0\r\n\r\n", "x".repeat(4096));
+        let (client, origin) = response_server(response).await;
+        assert!(send(&client, &origin, "claim", &p, None).await.is_none());
+    }
+
+}
