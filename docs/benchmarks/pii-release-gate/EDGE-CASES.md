@@ -1,5 +1,7 @@
 # Privacy gate edge-case evidence
 
+Historical snapshot. See [the subsequent compatibility fixes and controlled measurements](MERGE-READINESS.md) and the PR body for current validation; the measurements and counts below describe their original revision.
+
 Passing tests establish the stated behavior on their fixtures. They do not exhaust the state space or establish perfect detector recall.
 
 | Case | Evidence | Result or boundary |

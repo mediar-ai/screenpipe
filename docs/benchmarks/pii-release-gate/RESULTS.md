@@ -1,5 +1,7 @@
 # PII gate benchmark results
 
+Historical snapshot. See [the subsequent compatibility fixes and controlled measurements](MERGE-READINESS.md) and the PR body for current validation; the measurements and counts below describe their original revision.
+
 Measured on October 14, 2026, on an Apple M5 Max, 18 CPU cores, 128 GiB RAM, macOS 26.6.2. Unmodified release profile (`opt-level=s`, LTO, one codegen unit), `onnx-cpu`. This is a high-end machine and CPU execution only. Our benchmark processes ran serially after compilation; the user’s normal desktop workloads were not stopped, so this is not dedicated-machine isolation. All inputs are synthetic; no production data or traffic figures are included.
 
 The final serial run passed **41 scale cases and seven model/stress cases plus two six-frame-load repeats, and four policy-ID sensitivity cases**. It seeded 7,412,000 history frames across fresh databases and inserted 123,000 additional frames in the scale matrix. Test success means its assertions passed; it does not imply a drained backlog, zero overhead, accurate detection, or rollout readiness.

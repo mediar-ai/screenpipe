@@ -1,5 +1,7 @@
 # Derived enterprise upload validation
 
+Historical snapshot. See [the subsequent compatibility fixes and controlled measurements](MERGE-READINESS.md) and the PR body for current validation; the measurements and counts below describe their original revision.
+
 Measured October 16, 2026. Source revision: `b40eda11d44c13791de28dcd9b05926bec8db07d`. This follow-up restores protected parsed, activity-history and feedback uploads. It does not resolve the whole PR's previously documented rollout blockers.
 
 ## Paired source-trigger measurement
