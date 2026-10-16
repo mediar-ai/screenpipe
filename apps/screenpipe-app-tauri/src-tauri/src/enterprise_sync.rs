@@ -2033,6 +2033,7 @@ mod imp {
             struct CapturingLocal {
                 db: Arc<screenpipe_db::DatabaseManager>,
                 delete_selected: bool,
+                compact_selected: bool,
             }
             #[async_trait::async_trait]
             impl LocalApiClient for CapturingLocal {
@@ -2054,7 +2055,18 @@ mod imp {
                         .unwrap();
                     let text = payloads.get(&1).unwrap().full_text.clone();
                     // Capture continues after selecting the outgoing page.
-                    self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-09','new capture')").await.unwrap();
+                    self.db.execute_raw_sql_write("INSERT OR IGNORE INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-09','new capture')").await.unwrap();
+                    if self.compact_selected {
+                        let chunk = self
+                            .db
+                            .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
+                            .await
+                            .unwrap();
+                        self.db
+                            .compact_snapshots_queued(chunk, vec![(1, 0)])
+                            .await
+                            .unwrap();
+                    }
                     if self.delete_selected {
                         self.db
                             .execute_raw_sql_write("DELETE FROM frames WHERE id=1")
@@ -2080,7 +2092,9 @@ mod imp {
                     Ok(Vec::new())
                 }
             }
-            for delete_selected in [false, true] {
+            for (delete_selected, compact_selected) in
+                [(false, false), (false, true), (true, false)]
+            {
                 let dir = tempfile::tempdir().unwrap();
                 let db = Arc::new(
                     screenpipe_db::DatabaseManager::new_hybrid(
@@ -2091,7 +2105,7 @@ mod imp {
                     .await
                     .unwrap(),
                 );
-                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload')").await.unwrap();
+                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,snapshot_path) VALUES(1,'2026-10-09','pending upload','redacted.jpg'); UPDATE frames SET full_text_redacted_at=1,image_redacted_at=1 WHERE id=1").await.unwrap();
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
                     .respond_with(wiremock::ResponseTemplate::new(200))
@@ -2103,6 +2117,7 @@ mod imp {
                 let local = CapturingLocal {
                     db: db.clone(),
                     delete_selected,
+                    compact_selected,
                 };
                 let result =
                     sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new()).await;
@@ -2116,6 +2131,9 @@ mod imp {
                         }
                     ));
                     assert!(error.to_string().contains("read revision changed"));
+                    assert!(error
+                        .to_string()
+                        .contains("cause=hybrid_read_revoke_delete_frames"));
                     assert!(
                         !cfg.cursor_path.exists(),
                         "revoked data must not be checkpointed"
@@ -2142,7 +2160,7 @@ mod imp {
                     "upload admission must preserve the new recording"
                 );
                 db.close().await;
-                let error = StorageExport::begin(db)
+                let error = StorageExport::begin(db.clone())
                     .await
                     .err()
                     .expect("closed storage refused");
@@ -2153,6 +2171,46 @@ mod imp {
                         ..
                     }
                 ));
+                if delete_selected {
+                    // Restart from the durable, unacknowledged checkpoint.
+                    // Only newly recorded replacement content may now upload.
+                    let db = Arc::new(
+                        screenpipe_db::DatabaseManager::new(
+                            dir.path().join("db.sqlite").to_str().unwrap(),
+                            Default::default(),
+                        )
+                        .await
+                        .unwrap(),
+                    );
+                    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','fresh after revocation')").await.unwrap();
+                    server.reset().await;
+                    wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+                        .respond_with(wiremock::ResponseTemplate::new(200))
+                        .expect(1)
+                        .mount(&server)
+                        .await;
+                    let local = CapturingLocal {
+                        db: db.clone(),
+                        delete_selected: false,
+                        compact_selected: false,
+                    };
+                    sync::run_one_sync(&cfg, &mut cursor, &local, &reqwest::Client::new())
+                        .await
+                        .unwrap();
+                    assert_eq!(
+                        sync::Cursor::load(&cfg.cursor_path)
+                            .last_frame_ts
+                            .as_deref(),
+                        Some("2026-10-09T00:00:00Z")
+                    );
+                    let requests = server.received_requests().await.unwrap();
+                    assert_eq!(requests.len(), 1);
+                    assert!(String::from_utf8_lossy(&requests[0].body)
+                        .contains("fresh after revocation"));
+                    assert!(!String::from_utf8_lossy(&requests[0].body).contains("pending upload"));
+                    db.close().await;
+                    server.verify().await;
+                }
             }
         }
 

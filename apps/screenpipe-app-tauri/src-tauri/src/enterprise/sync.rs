@@ -3741,6 +3741,24 @@ pub(crate) mod tests {
     pub(crate) async fn check_sync_retry_failure(log_dir: &std::path::Path) -> String {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _mode_env = UploadModeEnvGuard::clear();
+        // Keep the originating database revocation in the actual worker's
+        // retained diagnostic and the collected/redacted support upload.
+        let storage_dir = TempDir::new().unwrap();
+        let db = screenpipe_db::DatabaseManager::new_hybrid(
+            storage_dir.path(),
+            Default::default(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','private-person@example.com')").await.unwrap();
+        let export = db.storage_export_token().await.unwrap();
+        db.execute_raw_sql_write("DELETE FROM frames WHERE id=1")
+            .await
+            .unwrap();
+        let revocation = export.admit(&db.pool).await.unwrap_err().to_string();
+        drop(export);
+        db.close().await;
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::path(
             "/api/enterprise/storage-binding/mode",
@@ -3824,7 +3842,7 @@ pub(crate) mod tests {
                         "prepare export"
                     },
                     cause: if attempt % 2 == 0 {
-                        "frame storage: read revision changed; retry the complete query"
+                        &revocation
                     } else {
                         "frame storage: payload read deadline exceeded"
                     }
@@ -3909,6 +3927,7 @@ pub(crate) mod tests {
         assert!(logged.contains("enterprise upload storage prepare export failed"));
         assert!(logged.contains("frame storage: payload read deadline exceeded"));
         assert!(logged.contains("frame storage: read revision changed"));
+        assert!(logged.contains("cause=hybrid_read_revoke_delete_frames"));
         assert!(logged.contains("pending work retained, retrying in 300s"));
         assert!(!logged.contains("backing off 3600s"));
         String::from_utf8(diagnostic.body.clone()).unwrap()

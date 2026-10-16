@@ -53,14 +53,14 @@ impl StorageReadToken {
             return Err(sqlx::Error::PoolClosed);
         }
         if let Some(expected) = self.revocation {
-            let current: i64 =
-                sqlx::query_scalar("SELECT revision FROM _storage_revocation WHERE id=1")
+            let (current, cause): (i64, String) =
+                sqlx::query_as("SELECT revision,(SELECT cause FROM _storage_revocation_cause WHERE id=1) FROM _storage_revocation WHERE id=1")
                     .fetch_one(pool)
                     .await?;
             if current != expected {
-                return Err(storage_error(
-                    "read revision changed; retry the complete query",
-                ));
+                return Err(storage_error(format!(
+                    "read revision changed; retry the complete query (expected_revocation={expected}, current_revocation={current}, cause={cause})"
+                )));
             }
             return Ok(Some(gate));
         }

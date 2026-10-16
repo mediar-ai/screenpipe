@@ -304,6 +304,10 @@ mod tests {
         assert!(report.contains("enterprise upload storage prepare export failed"));
         assert!(report.contains("frame storage: payload read deadline exceeded"));
         assert!(report.contains("frame storage: read revision changed"));
+        assert!(report.contains("cause=hybrid_read_revoke_delete_frames"));
+        assert!(report.contains("expected_revocation="));
+        assert!(report.contains("current_revocation="));
+        assert!(!report.contains("private-person@example.com"));
         assert!(report.contains("pending work retained, retrying in 300s"));
         assert!(!report.contains("backing off 3600s"));
     }
