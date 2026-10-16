@@ -99,6 +99,7 @@ pub mod structured_outputs;
 mod sync_api;
 pub mod sync_provider;
 pub mod telemetry_context;
+mod telemetry_tasks;
 pub mod ui_recorder;
 // Exposed publicly so the commercial `screenpipe-sdk` (screenpipe/sdk repo)
 // can wrap `start_ffmpeg_process` / `write_frame_to_ffmpeg` /
