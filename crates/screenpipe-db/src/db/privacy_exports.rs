@@ -8,6 +8,10 @@ use super::*;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+// Internal envelope distinguishes a JSON null stored in a TEXT column from a
+// SQL NULL. It is removed before publishing the SQL-compatible projection.
+const SQL_JSON_VALUE: &str = "_privacy_json_value";
+
 /// Local content projections share the durable export worker, but are retained
 /// after completion. Paths and identity labels are copied, never rewritten in
 /// the source tables (where they may be filesystem or reconciliation keys).
@@ -134,7 +138,9 @@ pub(crate) fn restore_payload(template: &str, texts: &str) -> Result<Value, Sqlx
 pub(crate) fn local_sql_payload(stream: &str, mut row: Value) -> Value {
     if let Some(surface) = local_surface(stream) {
         for column in surface.json {
-            if !row[*column].is_null() {
+            if let Some(value) = row[*column].get(SQL_JSON_VALUE) {
+                row[*column] = Value::String(value.to_string());
+            } else if !row[*column].is_null() {
                 row[*column] = Value::String(row[*column].to_string());
             }
         }
@@ -593,9 +599,10 @@ impl DatabaseManager {
                         if let Some(raw) = row[*key].as_str() {
                             // Existing columns may contain plain text rather
                             // than JSON. Preserve that shape and process it too.
-                            if let Ok(parsed) = serde_json::from_str(raw) {
-                                row[*key] = parsed;
-                            }
+                            let parsed = serde_json::from_str(raw)
+                                .unwrap_or_else(|_| Value::String(raw.into()));
+                            row[*key] =
+                                Value::Object(Map::from_iter([(SQL_JSON_VALUE.into(), parsed)]));
                         }
                     }
                 }

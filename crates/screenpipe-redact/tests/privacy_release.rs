@@ -2356,3 +2356,35 @@ async fn insert_trigger_upgrade_rediscovers_generated_ids_missed_after_completed
     protected.close().await;
     db.close().await;
 }
+
+#[tokio::test]
+async fn local_json_scalars_preserve_types_and_distinguish_sql_null() {
+    let (_root, db) = database().await;
+    db.execute_raw_sql_write("INSERT INTO feedback(id,target_kind,target_id,actor_id,rating,context,created_at,updated_at) VALUES('one','activity','stable','actor','up','null','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z')").await.unwrap();
+    let protected = db.protected_reads().await.unwrap();
+    for (source, expected) in [
+        ("null", "null"),
+        ("7", "7"),
+        ("true", "true"),
+        ("\"SYNTHETIC_SECRET\"", "\"[PRIVATE]\""),
+    ] {
+        db.execute_raw_sql_write(&format!(
+            "UPDATE feedback SET context='{source}' WHERE id='one'"
+        ))
+        .await
+        .unwrap();
+        db.prepare_derived_exports("local_feedback", "", 1)
+            .await
+            .unwrap();
+        finish_export_jobs(&db).await;
+        let (context, snapshot): (String, Option<String>) =
+            sqlx::query_as("SELECT context,snapshot FROM feedback WHERE id='one'")
+                .fetch_one(&protected.pool)
+                .await
+                .unwrap();
+        assert_eq!(context, expected);
+        assert_eq!(snapshot, None);
+    }
+    protected.close().await;
+    db.close().await;
+}
