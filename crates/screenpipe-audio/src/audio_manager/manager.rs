@@ -371,6 +371,7 @@ fn runtime_transcription_config_matches(
 
 impl AudioManager {
     pub async fn new(options: AudioManagerOptions, db: Arc<DatabaseManager>) -> Result<Self> {
+        let options = options.normalize_capture_backend();
         let effective_windows_input_aec_enabled =
             options.windows_input_aec_enabled && !options.screenpipe_aec_enabled;
         let effective_macos_input_vpio_enabled =
@@ -469,6 +470,7 @@ impl AudioManager {
     /// live-meeting provider, devices, language, vocabulary, and batch mode
     /// update on a capture-level restart.
     pub async fn apply_options(&self, options: AudioManagerOptions) -> Result<()> {
+        let options = options.normalize_capture_backend();
         if self.status().await == AudioManagerStatus::Running
             || options.is_disabled
             || !self.recording_handles.is_empty()

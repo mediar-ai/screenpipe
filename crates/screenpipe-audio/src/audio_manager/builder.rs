@@ -134,7 +134,7 @@ pub struct AudioManagerOptions {
     pub always_record_bluetooth_mic: bool,
     /// Experimental: request Windows WASAPI microphone AEC when the endpoint supports it.
     pub windows_input_aec_enabled: bool,
-    /// Use Apple VoiceProcessingIO on the default macOS microphone when supported.
+    /// Legacy macOS native-AEC request. Normalized to software AEC before use.
     pub macos_input_vpio_enabled: bool,
     /// Request Screenpipe's software Acoustic Echo Cancellation (via sonora WebRTC AEC3).
     pub screenpipe_aec_enabled: bool,
@@ -201,6 +201,52 @@ impl Default for AudioManagerOptions {
             channel_config: ChannelConfig::default(),
             is_disabled: false,
         }
+    }
+}
+
+impl AudioManagerOptions {
+    /// Raw builder/API options also need the migration, independently of the
+    /// desktop/headless RecordingSettings normalization.
+    #[allow(unused_mut)]
+    pub(crate) fn normalize_capture_backend(mut self) -> Self {
+        #[cfg(target_os = "macos")]
+        if self.macos_input_vpio_enabled {
+            self.screenpipe_aec_enabled = true;
+            self.macos_input_vpio_enabled = false;
+        }
+        self
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod capture_backend_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_native_request_uses_software_aec_on_initial_start_and_restart() {
+        let requested = AudioManagerOptions {
+            macos_input_vpio_enabled: true,
+            screenpipe_aec_enabled: false,
+            ..Default::default()
+        };
+        let effective = requested.normalize_capture_backend();
+        assert!(effective.screenpipe_aec_enabled);
+        assert!(!effective.macos_input_vpio_enabled);
+        let restarted = effective.normalize_capture_backend();
+        assert!(restarted.screenpipe_aec_enabled);
+        assert!(!restarted.macos_input_vpio_enabled);
+    }
+
+    #[test]
+    fn aec_off_stays_off() {
+        let effective = AudioManagerOptions {
+            macos_input_vpio_enabled: false,
+            screenpipe_aec_enabled: false,
+            ..Default::default()
+        }
+        .normalize_capture_backend();
+        assert!(!effective.screenpipe_aec_enabled);
+        assert!(!effective.macos_input_vpio_enabled);
     }
 }
 

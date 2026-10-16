@@ -20,8 +20,10 @@ use std::sync::Arc;
 #[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::{broadcast, oneshot};
+#[cfg(target_os = "windows")]
+use tracing::info;
 #[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 #[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
 use crate::utils::audio::audio_to_mono;
@@ -311,54 +313,15 @@ impl AudioStream {
         windows_input_aec: bool,
         macos_input_vpio: bool,
     ) -> Result<(AudioStreamConfig, tokio::task::JoinHandle<()>)> {
-        // Only the macOS VoiceProcessingIO branch below reassigns `config`, so the
-        // `mut` is dead weight on every other target.
-        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
-        let (cpal_audio_device, mut config) = get_cpal_device_and_config(device).await?;
+        let (cpal_audio_device, config) = get_cpal_device_and_config(device).await?;
         let is_running_weak = Arc::downgrade(is_running);
         let input_aec = windows_input_aec && device.device_type == super::device::DeviceType::Input;
-        let input_vpio = macos_input_vpio
-            && device.device_type == super::device::DeviceType::Input
-            && is_default_input_device(device);
-
-        #[cfg(target_os = "macos")]
-        {
-            if macos_input_vpio && input_vpio {
-                let original_rate = config.sample_rate().0;
-                info!(
-                    device = %device,
-                    "screenpipe-audio: requesting VoiceProcessingIO (AEC) on default microphone"
-                );
-                config = cpal_audio_device.default_input_config().map_err(|e| {
-                    anyhow!(
-                        "could not get default input config for VoiceProcessingIO on {}: {}",
-                        device,
-                        e
-                    )
-                })?;
-                let vpio_rate = config.sample_rate().0;
-                if vpio_rate != original_rate {
-                    info!(
-                        device = %device,
-                        original_rate,
-                        vpio_rate,
-                        "screenpipe-audio: VPIO config rate differs from originally-picked config; \
-                         using hardware native rate"
-                    );
-                }
-                info!(
-                    device = %device,
-                    sample_rate = vpio_rate,
-                    channels = config.channels(),
-                    "screenpipe-audio: using default input config for VoiceProcessingIO"
-                );
-            } else if macos_input_vpio && device.device_type == super::device::DeviceType::Input {
-                info!(
-                    device = %device,
-                    "screenpipe-audio: macOS VPIO requested but using HAL (only system default input supports VoiceProcessingIO)"
-                );
-            }
-        }
+        // VPIO can deadlock inside Apple's route reconfiguration. Its internal
+        // workers are outside our lifetime lock; timeouts cannot unwind them. Product
+        // callers migrate legacy native-AEC settings to HAL + software AEC.
+        // Keep this low-level boundary safe for callers passing the old flag.
+        let _ = macos_input_vpio;
+        let input_vpio = false;
 
         let audio_config = AudioStreamConfig::from(&config);
         let channels = config.channels();
@@ -398,28 +361,6 @@ impl AudioStream {
         let use_aec = windows_input_aec;
 
         Ok(tokio::task::spawn_blocking(move || {
-            // Own the process-wide VPIO slot on the native worker, before
-            // construction and until after pause/drop. An async timeout cannot
-            // cancel native work or allow another VPIO unit to overlap it.
-            #[cfg(target_os = "macos")]
-            let _vpio_lease = macos_input_vpio
-                .then(|| {
-                    super::vpio_lifecycle::VpioLease::try_acquire(
-                        &super::vpio_lifecycle::VPIO_OWNER,
-                    )
-                })
-                .flatten();
-            #[cfg(target_os = "macos")]
-            let macos_input_vpio = {
-                if macos_input_vpio && _vpio_lease.is_none() {
-                    warn!(device = %device_name,
-                        "another VoiceProcessingIO worker still owns native audio; using HAL for this microphone");
-                }
-                _vpio_lease.is_some()
-            };
-            #[cfg(target_os = "macos")]
-            let mut use_vpio = macos_input_vpio;
-
             // Primary attempt: the "best" config get_cpal_device_and_config
             // picked (highest sample rate × most channels from
             // supported_input_configs). On Windows 11 24H2 WASAPI sometimes
@@ -536,43 +477,6 @@ impl AudioStream {
                         }
                     }
                 }
-                #[cfg(target_os = "macos")]
-                Err(primary_err) if macos_input_vpio => {
-                    // Report the backend actually running after fallback.
-                    use_vpio = false;
-                    warn!(
-                        device = %device_name,
-                        rate = config.sample_rate().0,
-                        channels = channels,
-                        format = ?config.sample_format(),
-                        "VoiceProcessingIO stream creation failed ({}); retrying with HAL (VPIO disabled)",
-                        primary_err,
-                    );
-                    let fallback_cb = create_error_callback(
-                        device_name.clone(),
-                        is_running_weak,
-                        is_disconnected,
-                        stream_control_tx,
-                    );
-                    match build_input_stream(
-                        &device,
-                        &config,
-                        channels,
-                        tx,
-                        fallback_cb,
-                        windows_input_aec,
-                        false,
-                    ) {
-                        Ok(s) => Some(s),
-                        Err(fallback_err) => {
-                            error!(
-                                "HAL fallback also failed for {} after VPIO error: {} (VPIO error: {})",
-                                device_name, fallback_err, primary_err
-                            );
-                            None
-                        }
-                    }
-                }
                 Err(e) => {
                     if is_mic_access_denied(&e) {
                         if first_access_denied_for_device(&device_name) {
@@ -594,13 +498,6 @@ impl AudioStream {
                     return;
                 }
 
-                #[cfg(target_os = "macos")]
-                if use_vpio {
-                    info!(
-                        device = %device_name,
-                        "screenpipe-audio: VoiceProcessingIO microphone capture running (AEC initialized)"
-                    );
-                }
                 #[cfg(target_os = "windows")]
                 if use_aec {
                     info!(
@@ -953,26 +850,12 @@ fn build_input_stream(
     }
 }
 
-#[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
-fn is_default_input_device(device: &AudioDevice) -> bool {
-    use super::device::{default_input_device, DeviceType};
-
-    if device.device_type != DeviceType::Input {
-        return false;
-    }
-
-    default_input_device()
-        .map(|default_device| default_device == *device)
-        .unwrap_or(false)
-}
-
 #[cfg(target_os = "macos")]
-fn macos_voice_processing_config(enabled: bool) -> Option<cpal::MacosVoiceProcessingInputConfig> {
-    if enabled {
-        Some(cpal::MacosVoiceProcessingInputConfig::screenpipe_aec())
-    } else {
-        None
-    }
+fn macos_voice_processing_config(
+    _legacy_enabled: bool,
+) -> Option<cpal::MacosVoiceProcessingInputConfig> {
+    // Always HAL. Software AEC runs after capture, outside the native callback.
+    None
 }
 
 #[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
@@ -1165,6 +1048,100 @@ mod from_wav_tests {
                 assert_eq!(mode, StopMode::DeferredDeviceDisconnect);
             }
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn legacy_native_aec_cannot_reenter_voiceprocessor() {
+        assert!(macos_voice_processing_config(true).is_none());
+        assert!(macos_voice_processing_config(false).is_none());
+    }
+
+    /// Opt-in hardware proof: repeatedly open a replacement before stopping
+    /// its predecessor, run real mic samples through software AEC, and verify
+    /// the production file writer's output can be decoded. No OS default
+    /// changes, transcription, network calls, or retained microphone files.
+    #[cfg(target_os = "macos")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "opens the real default microphone; run explicitly on macOS"]
+    async fn live_legacy_aec_handoffs_persist_microphone_samples() -> Result<()> {
+        use crate::core::run_record_and_transcribe::run_record_and_transcribe;
+        use crate::metrics::AudioPipelineMetrics;
+        use crate::utils::ffmpeg::{read_audio_from_file, write_audio_to_file};
+
+        async fn open(device: Arc<AudioDevice>) -> Result<Arc<AudioStream>> {
+            // Deliberately pass the legacy native flag to verify even a raw
+            // caller cannot enter VPIO. Product callers migrate AEC upstream.
+            AudioStream::from_device(
+                device,
+                Arc::new(AtomicBool::new(true)),
+                false,
+                false,
+                true,
+                None,
+            )
+            .await
+            .map(Arc::new)
+        }
+        async fn samples(stream: &AudioStream) -> Result<Vec<f32>> {
+            let mut receiver = stream.subscribe().await;
+            let target = stream.device_config.sample_rate().0 as usize / 5;
+            tokio::time::timeout(Duration::from_secs(5), async {
+                let mut audio = Vec::new();
+                while audio.len() < target {
+                    audio.extend(receiver.recv().await?);
+                }
+                anyhow::ensure!(audio.iter().all(|s| s.is_finite()));
+                Ok::<_, anyhow::Error>(audio)
+            })
+            .await?
+        }
+
+        let device = Arc::new(super::super::device::default_input_device()?);
+        let dir = tempfile::tempdir()?;
+        let mut current = open(device.clone()).await?;
+        samples(&current).await?;
+        for cycle in 0..10 {
+            let replacement = open(device.clone()).await?;
+            let running = Arc::new(AtomicBool::new(true));
+            let (segment_tx, segment_rx) = flume::bounded(8);
+            let recorder = tokio::spawn(run_record_and_transcribe(
+                replacement.clone(),
+                Duration::from_secs(30),
+                Arc::new(segment_tx),
+                running.clone(),
+                Arc::new(AudioPipelineMetrics::new()),
+                None,
+                None,
+                true,
+            ));
+            let captured = samples(&replacement).await?;
+            // The predecessor must still deliver until the replacement does.
+            samples(&current).await?;
+            current.stop().await?;
+            running.store(false, Ordering::Relaxed);
+            tokio::time::timeout(Duration::from_secs(2), recorder).await???;
+            let segments: Vec<_> = segment_rx.try_iter().collect();
+            anyhow::ensure!(!segments.is_empty(), "AEC recorder lost microphone samples");
+            let sample_rate = segments[0].sample_rate;
+            let cleaned: Vec<f32> = segments
+                .iter()
+                .flat_map(|s| s.data.iter().copied())
+                .collect();
+            let path = dir.path().join(format!("handoff-{cycle}.m4a"));
+            write_audio_to_file(&cleaned, sample_rate, &path, false)?;
+            let (decoded, rate) = read_audio_from_file(&path)?;
+            anyhow::ensure!(rate == sample_rate && decoded.len() >= cleaned.len());
+            println!(
+                "handoff {cycle}: captured={}, persisted={}, decoded={}, teardown=ok",
+                captured.len(),
+                cleaned.len(),
+                decoded.len()
+            );
+            current = replacement;
+        }
+        current.stop().await?;
+        Ok(())
     }
 
     /// 16 kHz mono sine wav round-trips through `from_wav`. The test counts

@@ -425,7 +425,9 @@ export function normalizeAecModeForPlatform(
   platform?: string,
 ): AecMode {
   if (mode === "screenpipe") return mode;
-  if (mode === "macos" && platform === "macos") return mode;
+  // Saved and managed native-macOS selections retain AEC using the software
+  // engine. VoiceProcessingIO can deadlock during audio-route changes.
+  if (mode === "macos" && platform === "macos") return "screenpipe";
   if (mode === "windows" && platform === "windows") return mode;
   return "off";
 }
@@ -442,10 +444,11 @@ export function resolveAecModeRemoteValue(
 }
 
 export function getAecModeSettings(mode: AecMode) {
+  if (mode === "macos") mode = "screenpipe";
   return {
     aecMode: mode,
     screenpipeAecEnabled: mode === "screenpipe",
-    macosInputVpioEnabled: mode === "macos",
+    macosInputVpioEnabled: false,
     windowsInputAecEnabled: mode === "windows",
   };
 }
