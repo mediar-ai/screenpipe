@@ -20,7 +20,7 @@ function visible(value: "visible" | "hidden") {
 
 describe("shared feature flag refresh", () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "Date"] });
     reload.mockReset();
     visible("visible");
   });
@@ -63,6 +63,30 @@ describe("shared feature flag refresh", () => {
     expect(reload).toHaveBeenCalledTimes(2);
     vi.advanceTimersByTime(1);
     expect(reload).toHaveBeenCalledTimes(3);
+  });
+
+  it("refreshes on wake when wall time advanced but the performance clock paused", () => {
+    subscribe();
+    vi.advanceTimersByTime(10_000);
+    vi.setSystemTime(Date.now() + 6 * 60 * 60 * 1000);
+    window.dispatchEvent(new Event("focus"));
+    expect(reload).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(59_999);
+    expect(reload).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1);
+    expect(reload).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the minute deadline when the wall clock moves backwards", () => {
+    subscribe();
+    vi.advanceTimersByTime(10_000);
+    vi.setSystemTime(Date.now() - 6 * 60 * 60 * 1000);
+    window.dispatchEvent(new Event("focus"));
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(49_999);
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 
   it("does not poll while hidden or after the last consumer unmounts", () => {

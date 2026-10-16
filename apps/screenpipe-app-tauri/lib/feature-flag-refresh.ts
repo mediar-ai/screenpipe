@@ -9,12 +9,21 @@ export const FEATURE_FLAG_REFRESH_INTERVAL_MS = 60_000;
 // only this schedule refreshes them. SDK-triggered identity refreshes are separate.
 const consumers = new Set<() => boolean>();
 let timer: ReturnType<typeof setTimeout> | undefined;
-let lastAttempt: number | undefined;
+let lastAttempt: { monotonic: number; wall: number } | undefined;
+
+function attemptAge(): number {
+  if (!lastAttempt) return Infinity;
+  // WebKit's performance clock can pause during system sleep. Wall time
+  // catches that elapsed time; monotonic time handles wall-clock rollback.
+  return Math.max(
+    performance.now() - lastAttempt.monotonic,
+    Date.now() - lastAttempt.wall,
+  );
+}
 
 function refresh() {
   if (timer !== undefined) clearTimeout(timer);
-  const now = performance.now();
-  const age = lastAttempt === undefined ? Infinity : now - lastAttempt;
+  const age = attemptAge();
   if (
     document.visibilityState !== "hidden" &&
     age >= FEATURE_FLAG_REFRESH_INTERVAL_MS &&
@@ -30,7 +39,7 @@ function refresh() {
       posthog.reloadFeatureFlags();
       // This is an attempt TTL, not proof of a successful response. The SDK
       // retains its cached values on failure; the next minute retries.
-      lastAttempt = now;
+      lastAttempt = { monotonic: performance.now(), wall: Date.now() };
     } catch {
       // The SDK may not be initialized yet. Retry on focus or the next tick.
     }
@@ -42,7 +51,7 @@ function refresh() {
   const remaining =
     lastAttempt === undefined
       ? FEATURE_FLAG_REFRESH_INTERVAL_MS
-      : FEATURE_FLAG_REFRESH_INTERVAL_MS - (performance.now() - lastAttempt);
+      : FEATURE_FLAG_REFRESH_INTERVAL_MS - attemptAge();
   timer = setTimeout(
     refresh,
     remaining > 0 ? remaining : FEATURE_FLAG_REFRESH_INTERVAL_MS,
