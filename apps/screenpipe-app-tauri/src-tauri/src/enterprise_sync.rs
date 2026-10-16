@@ -712,9 +712,22 @@ mod imp {
             &self,
             frame_id: i64,
         ) -> Result<Option<Vec<u8>>, EnterpriseSyncError> {
-            if !self.image_uploads_allowed() {
-                // A settings refusal is not evidence that the local image is missing.
-                return Err(EnterpriseSyncError::BackfillImages("screenshot_policy_disabled"));
+            // Separate the local recording preference from the org sync mode.
+            // Missing/unreadable settings fail closed and remain retryable too.
+            let settings = crate::store::SettingsStore::get(&self.app)
+                .map_err(|error| {
+                    tracing::warn!(
+                        "enterprise screenshot recovery: recording settings read failed: {error}"
+                    );
+                    EnterpriseSyncError::BackfillImages("screenshot_settings_unavailable")
+                })?
+                .ok_or(EnterpriseSyncError::BackfillImages(
+                    "screenshot_settings_unavailable",
+                ))?;
+            if settings.recording.disable_screenshots {
+                return Err(EnterpriseSyncError::BackfillImages(
+                    "screenshot_local_settings_disabled",
+                ));
             }
 
             // Same image `/frames/{id}` serves in the UI — decoded from local
