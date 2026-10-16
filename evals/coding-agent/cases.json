@@ -6658,6 +6658,45 @@
         ],
         "command": "cargo test --offline --manifest-path .eval-telemetry-ax/Cargo.toml --test outcomes -- --nocapture"
       }
+    },
+    {
+      "id": "app-audio-drop-control-dispatch",
+      "name": "Dispatch audio shutdown before dropping the stream",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "cd1fe138819e573b89e975283e4d19c8307748ed"
+      },
+      "base_ref": "e53b0f0938e47d7d161e4e50a088c43ac04a402c",
+      "oracle_ref": "cd1fe138819e573b89e975283e4d19c8307748ed",
+      "oracle_paths": [
+        "crates/screenpipe-audio/src/core/stream.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-audio/src/core/stream.rs"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "audio",
+        "resource-lifecycle"
+      ],
+      "prompt": "Dropping an AudioStream outside an asynchronous runtime can leave its shutdown request unsent and shared disconnect state unchanged. Repair the actual stream destructor so dropping a synthetic stream synchronously marks it disconnected and dispatches its stop request before returning, even when no executor is polling. If the control receiver is already closed, dropping must still mark it disconnected without panicking. A live stream must remain connected until stopped or dropped, and explicit stop with the synthetic closed receiver must remain successful and mark it disconnected. Preserve the existing AudioStream interfaces and synthetic constructor. The hidden checks use the existing internal control sender and shared disconnect flag to observe these outcomes; no particular shutdown helper, task implementation or control-message representation is required. Use synthetic streams only. Native worker completion, device teardown timing, capture hardware, durable recording, migration authority and real customer data are outside this task.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/audio-drop.mjs",
+            "destination_path": ".eval-audio-drop/audio-drop.mjs"
+          },
+          {
+            "local_path": "graders/audio-drop.fixture.rs",
+            "destination_path": ".eval-audio-drop/audio-drop.fixture.rs"
+          }
+        ],
+        "command": "node .eval-audio-drop/audio-drop.mjs && cargo test --locked -p screenpipe-audio --lib eval_audio_drop -- --test-threads=1"
+      }
     }
   ]
 }
