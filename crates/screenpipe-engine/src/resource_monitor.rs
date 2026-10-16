@@ -550,11 +550,20 @@ impl ResourceTelemetryReporter {
             "telemetry_window_samples".to_string(),
             json!(window.samples),
         );
-        properties.insert("window_cpu_percent_mean".to_string(), json!(window.cpu_mean()));
+        properties.insert(
+            "window_cpu_percent_mean".to_string(),
+            json!(window.cpu_mean()),
+        );
         properties.insert("window_cpu_percent_max".to_string(), json!(window.cpu_max));
-        properties.insert("window_memory_gb_mean".to_string(), json!(window.memory_mean()));
+        properties.insert(
+            "window_memory_gb_mean".to_string(),
+            json!(window.memory_mean()),
+        );
         properties.insert("window_memory_gb_max".to_string(), json!(window.memory_max));
-        properties.insert("window_phys_footprint_gb_max".to_string(), json!(window.footprint_max));
+        properties.insert(
+            "window_phys_footprint_gb_max".to_string(),
+            json!(window.footprint_max),
+        );
         properties.insert("distinct_id".to_string(), json!(&self.distinct_id));
         properties.insert("$lib".to_string(), json!("rust-reqwest"));
         properties.insert(

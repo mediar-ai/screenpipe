@@ -668,7 +668,11 @@ impl SCServer {
                         let cov = crate::recording_coverage::coverage_snapshot();
                         if !reports.should_report(
                             start.elapsed(),
-                            [snap.frames_dropped, snap.pipeline_stall_count, cov.active_stalled_secs],
+                            [
+                                snap.frames_dropped,
+                                snap.pipeline_stall_count,
+                                cov.active_stalled_secs,
+                            ],
                         ) {
                             continue;
                         }
