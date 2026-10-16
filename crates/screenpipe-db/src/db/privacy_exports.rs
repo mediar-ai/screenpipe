@@ -89,6 +89,7 @@ fn local_surface(stream: &str) -> Option<&'static LocalSurface> {
 async fn upgrade_insert_trigger(
     conn: &mut sqlx::SqliteConnection,
     name: &str,
+    stream: &str,
 ) -> Result<(), SqlxError> {
     let old: Option<String> =
         sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?")
@@ -99,6 +100,12 @@ async fn upgrade_insert_trigger(
         // NEW.id is not assigned yet in a BEFORE INSERT trigger when callers
         // use AUTOINCREMENT. Names come only from the static surface registry.
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP TRIGGER {name}")))
+            .execute(&mut *conn)
+            .await?;
+        // The old trigger may have missed generated IDs after discovery ended.
+        // Revisit that stream instead of leaving accepted history stranded.
+        sqlx::query("DELETE FROM _privacy_export_scan WHERE stream=?")
+            .bind(stream)
             .execute(&mut *conn)
             .await?;
     }
@@ -151,7 +158,12 @@ CREATE TABLE IF NOT EXISTS _privacy_replays(request_id TEXT NOT NULL,stream TEXT
     }
     for surface in LOCAL_SURFACES {
         let table = surface.table;
-        upgrade_insert_trigger(conn, &format!("privacy_local_{table}_INSERT")).await?;
+        upgrade_insert_trigger(
+            conn,
+            &format!("privacy_local_{table}_INSERT"),
+            &format!("local_{table}"),
+        )
+        .await?;
         for event in ["INSERT", "UPDATE", "DELETE"] {
             let timing = if event == "INSERT" { "AFTER" } else { "BEFORE" };
             let keys = match event {
@@ -176,7 +188,7 @@ END"))).execute(&mut *conn).await?;
         ("semantic_actors", "parsed", "SELECT CAST(f.id AS TEXT) FROM frames f JOIN semantic_run_items ri ON ri.run_id=f.semantic_run_id JOIN semantic_item_actors ia ON ia.item_id=ri.item_id WHERE ia.actor_id={row}.id"),
         ("feedback", "feedback", "SELECT {row}.id"),
     ] {
-        upgrade_insert_trigger(conn, &format!("privacy_export_{table}_INSERT")).await?;
+        upgrade_insert_trigger(conn, &format!("privacy_export_{table}_INSERT"), stream).await?;
         for event in ["INSERT", "UPDATE", "DELETE"] {
             let timing = if event == "INSERT" { "AFTER" } else { "BEFORE" };
             let keys = match event {

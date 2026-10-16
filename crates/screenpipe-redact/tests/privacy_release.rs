@@ -2303,3 +2303,56 @@ async fn historical_replay_restages_acknowledged_copies_and_waits_only_for_reque
     protected.close().await;
     db.close().await;
 }
+
+#[tokio::test]
+async fn insert_trigger_upgrade_rediscovers_generated_ids_missed_after_completed_scan() {
+    let (_root, db) = database().await;
+    db.prepare_derived_exports("local_meetings", "", 1)
+        .await
+        .unwrap();
+    let sql: String = sqlx::query_scalar(
+        "SELECT sql FROM sqlite_master WHERE name='privacy_local_meetings_INSERT'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    let old = sql.replace(" AFTER INSERT ", " BEFORE INSERT ");
+    assert_ne!(sql, old);
+    db.execute_raw_sql_write(&format!(
+        "DROP TRIGGER privacy_local_meetings_INSERT; {old}"
+    ))
+    .await
+    .unwrap();
+    db.execute_raw_sql_write("INSERT INTO meetings(meeting_start,meeting_end,meeting_app,title) VALUES('2020-01-01T12:00:00Z','2020-01-01T13:00:00Z','SYNTHETIC_SECRET','SYNTHETIC_SECRET')").await.unwrap();
+    db.prepare_derived_exports("local_meetings", "", 1)
+        .await
+        .unwrap();
+    let missed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM _privacy_exports WHERE stream='local_meetings'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        missed, 0,
+        "the old trigger's generated-ID failure must be reproduced"
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "test:model-v1".into(),
+        text: true,
+        images: true,
+    })
+    .await
+    .unwrap();
+    db.prepare_derived_exports("local_meetings", "", 1)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let title: String = sqlx::query_scalar("SELECT title FROM meetings WHERE id=1")
+        .fetch_one(&protected.pool)
+        .await
+        .unwrap();
+    assert_eq!(title, "[PRIVATE]");
+    protected.close().await;
+    db.close().await;
+}
