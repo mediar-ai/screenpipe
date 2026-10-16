@@ -265,6 +265,7 @@ mod tests {
         .await
         .unwrap();
         db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-15','private-person@example.com')").await.unwrap();
+        db.stage_activity_exports(&[serde_json::json!({"activity_id":"support-activity","end_at":"2026-10-15T10:00:00Z","title":"private-person@example.com"})],"2026-10-15T00:00:00Z").await.unwrap();
         let worker = screenpipe_redact::worker::Worker::new_with_writer(
             db.pool.clone(),
             db.coordinated_writer(),
@@ -272,7 +273,7 @@ mod tests {
             Default::default(),
         )
         .with_frame_storage(db.clone());
-        assert_eq!(worker.process_release_batch(1).await.unwrap(), 0);
+        assert_eq!(worker.process_release_batch(16).await.unwrap(), 0);
         db.close().await;
         drop(guard);
         std::fs::rename(&current, logs.join("screenpipe.2026-10-15.1.log")).unwrap();
@@ -285,6 +286,7 @@ mod tests {
         assert!(report.contains("required PII model is unavailable"));
         assert!(report.contains("retry scheduled"));
         assert!(report.contains("kind=frames"));
+        assert!(report.contains("kind=exports"));
         assert!(report.contains("recorder restarted"));
         assert!(!report.contains("private-person@example.com"));
     }

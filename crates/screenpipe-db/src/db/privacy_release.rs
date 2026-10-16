@@ -106,6 +106,11 @@ pub(crate) const SURFACES: &[Surface] = &[
         columns: &["summary", "app_name"],
     },
     Surface {
+        kind: "exports",
+        table: "_privacy_exports",
+        columns: &["text_json"],
+    },
+    Surface {
         kind: "image",
         table: "frames",
         columns: &["snapshot_path", "name"],
@@ -162,6 +167,11 @@ impl DatabaseManager {
         }
         let mut tx = self.begin_immediate_with_retry().await?;
         sqlx::raw_sql(SCHEMA).execute(&mut **tx.conn()).await?;
+        super::privacy_exports::install(&mut **tx.conn()).await?;
+        sqlx::query("DELETE FROM _privacy_export_scan WHERE EXISTS(SELECT 1 FROM _privacy_policy WHERE identity!=? OR text_required!=? OR image_required!=?)")
+            .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
+        sqlx::query("UPDATE _privacy_export_sources SET pending=1,delivered_version=NULL WHERE EXISTS(SELECT 1 FROM _privacy_policy WHERE identity!=? OR text_required!=? OR image_required!=?)")
+            .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         sqlx::query("DELETE FROM _privacy_discovery WHERE EXISTS(SELECT 1 FROM _privacy_policy WHERE identity!=? OR text_required!=? OR image_required!=?)")
             .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         sqlx::query("UPDATE _privacy_policy SET identity=?,text_required=?,image_required=?,epoch=epoch+1,revocation=revocation+1 WHERE identity!=? OR text_required!=? OR image_required!=?")
@@ -199,6 +209,9 @@ impl DatabaseManager {
             // Image eligibility depends on capture time as well as its paths.
             // Correcting a clock-skewed timestamp must reset its queued deadline.
             let mut watched = surface.columns.to_vec();
+            if surface.kind == "exports" {
+                watched.extend(["source_version", "template_json", "timestamp"]);
+            }
             if surface.kind == "image" {
                 watched.push("timestamp");
             }
@@ -248,7 +261,11 @@ impl DatabaseManager {
                     format!("WHEN {active}{maintenance}")
                 };
                 let table = physical;
-                let mutation = if event == "DELETE" {
+                let mutation = if event == "DELETE" && kind == "exports" {
+                    // Upload-copy IDs are AUTOINCREMENT and never reused. Their
+                    // source version markers survive separately after delivery.
+                    format!("DELETE FROM _privacy_release WHERE kind='exports' AND id=CAST({id} AS TEXT);")
+                } else if event == "DELETE" {
                     format!("UPDATE _privacy_release SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL WHERE kind='{kind}' AND id=CAST({id} AS TEXT); DELETE FROM _privacy_work WHERE kind='{kind}' AND id=CAST({id} AS TEXT);")
                 } else {
                     format!("INSERT INTO _privacy_release(kind,id,revision) VALUES('{kind}',CAST({id} AS TEXT),1) ON CONFLICT(kind,id) DO UPDATE SET revision=revision+1,policy=NULL,attempts=0,retry_at=NULL;")
@@ -933,6 +950,9 @@ impl DatabaseManager {
     ) -> Result<ReleasePage, sqlx::Error> {
         if !self.protected_reads_enabled() {
             return Err(err("protected read adapter required"));
+        }
+        if matches!(kind, "activities" | "parsed" | "feedback") {
+            return self.derived_release_page(kind, after, cutoff, limit).await;
         }
         let (table,projection,time)=match kind {
             "frames"=>("frames","s.id AS frame_id,s.timestamp,s.app_name,s.window_name,s.browser_url,COALESCE(s.full_text,s.accessibility_text,'') AS text","timestamp"),

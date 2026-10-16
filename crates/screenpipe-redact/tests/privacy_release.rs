@@ -1137,3 +1137,620 @@ async fn unchanged_configuration_keeps_receipts_but_an_older_contract_is_revoked
     assert_eq!(db.release_pending("frames", 1).await.unwrap().len(), 1);
     db.close().await;
 }
+
+fn exported_activity(title: &str) -> serde_json::Value {
+    serde_json::json!({"activity_id":"stable-activity", "activity_kind":"work", "meeting_id":7,
+        "timestamp":"2026-10-16T10:05:00Z", "start_at":"2026-10-16T10:00:00Z", "end_at":"2026-10-16T10:05:00Z",
+        "title":title, "summary":"SYNTHETIC_SECRET summary", "future_content":"SYNTHETIC_SECRET future field", "evidence":[{"kind":"frame","at":"2026-10-16T10:01:00Z","frame_id":42,"meeting_id":7,"app_name":"SYNTHETIC_SECRET app","label":"SYNTHETIC_SECRET evidence"}]})
+}
+
+async fn finish_export_jobs(db: &Arc<DatabaseManager>) {
+    let worker = screenpipe_redact::worker::Worker::new_with_writer(
+        db.pool.clone(),
+        db.coordinated_writer(),
+        Arc::new(CountingDetector {
+            calls: Arc::new(Default::default()),
+            fail: Arc::new(Default::default()),
+            delay: Default::default(),
+        }),
+        screenpipe_redact::worker::WorkerConfig {
+            resource_governor: None,
+            ..Default::default()
+        },
+    )
+    .with_frame_storage(db.clone());
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            worker.process_release_batch(16).await.unwrap();
+            let pending: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM _privacy_work WHERE kind='exports'")
+                    .fetch_one(&db.pool)
+                    .await
+                    .unwrap();
+            if pending == 0 {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn derived_activity_outage_restart_edit_and_policy_preserve_source_and_identity() {
+    let (root, db) = database().await;
+    let cutoff = "2026-10-16T00:00:00Z";
+    let original = exported_activity("SYNTHETIC_SECRET title");
+    db.stage_activity_exports(&[original.clone()], cutoff)
+        .await
+        .unwrap();
+    let worker = screenpipe_redact::worker::Worker::new_with_writer(
+        db.pool.clone(),
+        db.coordinated_writer(),
+        Arc::new(Pipeline::regex_only()),
+        Default::default(),
+    )
+    .with_frame_storage(db.clone());
+    worker.process_release_batch(16).await.unwrap();
+    let protected = db.protected_reads().await.unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("activities", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    // Background failure never prevents new durable captures.
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(42,'2026-10-16T10:00:00Z','recording continues')").await.unwrap();
+    protected.close().await;
+    db.close().await;
+    drop(worker);
+    let db = Arc::new(
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap(),
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "test:model-v1".into(),
+        text: true,
+        images: true,
+    })
+    .await
+    .unwrap();
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM frames WHERE id=42")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 1);
+    // Simulate the existing retry becoming due; no accepted item was discarded.
+    db.execute_raw_sql_write(
+        "UPDATE _privacy_work SET available_at=0; UPDATE _privacy_release SET retry_at=NULL",
+    )
+    .await
+    .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("activities", 0, cutoff, 10)
+        .await
+        .unwrap();
+    let row = &page.rows[0];
+    assert_eq!(row["activity_id"], original["activity_id"]);
+    assert_eq!(row["start_at"], original["start_at"]);
+    assert_eq!(row["evidence"][0]["frame_id"], 42);
+    assert_eq!(row["title"], "[PRIVATE]");
+    assert!(!row.to_string().contains("SYNTHETIC_SECRET"));
+    let version = db.activity_export_versions().await.unwrap();
+    db.stage_activity_exports(&[original.clone()], cutoff)
+        .await
+        .unwrap();
+    assert_eq!(db.activity_export_versions().await.unwrap(), version);
+    assert_eq!(
+        protected
+            .release_export_page("activities", page.sequence, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    let edited = exported_activity("SYNTHETIC_SECRET edited");
+    assert!(screenpipe_db::privacy_exports::validate_activity_exports(
+        &version,
+        &[original.clone()]
+    )
+    .is_ok());
+    assert!(
+        screenpipe_db::privacy_exports::validate_activity_exports(&version, &[edited.clone()])
+            .is_err()
+    );
+    assert!(screenpipe_db::privacy_exports::validate_activity_exports(&version, &[]).is_err());
+    db.stage_activity_exports(&[edited], cutoff).await.unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("activities", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    let stale = db.release_pending("exports", 1).await.unwrap().remove(0);
+    db.stage_activity_exports(
+        &[exported_activity("SYNTHETIC_SECRET changed again")],
+        cutoff,
+    )
+    .await
+    .unwrap();
+    assert!(!db.publish_release(&stale, &stale.values).await.unwrap());
+    finish_export_jobs(&db).await;
+    assert_eq!(
+        protected
+            .release_export_page("activities", page.sequence, cutoff, 10)
+            .await
+            .unwrap()
+            .rows
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "new-policy".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("activities", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    finish_export_jobs(&db).await;
+    assert_eq!(
+        protected
+            .release_export_page("activities", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    db.stage_activity_exports(&[], cutoff).await.unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("activities", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    protected.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn derived_feedback_paginates_and_reprocesses_edits_without_rewriting_local_feedback() {
+    let (_root, db) = database().await;
+    let cutoff = "2026-10-16T00:00:00Z";
+    for i in 0..3 {
+        db.execute_raw_sql_write(&format!("INSERT INTO feedback(id,target_kind,target_id,actor_id,rating,comment,snapshot,context,created_at,updated_at) VALUES('feedback-{i}','activity','stable-activity-{i}','actor-1','up','SYNTHETIC_SECRET','{{\"nested\":[\"SYNTHETIC_SECRET\"]}}','{{\"url\":\"SYNTHETIC_SECRET\"}}','2026-10-16T10:00:00Z','2026-10-16T10:00:00Z')")).await.unwrap();
+    }
+    assert!(db
+        .prepare_derived_exports("feedback", cutoff, 1)
+        .await
+        .unwrap());
+    while db
+        .prepare_derived_exports("feedback", cutoff, 1)
+        .await
+        .unwrap()
+    {}
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("feedback", 0, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows.as_array().unwrap().len(), 3);
+    assert!(!page.rows.to_string().contains("SYNTHETIC_SECRET"));
+    assert_eq!(page.rows[0]["actor_id"], "actor-1");
+    assert!(page.rows[0]["target_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("stable-activity-"));
+    let raw: String = sqlx::query_scalar("SELECT comment FROM feedback WHERE id='feedback-0'")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(raw, "SYNTHETIC_SECRET");
+    let token = db.storage_export_token().await.unwrap();
+    db.execute_raw_sql_write(
+        "UPDATE feedback SET comment='SYNTHETIC_SECRET changed' WHERE id='feedback-0'",
+    )
+    .await
+    .unwrap();
+    assert!(token.admit(&db.pool).await.is_err());
+    assert_eq!(
+        protected
+            .release_export_page("feedback", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    db.prepare_derived_exports("feedback", cutoff, 1)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    assert_eq!(
+        protected
+            .release_export_page("feedback", page.sequence, cutoff, 10)
+            .await
+            .unwrap()
+            .rows
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    db.execute_raw_sql_write("DELETE FROM feedback WHERE id='feedback-0'")
+        .await
+        .unwrap();
+    db.prepare_derived_exports("feedback", cutoff, 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("feedback", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    protected.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn derived_parsed_snapshot_covers_actor_labels_and_invalidates_join_changes() {
+    let (_root, db) = database().await;
+    let cutoff = "2026-10-16T00:00:00Z";
+    db.execute_raw_sql_write("INSERT INTO semantic_runs(id,input_fingerprint,parser_id,parser_version,schema_version,app_platform,input_content_hash,status,item_count) VALUES(1,zeroblob(32),'test-parser','1',1,'macos',zeroblob(8),'handled',1); INSERT INTO semantic_items(id,entity_fingerprint,version_fingerprint,kind,item_key,identity_quality,title,body,actor,metadata_json) VALUES(1,zeroblob(32),zeroblob(32),'message','SYNTHETIC_SECRET key','stable','SYNTHETIC_SECRET title','SYNTHETIC_SECRET body','SYNTHETIC_SECRET actor','{\"url\":\"SYNTHETIC_SECRET\"}'); INSERT INTO semantic_run_items(run_id,local_id,item_id,sort_order) VALUES(1,'stable-local-id',1,0); INSERT INTO semantic_actors(id,name) VALUES(1,'SYNTHETIC_SECRET resolved'); INSERT INTO semantic_item_actors(item_id,actor_id) VALUES(1,1); INSERT INTO frames(id,timestamp,app_name,window_name,full_text,semantic_run_id) VALUES(1,'2026-10-16T10:00:00Z','SYNTHETIC_SECRET app','SYNTHETIC_SECRET window','SYNTHETIC_SECRET source',1)").await.unwrap();
+    db.prepare_derived_exports("parsed", cutoff, 1)
+        .await
+        .unwrap();
+    let stale = db.release_pending("exports", 1).await.unwrap().remove(0);
+    db.execute_raw_sql_write(
+        "UPDATE semantic_actors SET name='SYNTHETIC_SECRET edited' WHERE id=1",
+    )
+    .await
+    .unwrap();
+    assert!(!db.publish_release(&stale, &stale.values).await.unwrap());
+    // Complete source workers first; their replacements also invalidate any
+    // derived copy assembled from the previous source revision.
+    finish_export_jobs(&db).await;
+    db.prepare_derived_exports("parsed", cutoff, 10)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("parsed", 0, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows.as_array().unwrap().len(), 1, "{page:?}");
+    let row = &page.rows[0];
+    assert_eq!(row["frame_id"], 1);
+    assert_eq!(row["run_id"], 1);
+    assert_eq!(row["items"][0]["local_id"], "stable-local-id");
+    assert_eq!(row["actors"][0]["actor_id"], 1);
+    assert_eq!(row["actors"][0]["name"], "[PRIVATE]");
+    assert!(!row.to_string().contains("SYNTHETIC_SECRET"));
+    let token = db.storage_export_token().await.unwrap();
+    db.execute_raw_sql_write(
+        "UPDATE semantic_run_items SET local_id='new-local-id' WHERE run_id=1",
+    )
+    .await
+    .unwrap();
+    assert!(token.admit(&db.pool).await.is_err());
+    assert_eq!(
+        protected
+            .release_export_page("parsed", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    db.prepare_derived_exports("parsed", cutoff, 10)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let page = protected
+        .release_export_page("parsed", page.sequence, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows[0]["items"][0]["local_id"], "new-local-id");
+    db.execute_raw_sql_write("DELETE FROM frames WHERE id=1")
+        .await
+        .unwrap();
+    db.prepare_derived_exports("parsed", cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("parsed", 0, cutoff, 10)
+            .await
+            .unwrap()
+            .rows,
+        serde_json::json!([])
+    );
+    protected.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn derived_ack_retires_payloads_but_survives_restart_and_source_reversion() {
+    let (root, db) = database().await;
+    let cutoff = "2026-10-16T00:00:00Z";
+    let original = exported_activity("SYNTHETIC_SECRET original");
+    db.stage_activity_exports(&[original.clone()], cutoff)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("activities", 0, cutoff, 10)
+        .await
+        .unwrap();
+    db.acknowledge_derived_exports("activities", page.sequence)
+        .await
+        .unwrap();
+    let copies: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _privacy_exports")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(copies, 0);
+    protected.close().await;
+    db.close().await;
+    let db = Arc::new(
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap(),
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "test:model-v1".into(),
+        text: true,
+        images: true,
+    })
+    .await
+    .unwrap();
+    db.stage_activity_exports(&[original.clone()], cutoff)
+        .await
+        .unwrap();
+    assert!(db.activity_export_versions().await.unwrap().is_empty());
+    db.stage_activity_exports(&[exported_activity("SYNTHETIC_SECRET changed")], cutoff)
+        .await
+        .unwrap();
+    let stale = db.release_pending("exports", 1).await.unwrap().remove(0);
+    // Reverting to the already acknowledged source must discard an intermediate
+    // copy, not upload that now-obsolete edit or hold other streams forever.
+    db.stage_activity_exports(&[original.clone()], cutoff)
+        .await
+        .unwrap();
+    assert!(!db.publish_release(&stale, &stale.values).await.unwrap());
+    assert!(db.activity_export_versions().await.unwrap().is_empty());
+    db.configure_release(&ReleasePolicy {
+        identity: "new-policy".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    db.stage_activity_exports(&[original.clone()], cutoff)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("activities", page.sequence, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows.as_array().unwrap().len(), 1);
+    // A policy change between transport and cleanup must keep the copy pending
+    // under the new policy, even if the old response was acknowledged.
+    db.configure_release(&ReleasePolicy {
+        identity: "policy-changed-before-cleanup".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    db.acknowledge_derived_exports("activities", page.sequence)
+        .await
+        .unwrap();
+    assert_eq!(db.activity_export_versions().await.unwrap().len(), 1);
+    finish_export_jobs(&db).await;
+    let fresh = protected
+        .release_export_page("activities", page.sequence, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(fresh.rows.as_array().unwrap().len(), 1);
+    db.acknowledge_derived_exports("activities", fresh.sequence)
+        .await
+        .unwrap();
+    db.stage_activity_exports(&[], cutoff).await.unwrap();
+    let markers: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM _privacy_export_sources WHERE stream='activities'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(markers, 0);
+    protected.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn derived_hybrid_upload_copy_uses_the_same_worker_and_cleanup() {
+    let root = tempfile::tempdir().unwrap();
+    let db = Arc::new(
+        DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap(),
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "hybrid".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    let cutoff = "2026-10-16T00:00:00Z";
+    db.stage_activity_exports(&[exported_activity("SYNTHETIC_SECRET")], cutoff)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("activities", 0, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows[0]["title"], "[PRIVATE]");
+    assert!(!page.rows.to_string().contains("SYNTHETIC_SECRET"));
+    db.acknowledge_derived_exports("activities", page.sequence)
+        .await
+        .unwrap();
+    assert!(db.activity_export_versions().await.unwrap().is_empty());
+    protected.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn derived_discovery_resumes_through_unparsed_history() {
+    let (root, db) = database().await;
+    let policy = ReleasePolicy {
+        identity: "discovery".into(),
+        text: true,
+        images: false,
+    };
+    db.configure_release(&ReleasePolicy {
+        text: false,
+        ..policy.clone()
+    })
+    .await
+    .unwrap();
+    db.execute_raw_sql_write("INSERT INTO semantic_runs(id,input_fingerprint,parser_id,parser_version,schema_version,app_platform,input_content_hash,status) VALUES(1,zeroblob(32),'test','1',1,'macos',zeroblob(8),'handled'); INSERT INTO frames(id,timestamp,semantic_run_id) VALUES(1,'2026-10-16T10:00:00Z',NULL),(2,'2026-10-16T10:00:00Z',NULL),(3,'2026-10-16T10:00:00Z',NULL),(4,'2026-10-16T10:00:00Z',1)").await.unwrap();
+    db.configure_release(&policy).await.unwrap();
+    let cutoff = "2026-10-16T00:00:00Z";
+    assert!(db
+        .prepare_derived_exports("parsed", cutoff, 2)
+        .await
+        .unwrap());
+    let position: i64 =
+        sqlx::query_scalar("SELECT after_id FROM _privacy_export_scan WHERE stream='parsed'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        position, 2,
+        "ordinary frames consume discovery's scheduling budget"
+    );
+    assert!(db.release_pending("exports", 10).await.unwrap().is_empty());
+    db.close().await;
+    let db = Arc::new(
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap(),
+    );
+    db.configure_release(&policy).await.unwrap();
+    assert!(db
+        .prepare_derived_exports("parsed", cutoff, 2)
+        .await
+        .unwrap());
+    assert!(!db
+        .prepare_derived_exports("parsed", cutoff, 2)
+        .await
+        .unwrap());
+    finish_export_jobs(&db).await;
+    // Source processing can revoke the first prepared copy; its source journal
+    // must preserve that revision for the next preparation turn.
+    db.prepare_derived_exports("parsed", cutoff, 2)
+        .await
+        .unwrap();
+    finish_export_jobs(&db).await;
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("parsed", 0, cutoff, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows.as_array().unwrap().len(), 1);
+    assert_eq!(page.rows[0]["frame_id"], 4);
+    protected.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+#[ignore = "manual paired capture-write microbenchmark; run without compiler workloads"]
+async fn derived_capture_journal_benchmark() {
+    // The only difference in each pair is the new source-journal triggers.
+    // This measures single-frame DB writes, not detector or desktop performance.
+    for (label, text, parsed) in [
+        ("disabled/plain", false, false),
+        ("enabled/plain", true, false),
+        ("enabled/parsed", true, true),
+    ] {
+        for run in 0..3 {
+            for journal in [run % 2 == 0, run % 2 != 0] {
+                let (_root, db) = database().await;
+                db.configure_release(&ReleasePolicy {
+                    identity: "bench".into(),
+                    text,
+                    images: false,
+                })
+                .await
+                .unwrap();
+                if parsed {
+                    db.execute_raw_sql_write("INSERT INTO semantic_runs(id,input_fingerprint,parser_id,parser_version,schema_version,app_platform,input_content_hash,status) VALUES(1,zeroblob(32),'bench','1',1,'macos',zeroblob(8),'handled')").await.unwrap();
+                }
+                if !journal {
+                    let triggers:Vec<String>=sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'privacy_export_*'").fetch_all(&db.pool).await.unwrap();
+                    for trigger in triggers {
+                        db.execute_raw_sql_write(&format!("DROP TRIGGER {trigger}"))
+                            .await
+                            .unwrap();
+                    }
+                }
+                let query=format!("INSERT INTO frames(timestamp,full_text,semantic_run_id) VALUES('2026-10-16T10:00:00Z','synthetic capture',{})",if parsed {"1"}else{"NULL"});
+                let mut times = Vec::new();
+                for _ in 0..1000 {
+                    let start = std::time::Instant::now();
+                    db.execute_raw_sql_write(&query).await.unwrap();
+                    times.push(start.elapsed().as_secs_f64() * 1000.0);
+                }
+                times.sort_by(f64::total_cmp);
+                println!("DERIVED_CAPTURE case={label} run={run} journal={journal} samples={} p50_ms={:.3} p95_ms={:.3} p99_ms={:.3}",times.len(),times[500],times[950],times[990]);
+                db.close().await;
+            }
+        }
+    }
+}

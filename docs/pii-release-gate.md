@@ -2,8 +2,8 @@
 
 Draft implementation, not a complete product privacy guarantee.
 
-<!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-redact/src/image/worker.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
-<!-- doc-verified: 7f5783a4c3736d41ad41d2e064d5144d9d424d65 -->
+<!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-db/src/db/privacy_exports.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-redact/src/image/worker.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
+<!-- doc-verified: 497df0c721c4953564d41328cb182a99f7643d2a -->
 
 Capture persists through the existing writer. Background detectors process a source revision under a desired policy, then publish the sanitized replacement and its receipt in one transaction. A read adapter exposes only current receipts. Text and image completion are independent. Optional regex filtering and legacy timestamps cannot certify required model processing.
 
@@ -19,7 +19,7 @@ capture -> durable local source -> background PII detector
 
 Model and network I/O remain outside the capture writer. Read requests do not invoke the model. Repeated content can reuse successful detector results under the same policy. The desired identity includes shipped model versions, configured backend, labels, columns and pseudonym mode. A completion receipt proves processing under that contract; it does not prove perfect detection recall.
 
-Enterprise frame, audio transcript, input and memory pages use per-stream completion sequences. An older capture that finishes late remains eligible, and failed uploads retain their checkpoint. The enrollment cutoff remains stable across retries and restarts. Upload admission rejects assembled data after a policy change, deletion or edit of released content. New completions do not invalidate an unrelated prepared batch. Admission is the transport handoff boundary; it cannot retract bytes already sent or remove old cloud copies.
+Enterprise frame, audio transcript, input, memory, parsed, activity and feedback pages use per-stream completion sequences. An older capture that finishes late remains eligible, and failed uploads retain their checkpoint. The enrollment cutoff remains stable across retries and restarts. Upload admission rejects assembled data after a policy change, deletion or edit of released content. New completions do not invalidate an unrelated prepared batch. Admission is the transport handoff boundary; it cannot retract bytes already sent or remove old cloud copies.
 
 Hybrid payload replacements retain their generation checks. Storage-only sealing preserves receipts. Protected pools participate in database-generation shutdown. Screenshot routes validate image readiness before cache lookup, including fallback candidates. Missing files, unsupported media and model failures remain unreleased.
 
@@ -55,6 +55,16 @@ Remaining limits are material: a broad ready search at one million frames took 1
 
 The [benchmark report](benchmarks/pii-release-gate/RESULTS.md) contains raw samples, run ranges, CPU/storage measurements, identity-length sensitivity, capacity equations and exact scope. These are synthetic measurements on an M5 Max with 128 GiB RAM, not ordinary-device guarantees or detector-recall evidence. No CI jobs were added.
 
+## Derived enterprise uploads
+
+Parsed projections, saved generated activity history, and feedback have durable upload copies in `_privacy_exports`. The existing text worker processes extracted content strings and publishes a version receipt atomically. Known record IDs, hierarchy, evidence references and timestamps remain intact; new text fields require processing by default. Nested text values are processed individually and restored to their original JSON structure. Original activity history and feedback stay unchanged locally.
+
+Database source changes enqueue identifiers and revoke derived copies in the same source transaction. Preparation uses the existing sync page budget and durable discovery state; large histories continue across pages and restarts. Parsed snapshots include frame metadata, parser items and resolved actor labels. Changes to those tables and their joins revoke the snapshot. Preparing a snapshot validates the source revision again before committing it.
+
+The app's activity store is separate from SQLite. Upload admission compares saved activity fingerprints with the prepared copies while holding the history-save lock, alongside the existing database admission lease. Edits and deletions therefore cannot pass transport admission with an older copy. Subsequent preparation replaces changed copies without reprocessing unchanged activities.
+
+Each enabled stream retains its enrollment cutoff before preparation starts and uploads in completion order. Pending detector work does not block ready streams. An unsuccessful transport acknowledgment retains the delivery checkpoint; restart retries it. After that checkpoint is durable, acknowledged upload copies are removed and only their source-version markers remain. Interrupted cleanup retries on the next tick. These adapters restore enterprise uploads, not the otherwise unsupported local API surfaces or administrative replay.
+
 ## Validation
 
 The regression suite uses synthetic private text and generated screenshot pixels. It covers real SQLite and hybrid storage, the actual worker and HTTP router, screenshot serving, cached-policy revocation, restart durability, late completion, upload acknowledgement failure and pre-upload policy changes. The synthetic detectors make ordering deterministic; these tests do not measure real-model recall or deployment performance.
@@ -62,7 +72,7 @@ The regression suite uses synthetic private text and generated screenshot pixels
 ## Merge blockers and boundaries
 
 - Protected mode currently closes raw SQL, raw video export, original audio samples, frame streaming, on-demand OCR, live content events, artifacts and database backup. These paths need their own release adapters and accurate product status before rollout.
-- Meetings, speakers, semantic actors, outputs, feedback and executions have no release worker in this draft. Their protected views stay empty. Parsed, activity and feedback enterprise uploads are held. This is a functional limitation, not a transient processing delay.
+- Meetings, speakers, semantic actors, outputs, feedback and executions have no release worker in this draft. Their protected views stay empty. Their local API limitation is separate from the protected upload copies described above.
 - Historical administrative replay is rejected in protected mode until pending work can be tracked within the exact requested range. Regular sync supports late completion; replay must not report success while relevant records remain pending.
 - The gate covers the selected local API and enterprise upload paths. Native model consumers that read the raw database, direct filesystem access, browser tools, other sync services, support logs and cloud history require separate boundary review. An agent with unrestricted filesystem access can bypass an HTTP gate.
 - Measured broad/sparse read latency, distinct-content overload and indivisible large-field inference remain rollout blockers. Candidate/receipt selection, compact policy keys and resumable model windows need improvement. Power/thermal behavior, ordinary low-memory hardware, accelerated providers, policy-upgrade catch-up and packaged desktop latency remain unmeasured. The current CPU cooldown is not a hard ceiling for long calls.

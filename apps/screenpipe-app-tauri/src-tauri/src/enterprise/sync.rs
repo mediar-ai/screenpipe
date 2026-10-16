@@ -317,11 +317,27 @@ pub struct PrivacyCursor {
 /// desktop crate against `LocalApiContext`.
 #[async_trait::async_trait]
 pub trait ExportAdmission: Send + Sync {
-    async fn admit(&self) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, EnterpriseSyncError>;
+    async fn admit(&self) -> Result<Option<Box<dyn Send>>, EnterpriseSyncError>;
 }
 
 #[async_trait::async_trait]
 pub trait LocalApiClient: Send + Sync {
+    /// Prepare versioned derived payloads before taking the transport token.
+    /// Returns true while durable discovery still has work for another page.
+    async fn prepare_release_exports(
+        &self,
+        _cutoffs: &std::collections::BTreeMap<String, String>,
+        _limit: u32,
+    ) -> Result<bool, EnterpriseSyncError> {
+        Ok(false)
+    }
+
+    async fn acknowledge_release_exports(
+        &self,
+        _cursors: &std::collections::BTreeMap<String, PrivacyCursor>,
+    ) -> Result<(), EnterpriseSyncError> {
+        Ok(())
+    }
     async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
         Ok(false)
     }
@@ -906,7 +922,6 @@ async fn run_one_sync_inner(
             "screenshot_source_changed",
         ));
     }
-    let export = local.begin_export().await?;
     let cfg = &prepared;
     if cfg.stable_device_id.is_none()
         && cursor.source_id.is_some()
@@ -992,17 +1007,24 @@ async fn run_one_sync_inner(
     let mut privacy_more = false;
     let mut privacy_next = cursor.privacy.clone();
     let mut ready = std::collections::HashMap::new();
+    let protected_streams = [
+        ("frames", streams.frames),
+        ("audio", streams.audio),
+        ("input", streams.ui_events),
+        ("memory", streams.memories),
+        ("parsed", streams.parsed),
+        ("activities", streams.activities),
+        (
+            "feedback",
+            streams.feedback != crate::enterprise_policy::FeedbackSyncMode::Off,
+        ),
+    ];
     if protected {
-        for (kind, enabled) in [
-            ("frames", streams.frames),
-            ("audio", streams.audio),
-            ("input", streams.ui_events),
-            ("memory", streams.memories),
-        ] {
+        for (kind, enabled) in protected_streams {
             if !enabled {
                 continue;
             }
-            let checkpoint = privacy_next
+            privacy_next
                 .entry(kind.into())
                 .or_insert_with(|| PrivacyCursor {
                     sequence: 0,
@@ -1014,6 +1036,30 @@ async fn run_one_sync_inner(
                             .to_rfc3339()
                         }),
                 });
+        }
+        // Enrollment survives preparation/detector/transport failures. Delivery
+        // sequences still advance only after acknowledgment below.
+        cursor.privacy = privacy_next.clone();
+        cursor.save(&cfg.cursor_path)?;
+        let cutoffs = privacy_next
+            .iter()
+            .filter(|(kind, _)| match kind.as_str() {
+                "parsed" => streams.parsed,
+                "activities" => streams.activities,
+                "feedback" => streams.feedback != crate::enterprise_policy::FeedbackSyncMode::Off,
+                _ => false,
+            })
+            .map(|(kind, cursor)| (kind.clone(), cursor.cutoff.clone()))
+            .collect();
+        privacy_more |= local.prepare_release_exports(&cutoffs, PAGE_LIMIT).await?;
+    }
+    let export = local.begin_export().await?;
+    if protected {
+        for (kind, enabled) in protected_streams {
+            if !enabled {
+                continue;
+            }
+            let checkpoint = privacy_next.get_mut(kind).expect("enabled stream enrolled");
             let page = local
                 .fetch_release_page(kind, checkpoint.sequence, &checkpoint.cutoff, PAGE_LIMIT)
                 .await?;
@@ -1136,31 +1182,37 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    let mut feedback =
-        if !protected && streams.feedback != crate::enterprise_policy::FeedbackSyncMode::Off {
-            match local
-                .fetch_feedback_since(
-                    cursor.last_feedback_ts.as_deref(),
-                    cursor.boundary.feedback_id.as_deref(),
-                    PAGE_LIMIT,
-                )
-                .await
-            {
-                Ok(rows) => rows,
-                Err(error) => {
-                    if backfill.is_some() {
-                        return Err(error);
-                    }
-                    warn!(
-                        "enterprise sync: feedback fetch failed (skipping): {}",
-                        error
-                    );
-                    Vec::new()
+    let mut feedback = if protected {
+        serde_json::from_value(
+            ready
+                .remove("feedback")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.feedback != crate::enterprise_policy::FeedbackSyncMode::Off {
+        match local
+            .fetch_feedback_since(
+                cursor.last_feedback_ts.as_deref(),
+                cursor.boundary.feedback_id.as_deref(),
+                PAGE_LIMIT,
+            )
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                if backfill.is_some() {
+                    return Err(error);
                 }
+                warn!(
+                    "enterprise sync: feedback fetch failed (skipping): {}",
+                    error
+                );
+                Vec::new()
             }
-        } else {
-            Vec::new()
-        };
+        }
+    } else {
+        Vec::new()
+    };
     if streams.feedback == crate::enterprise_policy::FeedbackSyncMode::Ratings {
         for row in &mut feedback {
             row.comment = None;
@@ -1171,7 +1223,14 @@ async fn run_one_sync_inner(
     // Parsed app data is a separate privacy-sensitive stream. It is best
     // effort because parser support is optional and older local servers do
     // not expose content_type=parsed.
-    let mut parsed = if !protected && streams.parsed {
+    let mut parsed = if protected {
+        serde_json::from_value(
+            ready
+                .remove("parsed")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.parsed {
         match local
             .fetch_parsed_since(
                 cursor.last_parsed_ts.as_deref(),
@@ -1192,7 +1251,14 @@ async fn run_one_sync_inner(
     } else {
         Vec::new()
     };
-    let activities = if !protected && streams.activities {
+    let activities = if protected {
+        serde_json::from_value(
+            ready
+                .remove("activities")
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+    } else if streams.activities {
         match local
             .fetch_activities_since(cursor.boundary.activity_ts.as_deref())
             .await
@@ -1234,6 +1300,7 @@ async fn run_one_sync_inner(
             }
             cursor.privacy = privacy_next;
             cursor.save(&cfg.cursor_path)?;
+            local.acknowledge_release_exports(&cursor.privacy).await?;
         }
         debug!("enterprise sync: nothing new since last tick");
         return Ok(SyncTickReport {
@@ -1416,6 +1483,9 @@ async fn run_one_sync_inner(
     // Advance cursor only on success — partial failure must not skip records.
     *cursor = next_cursor;
     cursor.save(&cfg.cursor_path)?;
+    if protected {
+        local.acknowledge_release_exports(&cursor.privacy).await?;
+    }
 
     Ok(SyncTickReport {
         privacy_more,
@@ -3448,12 +3518,11 @@ pub(crate) mod tests {
     }
     #[async_trait::async_trait]
     impl ExportAdmission for PrivacyAdmission {
-        async fn admit(
-            &self,
-        ) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, EnterpriseSyncError> {
+        async fn admit(&self) -> Result<Option<Box<dyn Send>>, EnterpriseSyncError> {
             self.token
                 .admit(&self.db.pool)
                 .await
+                .map(|guard| guard.map(|guard| Box::new(guard) as Box<dyn Send>))
                 .map_err(|e| EnterpriseSyncError::Storage {
                     operation: "test export admission",
                     cause: e.to_string(),
@@ -3464,6 +3533,18 @@ pub(crate) mod tests {
     impl LocalApiClient for PrivacyLocal {
         async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
             Ok(true)
+        }
+        async fn acknowledge_release_exports(
+            &self,
+            cursors: &std::collections::BTreeMap<String, PrivacyCursor>,
+        ) -> Result<(), EnterpriseSyncError> {
+            for (kind, cursor) in cursors {
+                self.db
+                    .acknowledge_derived_exports(kind, cursor.sequence)
+                    .await
+                    .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+            }
+            Ok(())
         }
         async fn begin_export(
             &self,
@@ -3628,6 +3709,147 @@ pub(crate) mod tests {
             "revoked data reached transport"
         );
         db.close().await;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "off".into(),
+            "all".into(),
+        );
+    }
+
+    #[tokio::test]
+    async fn privacy_derived_streams_upload_ready_records_and_keep_failed_ack_pending() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _mode = UploadModeEnvGuard::clear();
+        crate::enterprise_policy::set_sync_streams(
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            "full".into(),
+            "off".into(),
+        );
+        crate::enterprise_policy::set_activity_sync_enabled(true);
+        let dir = TempDir::new().unwrap();
+        let db = Arc::new(
+            screenpipe_db::DatabaseManager::new(
+                dir.path().join("recording.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "v1".into(),
+            text: true,
+            images: false,
+        })
+        .await
+        .unwrap();
+        let at = chrono::Utc::now().to_rfc3339();
+        let mut row = activity("stable-activity", &at, &at);
+        row.title = "SYNTHETIC_SECRET activity".into();
+        row.summary = "SYNTHETIC_SECRET summary".into();
+        let cutoff = "2020-01-01T00:00:00Z";
+        db.stage_activity_exports(&[serde_json::to_value(row).unwrap()], cutoff)
+            .await
+            .unwrap();
+        db.execute_raw_sql_write(&format!("INSERT INTO feedback(id,target_kind,target_id,actor_id,rating,comment,context,created_at,updated_at) VALUES('stable-feedback','activity','stable-activity','local-user','up','SYNTHETIC_SECRET feedback','{{\"detail\":\"SYNTHETIC_SECRET nested\"}}','{at}','{at}'); INSERT INTO semantic_runs(id,input_fingerprint,parser_id,parser_version,schema_version,app_platform,input_content_hash,status,item_count) VALUES(1,zeroblob(32),'test-parser','1',1,'macos',zeroblob(8),'handled',1); INSERT INTO semantic_items(id,entity_fingerprint,version_fingerprint,kind,item_key,identity_quality,body) VALUES(1,zeroblob(32),zeroblob(32),'message','stable-key','stable','SYNTHETIC_SECRET parsed'); INSERT INTO semantic_run_items(run_id,local_id,item_id,sort_order) VALUES(1,'stable-local',1,0); INSERT INTO frames(id,timestamp,app_name,window_name,semantic_run_id) VALUES(1,'{at}','App','Window',1)")).await.unwrap();
+        db.prepare_derived_exports("feedback", cutoff, PAGE_LIMIT)
+            .await
+            .unwrap();
+        db.prepare_derived_exports("parsed", cutoff, PAGE_LIMIT)
+            .await
+            .unwrap();
+        let local = PrivacyLocal {
+            protected: db.protected_reads().await.unwrap(),
+            db: db.clone(),
+            revoke: Default::default(),
+        };
+        let server = wiremock::MockServer::start().await;
+        let failures = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let fail = failures.clone();
+        wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+            .respond_with(move |_: &wiremock::Request| {
+                wiremock::ResponseTemplate::new(if fail.load(Ordering::SeqCst) {
+                    503
+                } else {
+                    200
+                })
+            })
+            .mount(&server)
+            .await;
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let http = reqwest::Client::new();
+        let mut cursor = Cursor::default();
+        let report = run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .unwrap();
+        assert_eq!(
+            (report.parsed, report.activities, report.feedback),
+            (0, 0, 0)
+        );
+        assert!(server.received_requests().await.unwrap().is_empty());
+        let jobs = db.release_pending("exports", 10).await.unwrap();
+        for (i, job) in jobs.iter().enumerate() {
+            let mut values = job.values.clone();
+            let mut fields: serde_json::Value =
+                serde_json::from_str(values["text_json"].as_ref().unwrap()).unwrap();
+            for value in fields.as_object_mut().unwrap().values_mut() {
+                *value = serde_json::json!("sanitized content");
+            }
+            values.insert("text_json".into(), Some(fields.to_string()));
+            assert!(db.publish_release(job, &values).await.unwrap());
+            if i == 0 {
+                let report = run_one_sync(&cfg, &mut cursor, &local, &http)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    report.parsed + report.activities + report.feedback,
+                    1,
+                    "a pending stream must not hold another ready stream"
+                );
+            }
+        }
+        failures.store(true, Ordering::SeqCst);
+        let checkpoint = std::fs::read(&cfg.cursor_path).unwrap();
+        assert!(run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .is_err());
+        assert_eq!(std::fs::read(&cfg.cursor_path).unwrap(), checkpoint);
+        let mut cursor = Cursor::load(&cfg.cursor_path);
+        failures.store(false, Ordering::SeqCst);
+        let report = run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .unwrap();
+        assert_eq!(report.parsed + report.activities + report.feedback, 2);
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 3);
+        let bodies = requests
+            .iter()
+            .map(|r| String::from_utf8_lossy(&r.body))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!bodies.contains("SYNTHETIC_SECRET"));
+        for kind in ["activity", "parsed", "feedback"] {
+            assert!(bodies.contains(&format!("\"kind\":\"{kind}\"")), "{bodies}");
+        }
+        assert!(bodies.contains("stable-activity"));
+        assert!(bodies.contains("stable-feedback"));
+        assert!(bodies.contains("stable-local"));
+        let report = run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .unwrap();
+        assert_eq!(report.parsed + report.activities + report.feedback, 0);
+        local.protected.close().await;
+        db.close().await;
+        crate::enterprise_policy::set_activity_sync_enabled(false);
         crate::enterprise_policy::set_sync_streams(
             true,
             true,
