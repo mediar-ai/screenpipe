@@ -329,7 +329,7 @@ impl DirectUploadConfig {
 /// `host:port` entries; whitespace and empty entries ignored. This
 /// repurposes the env-var channel the (dropped) encryption root keys used —
 /// customers already deploy MDM env vars to enterprise fleets.
-fn pinned_hosts_from_env() -> Vec<String> {
+pub(super) fn pinned_hosts_from_env() -> Vec<String> {
     std::env::var("SCREENPIPE_ENTERPRISE_UPLOAD_PINNED_HOSTS")
         .ok()
         .map(|raw| {

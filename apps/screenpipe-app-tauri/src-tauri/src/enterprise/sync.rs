@@ -641,7 +641,7 @@ pub use screenpipe_telemetry_wire::{build_jsonl, build_jsonl_with_parsed};
 /// Split JSONL on record boundaries for hosted ingest. Concatenating the
 /// returned chunks always reproduces `body` byte-for-byte; no record is
 /// truncated or discarded. A single record larger than the target travels in
-/// its own request.
+/// its own ticketed storage transfer.
 pub fn split_jsonl_requests(body: Vec<u8>, target_bytes: usize) -> Vec<Vec<u8>> {
     if body.is_empty() {
         return Vec::new();
@@ -689,6 +689,42 @@ async fn post_jsonl_with_identity(
     stable_device_id: Option<&str>,
     backfill: bool,
 ) -> Result<(), EnterpriseSyncError> {
+    // A single retained AX record can exceed the hosted HTTP body limit even
+    // after splitting the page. Keep every byte and use the same ticketed
+    // storage transport as full-quality screenshots. Cursor advancement still
+    // waits for completion (policy/source/checksum validation and durable ingest).
+    if body.len() > HOSTED_INGEST_REQUEST_BYTES {
+        use reqwest::header::HeaderMap;
+        use screenpipe_sync::pipeline::{TicketedConfig, TicketedPipeline};
+        #[derive(serde::Deserialize)]
+        struct Source { device_id: String }
+        let source: Source = serde_json::from_slice(
+            body.split(|byte| *byte == b'\n').next().unwrap_or_default(),
+        ).map_err(|_| EnterpriseSyncError::Ingest("invalid hosted telemetry source".into()))?;
+        // Preserve the identity contract used by inline ingest: manually
+        // assigned IDs and safe deferred migrations have no stable header.
+        let mut identity_headers = vec![("x-license-key", license_key)];
+        if let Some(stable) = stable_device_id {
+            identity_headers.push(("x-screenpipe-stable-device-id", stable));
+        }
+        let mut headers = HeaderMap::new();
+        for (key, value) in identity_headers {
+            headers.insert(key, value.parse().map_err(|_| EnterpriseSyncError::Configuration(
+                "invalid hosted upload identity header".into(),
+            ))?);
+        }
+        headers.insert("x-screenpipe-ingest-transfer", "1".parse().unwrap());
+        if backfill { headers.insert("x-screenpipe-backfill", "1".parse().unwrap()); }
+        let ticket = serde_json::json!({"action": "ticket", "device_id": source.device_id,
+            "content_length": body.len(), "sha256": screenpipe_core::sync::crypto::compute_checksum(&body)});
+        let mut complete = ticket.clone();
+        complete["action"] = serde_json::json!("complete");
+        TicketedPipeline::new(TicketedConfig::new(url, url)
+            .with_http(client.clone()).with_control_headers(headers)
+            .with_pinned_upload_hosts(enterprise_upload::pinned_hosts_from_env()))
+            .upload(&body, "application/x-ndjson", &ticket, &complete).await?;
+        return Ok(());
+    }
     let mut request = client
         .post(url)
         .header("X-License-Key", license_key)
@@ -3188,6 +3224,79 @@ pub(crate) mod tests {
         assert!(body.is_empty());
     }
 
+    #[tokio::test]
+    async fn hosted_large_record_retries_each_phase_without_advancing_or_losing_bytes() {
+        use std::sync::atomic::AtomicBool;
+        let _policy = crate::enterprise_policy::sync_streams_test_lock();
+        struct RetainedFrame(FrameRow);
+        #[async_trait::async_trait]
+        impl LocalApiClient for RetainedFrame {
+            async fn upload_source_id(&self) -> Result<String, EnterpriseSyncError> {
+                Ok("dev-1".into())
+            }
+            async fn fetch_frames_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Ok(vec![self.0.clone(), frame(26, "2026-10-16T15:21:00Z", "Fixture", "later normal marker")])
+            }
+            async fn fetch_audio_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<AudioRow>, EnterpriseSyncError> { Ok(vec![]) }
+        }
+        // Operator-assigned identities and safe deferred migrations keep the
+        // legacy namespace. Their full records must also make progress.
+        for stable_identity in [Some("stable-device"), None] {
+            for (phase, status) in [("ticket", 401), ("ticket", 403), ("ticket", 429), ("ticket", 503), ("put", 400), ("complete", 503)] {
+                let control = wiremock::MockServer::start().await;
+                let storage = wiremock::MockServer::start().await;
+                let failing = Arc::new(AtomicBool::new(true));
+                let fail = failing.clone();
+                let target = format!("{}/blob", storage.uri());
+                wiremock::Mock::given(wiremock::matchers::method("POST"))
+                    .respond_with(move |request: &wiremock::Request| {
+                        let json: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+                        let action = json["action"].as_str().unwrap_or("inline");
+                        if fail.load(Ordering::SeqCst) && action == phase {
+                            return wiremock::ResponseTemplate::new(status);
+                        }
+                        if action == "ticket" {
+                            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                                "ok": true, "method": "PUT", "upload_url": target,
+                                "headers": {"Content-Type": "application/x-ndjson"}
+                            }))
+                        } else { wiremock::ResponseTemplate::new(200) }
+                    }).mount(&control).await;
+                let fail = failing.clone();
+                wiremock::Mock::given(wiremock::matchers::method("PUT"))
+                    .respond_with(move |_: &wiremock::Request| wiremock::ResponseTemplate::new(
+                        if phase == "put" && fail.load(Ordering::SeqCst) { status } else { 201 }
+                    )).mount(&storage).await;
+                let mut row = frame(25, "2026-10-16T15:20:00Z", "Fixture", "flattened preview");
+                row.accessibility_tree = Some(serde_json::json!({"role": "Edit", "text": "界".repeat(2_100_000)}));
+                let local = RetainedFrame(row);
+                let dir = TempDir::new().unwrap();
+                let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", control.uri()));
+                cfg.stable_device_id = stable_identity.map(str::to_string);
+                let mut cursor = Cursor { source_id: Some("dev-1".into()),
+                    last_frame_ts: Some("2026-10-16T15:00:00Z".into()), ..Cursor::default() };
+                let http = enterprise_http_client();
+                assert!(run_one_sync(&cfg, &mut cursor, &local, &http).await.is_err(), "{phase}/{status}");
+                assert_eq!(cursor.last_frame_ts.as_deref(), Some("2026-10-16T15:00:00Z"));
+                assert!(!cfg.cursor_path.exists());
+                failing.store(false, Ordering::SeqCst);
+                let report = run_one_sync(&cfg, &mut cursor, &local, &http).await.unwrap();
+                assert_eq!(report.frames, 2);
+                assert_eq!(Cursor::load(&cfg.cursor_path).last_frame_ts.as_deref(), Some("2026-10-16T15:21:00Z"));
+                let expected = build_jsonl("dev-1", &cfg.device_label, &[local.0.clone()], &[], &[], &[], &[]);
+                assert!(expected.len() > 5 * 1024 * 1024);
+                for request in storage.received_requests().await.unwrap() {
+                    assert_eq!(request.body, expected, "storage must get the complete original JSONL");
+                    assert!(!request.headers.contains_key("x-license-key"));
+                }
+                let requests = control.received_requests().await.unwrap();
+                assert!(requests.iter().all(|r| r.body.len() < HOSTED_INGEST_REQUEST_BYTES));
+                assert!(requests.iter().all(|r| r.headers.contains_key("x-screenpipe-stable-device-id") == stable_identity.is_some()));
+                assert!(requests.iter().any(|r| String::from_utf8_lossy(&r.body).contains("later normal marker")));
+            }
+        }
+    }
+
     #[test]
     fn hosted_ingest_split_is_byte_for_byte_lossless() {
         let body = b"one\ntwo-two\nthree\n".to_vec();
@@ -5042,6 +5151,7 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn catch_up_failure_keeps_last_acknowledged_page_for_restart() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         let calls = Arc::new(AtomicUsize::new(0));
