@@ -719,7 +719,12 @@ async fn insert_frame(
     .bind(&sid)
     .bind(device_id)
     .bind(chrono::Utc::now().to_rfc3339())
-    .bind(frame.accessibility_tree.as_ref().map(|tree| tree.to_string()))
+    .bind(
+        frame
+            .accessibility_tree
+            .as_ref()
+            .map(|tree| tree.to_string()),
+    )
     .execute(&mut **conn)
     .await?;
     Ok(true)
@@ -1090,23 +1095,44 @@ mod tests {
         let db = test_db(&dir).await;
         let tree = serde_json::json!([{"role":"Button","text":"","depth":1,
             "properties":{"automation_id":"search","unknown":{"x":true}}}]);
-        let mut frame = FrameRow { frame_id:1, timestamp:"2026-10-15T00:00:00Z".into(),
-            app_name:None, window_name:None, browser_url:None, text:Some("Search".into()), accessibility_tree:None };
+        let mut frame = FrameRow {
+            frame_id: 1,
+            timestamp: "2026-10-15T00:00:00Z".into(),
+            app_name: None,
+            window_name: None,
+            browser_url: None,
+            text: Some("Search".into()),
+            accessibility_tree: None,
+        };
         let mut tx = db.begin_immediate_with_retry().await.unwrap();
-        assert!(insert_frame(tx.conn(), "device", "label", &frame).await.unwrap());
+        assert!(insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
         frame.accessibility_tree = Some(tree.clone());
-        assert!(!insert_frame(tx.conn(), "device", "label", &frame).await.unwrap());
+        assert!(!insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
         frame.frame_id = 2;
-        assert!(insert_frame(tx.conn(), "device", "label", &frame).await.unwrap());
+        assert!(insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
         frame.frame_id = 1;
         frame.accessibility_tree = None;
-        assert!(!insert_frame(tx.conn(), "device", "label", &frame).await.unwrap());
+        assert!(!insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
         tx.commit().await.unwrap();
-        let rows: Vec<String> = sqlx::query_scalar("SELECT accessibility_tree_json FROM frames ORDER BY id")
-            .fetch_all(&db.pool).await.unwrap();
+        let rows: Vec<String> =
+            sqlx::query_scalar("SELECT accessibility_tree_json FROM frames ORDER BY id")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
         assert_eq!(rows.len(), 2);
         for raw in rows {
-            assert_eq!(serde_json::from_str::<serde_json::Value>(&raw).unwrap(), tree);
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&raw).unwrap(),
+                tree
+            );
         }
         db.close().await;
     }
