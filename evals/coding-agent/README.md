@@ -1,5 +1,18 @@
 # Coding-agent regression evals
 
+`app-telemetry-full-ax-wire` compiles the complete telemetry records module and
+runs its public batch encoder and decoder with synthetic input. Twelve outcomes
+cover retained accessibility trees, empty nodes, nested and unknown properties,
+Unicode and long values, while preserving legacy frames, identity, mixed audio,
+record order and tolerant malformed-line handling. The parent loses four tree
+outcomes and preserves eight; the historical fix and current source pass twelve.
+Run `bun test evals/coding-agent/calibrate-telemetry-ax.test.js` for fifteen
+calibration controls, including equivalent representations, disconnected fixes,
+truncation, lost nodes, lost audio, malformed-line counts and setup errors.
+Hidden fixtures appear only at grading and need no future build-cache links.
+This narrow wire case does not execute native capture, database hydration,
+PII removal, upload consent, persistent gateway storage or actual model trials.
+
 `app-recording-status-authority` mounts the actual recording popover with
 synthetic device, settings and callback inputs. Fourteen outcomes distinguish
 empty or stale status from capture authority, preserve global/device actions,
