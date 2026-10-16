@@ -524,7 +524,40 @@ pub fn start_background_refresh() {
 
 // ── Local callback server ──────────────────────────────────────────────
 
-async fn wait_for_callback(listener: tokio::net::TcpListener) -> Result<String, String> {
+async fn respond_html(
+    stream: &mut tokio::net::TcpStream,
+    status: &str,
+    title: &str,
+    message: &str,
+    is_success: bool,
+) {
+    let accent_color = if is_success { "#2ea043" } else { "#f85149" };
+    let close_script = if is_success {
+        "<script>window.close()</script>"
+    } else {
+        ""
+    };
+    let html = format!(
+        "HTTP/1.1 {}\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n\
+        <!DOCTYPE html>\
+        <html>\
+        <head><title>Screenpipe - {}</title><meta charset=\"utf-8\"></head>\
+        <body style=\"font-family:system-ui,-apple-system,sans-serif;text-align:center;padding:60px;background:#0d1117;color:#e6edf3\">\
+          <div style=\"max-width:480px;margin:0 auto;background:#161b22;padding:32px;border-radius:12px;border:1px solid #30363d\">\
+            <h2 style=\"color:{};margin-top:0\">{}</h2>\
+            <p style=\"color:#8b949e\">{}</p>\
+          </div>\
+          {}\
+        </body>\
+        </html>",
+        status, title, accent_color, title, message, close_script
+    );
+    let _ = stream.write_all(html.as_bytes()).await;
+}
+
+async fn wait_for_callback(
+    listener: tokio::net::TcpListener,
+) -> Result<(String, tokio::net::TcpStream), String> {
     loop {
         let (mut stream, _) = listener
             .accept()
@@ -539,34 +572,36 @@ async fn wait_for_callback(listener: tokio::net::TcpListener) -> Result<String, 
 
         let request = String::from_utf8_lossy(&buf[..n]);
 
-        let code = request
+        let path = request
             .lines()
             .next()
-            .and_then(|line| line.split_whitespace().nth(1).map(String::from))
-            .and_then(|path| reqwest::Url::parse(&format!("http://localhost{}", path)).ok())
-            .and_then(|url| {
-                url.query_pairs()
-                    .find(|(k, _)| k == "code")
-                    .map(|(_, v)| v.to_string())
-            });
+            .and_then(|line| line.split_whitespace().nth(1).map(String::from));
+
+        let parsed_url = path
+            .as_ref()
+            .and_then(|p| reqwest::Url::parse(&format!("http://localhost{}", p)).ok());
+
+        let code = parsed_url.as_ref().and_then(|url| {
+            url.query_pairs()
+                .find(|(k, _)| k == "code")
+                .map(|(_, v)| v.to_string())
+        });
 
         match code {
             Some(code) => {
-                let html = concat!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n",
-                    "<html><body style=\"font-family:system-ui;text-align:center;padding:60px\">",
-                    "<h2>Login successful!</h2>",
-                    "<p>You can close this tab and return to screenpipe.</p>",
-                    "<script>window.close()</script>",
-                    "</body></html>"
-                );
-                let _ = stream.write_all(html.as_bytes()).await;
-                return Ok(code);
+                info!("ChatGPT OAuth: loopback callback received, proceeding with token exchange");
+                return Ok((code, stream));
             }
             None => {
-                let _ = stream
-                    .write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
-                    .await;
+                // Return a friendly completed/expired notice instead of unexplained 404 or connection reset
+                respond_html(
+                    &mut stream,
+                    "200 OK",
+                    "Sign-in Session Finished",
+                    "This authorization callback has expired or already completed. You can return to screenpipe.",
+                    false,
+                )
+                .await;
             }
         }
     }
@@ -625,20 +660,42 @@ pub async fn chatgpt_oauth_login(
 
     info!("waiting for ChatGPT OAuth callback on port {}", port);
 
-    let auth_code = tokio::time::timeout(
-        std::time::Duration::from_secs(120),
+    let (auth_code, mut stream) = match tokio::time::timeout(
+        std::time::Duration::from_secs(180),
         wait_for_callback(listener),
     )
     .await
-    .map_err(|_| "OAuth login timed out (120s)".to_string())?
-    .map_err(|e| format!("OAuth callback error: {}", e))?;
+    {
+        Ok(Ok(pair)) => pair,
+        Ok(Err(e)) => {
+            error!("ChatGPT OAuth: callback error: {}", e);
+            return Err(format!("OAuth callback error: {}", e));
+        }
+        Err(_) => {
+            warn!("ChatGPT OAuth: loopback listener timed out after 180s waiting for callback");
+            return Err("OAuth login timed out (180s)".to_string());
+        }
+    };
 
-    let client = reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("failed to build HTTP client: {}", e))?;
+    {
+        Ok(c) => c,
+        Err(e) => {
+            respond_html(
+                &mut stream,
+                "500 Internal Server Error",
+                "Sign-in Failed",
+                "Failed to build HTTP client. Please return to screenpipe and try again.",
+                false,
+            )
+            .await;
+            return Err(format!("failed to build HTTP client: {}", e));
+        }
+    };
 
-    let resp = client
+    let resp = match client
         .post(TOKEN_URL)
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(format!(
@@ -650,29 +707,80 @@ pub async fn chatgpt_oauth_login(
         ))
         .send()
         .await
-        .map_err(|e| format!("token exchange request failed: {}", e))?;
+    {
+        Ok(r) => r,
+        Err(e) => {
+            respond_html(
+                &mut stream,
+                "502 Bad Gateway",
+                "Sign-in Failed",
+                "Token exchange network request failed. Please check your connection and try again.",
+                false,
+            )
+            .await;
+            return Err(format!("token exchange request failed: {}", e));
+        }
+    };
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        error!("token exchange failed ({}): {}", status, body);
+        error!("ChatGPT OAuth: token exchange failed ({})", status);
+        respond_html(
+            &mut stream,
+            "400 Bad Request",
+            "Sign-in Failed",
+            "Token exchange was rejected by provider. Please return to screenpipe and retry sign-in.",
+            false,
+        )
+        .await;
         return Err(format!("token exchange failed ({}): {}", status, body));
     }
 
-    let v: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse token response: {}", e))?;
+    let v: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            respond_html(
+                &mut stream,
+                "502 Bad Gateway",
+                "Sign-in Failed",
+                "Invalid response payload from token endpoint.",
+                false,
+            )
+            .await;
+            return Err(format!("failed to parse token response: {}", e));
+        }
+    };
 
-    let access_token = v["access_token"]
-        .as_str()
-        .ok_or("no access_token in token response")?
-        .to_string();
+    let access_token = match v["access_token"].as_str() {
+        Some(t) => t.to_string(),
+        None => {
+            respond_html(
+                &mut stream,
+                "502 Bad Gateway",
+                "Sign-in Failed",
+                "No access token returned by provider.",
+                false,
+            )
+            .await;
+            return Err("no access_token in token response".to_string());
+        }
+    };
 
-    let refresh_token = v["refresh_token"]
-        .as_str()
-        .ok_or("no refresh_token in token response")?
-        .to_string();
+    let refresh_token = match v["refresh_token"].as_str() {
+        Some(t) => t.to_string(),
+        None => {
+            respond_html(
+                &mut stream,
+                "502 Bad Gateway",
+                "Sign-in Failed",
+                "No refresh token returned by provider.",
+                false,
+            )
+            .await;
+            return Err("no refresh_token in token response".to_string());
+        }
+    };
 
     let expires_in = v["expires_in"].as_u64().unwrap_or(3600);
 
@@ -680,6 +788,14 @@ pub async fn chatgpt_oauth_login(
     // the pi provider's opaque "Failed to extract accountId from token".
     if extract_chatgpt_account_id(&access_token).is_none() {
         warn!("ChatGPT OAuth login returned a token without chatgpt_account_id — rejecting login");
+        respond_html(
+            &mut stream,
+            "400 Bad Request",
+            "Sign-in Rejected",
+            "ChatGPT OAuth returned a token without chatgpt_account_id. An active subscription is required.",
+            false,
+        )
+        .await;
         return Err(MISSING_ACCOUNT_ID_MSG.to_string());
     }
 
@@ -690,7 +806,28 @@ pub async fn chatgpt_oauth_login(
         reauth_required: false,
     };
 
-    write_tokens_to_store(&tokens).await?;
+    if let Err(e) = write_tokens_to_store(&tokens).await {
+        error!("ChatGPT OAuth: failed to save tokens to secret store: {}", e);
+        respond_html(
+            &mut stream,
+            "500 Internal Server Error",
+            "Sign-in Failed",
+            "Could not persist tokens to secure storage. Please retry.",
+            false,
+        )
+        .await;
+        return Err(e);
+    }
+
+    respond_html(
+        &mut stream,
+        "200 OK",
+        "Sign-in Successful!",
+        "Your ChatGPT account has been securely connected to screenpipe. You can close this tab and return to screenpipe.",
+        true,
+    )
+    .await;
+
     info!("ChatGPT OAuth login successful — token saved to secret store");
 
     // Activate Screenpipe without forcing the legacy `main` window or changing
