@@ -684,7 +684,13 @@ async fn insert_frame(
     frame: &FrameRow,
 ) -> Result<bool, GatewayError> {
     let sid = sync_id(device_id, "frame", frame.frame_id);
-    if frame_row_id_by_sync_id(conn, &sid).await?.is_some() {
+    if let Some(id) = frame_row_id_by_sync_id(conn, &sid).await? {
+        // An explicit backfill may enrich a frame received from a text-only
+        // client. Never let an older replay erase already retained evidence.
+        if let Some(tree) = &frame.accessibility_tree {
+            sqlx::query("UPDATE frames SET accessibility_tree_json = ?1 WHERE id = ?2 AND accessibility_tree_json IS NULL")
+                .bind(tree.to_string()).bind(id).execute(&mut **conn).await?;
+        }
         return Ok(false);
     }
     let chunk_id: i64 = sqlx::query_scalar(
@@ -700,8 +706,8 @@ async fn insert_frame(
     sqlx::query(
         r#"INSERT INTO frames
            (video_chunk_id, offset_index, timestamp, app_name, window_name, browser_url,
-            full_text, device_name, sync_id, machine_id, synced_at)
-           VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"#,
+            full_text, device_name, sync_id, machine_id, synced_at, accessibility_tree_json)
+           VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"#,
     )
     .bind(chunk_id)
     .bind(&frame.timestamp)
@@ -713,6 +719,12 @@ async fn insert_frame(
     .bind(&sid)
     .bind(device_id)
     .bind(chrono::Utc::now().to_rfc3339())
+    .bind(
+        frame
+            .accessibility_tree
+            .as_ref()
+            .map(|tree| tree.to_string()),
+    )
     .execute(&mut **conn)
     .await?;
     Ok(true)
@@ -982,6 +994,7 @@ mod tests {
             device,
             label,
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 1,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: Some("Arc".to_string()),
@@ -1074,6 +1087,54 @@ mod tests {
         .await
         .unwrap();
         (ingestor, db, src)
+    }
+
+    #[tokio::test]
+    async fn full_ax_tree_survives_ingest_backfill_and_legacy_replay() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = test_db(&dir).await;
+        let tree = serde_json::json!([{"role":"Button","text":"","depth":1,
+            "properties":{"automation_id":"search","unknown":{"x":true}}}]);
+        let mut frame = FrameRow {
+            frame_id: 1,
+            timestamp: "2026-10-15T00:00:00Z".into(),
+            app_name: None,
+            window_name: None,
+            browser_url: None,
+            text: Some("Search".into()),
+            accessibility_tree: None,
+        };
+        let mut tx = db.begin_immediate_with_retry().await.unwrap();
+        assert!(insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        frame.accessibility_tree = Some(tree.clone());
+        assert!(!insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        frame.frame_id = 2;
+        assert!(insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        frame.frame_id = 1;
+        frame.accessibility_tree = None;
+        assert!(!insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        tx.commit().await.unwrap();
+        let rows: Vec<String> =
+            sqlx::query_scalar("SELECT accessibility_tree_json FROM frames ORDER BY id")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(rows.len(), 2);
+        for raw in rows {
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&raw).unwrap(),
+                tree
+            );
+        }
+        db.close().await;
     }
 
     #[tokio::test]
@@ -1319,6 +1380,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 7,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: Some("Arc".to_string()),
@@ -1386,6 +1448,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 1,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: None,
@@ -1438,6 +1501,7 @@ mod tests {
                 "dev-a",
                 "alice-mbp",
                 &[FrameRow {
+                    accessibility_tree: None,
                     frame_id: 2,
                     timestamp: "2026-07-22T10:01:00Z".to_string(),
                     app_name: None,
@@ -1547,6 +1611,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 7,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: Some("Arc".to_string()),
