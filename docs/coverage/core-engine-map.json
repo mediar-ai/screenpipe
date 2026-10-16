@@ -579,7 +579,7 @@
       "crate": "screenpipe-engine",
       "files": [
         "src/analytics.rs",
-        "src/telemetry_budget.rs",
+        "src/resource_summary.rs",
         "src/crash_log.rs",
         "src/piggyback_telemetry.rs",
         "src/recording_coverage.rs",

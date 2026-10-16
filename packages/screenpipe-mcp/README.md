@@ -44,34 +44,23 @@ and `telemetry_sample_interval_seconds: 60`; unsampled events carry `"none"` and
 `0`. Sampled events are presence diagnostics, not exact search counts or an
 unbiased sample of query properties. Their counts and property breakdowns are
 not comparable to earlier releases. `api_usage_5min.request_count` still counts
-aggregate API traffic across all routes at its existing cadence.
+aggregate API traffic across all routes, and `qualified_value_event` retains the
+existing successful-retrieval path, including cached searches. No new events are
+added for cache hits. Health/resource telemetry and local monitoring retain their
+existing cadence.
 
-Successful unnamed direct API searches, including cache hits, share a separate
-process-wide cap of five `qualified_value_event` events per monotonic minute
-(with a new budget after UTC midnight). Empty responses consume no slots.
-Named-agent API outcomes and app/MCP events remain unsampled. Sampled outcomes
-carry `telemetry_sampling: "first_five_per_minute"`,
-`telemetry_sample_interval_seconds: 60`, and
-`telemetry_max_events_per_interval: 5`. These are retained successful retrievals,
-not an exact request total or proof of human intent. Existing H1/D7 and result-depth
-queries that count these events require explicit rollout review: keeping the
-existing `metric_version` does not make sampled counts historically comparable.
-In particular, five-per-minute sampling does not guarantee exact results for
-cohort-relative time windows. Do not silently compare those counts across rollout.
+Resource events additionally report `telemetry_window_samples`,
+`window_cpu_percent_mean`, `window_cpu_percent_max`, `window_memory_gb_mean`,
+`window_memory_gb_max`, and `window_phys_footprint_gb_max` across local samples
+since the previous reporting attempt. These supplement the existing point-in-time
+properties. Weight window means by their sample counts when aggregating them.
+Transport remains best effort; these summaries are not a durable sample archive.
 
-Vision/audio pipeline telemetry retains its existing cumulative counter fields,
-reports its first active snapshot, then reports hourly and on changes to each
-fault counter's recent activity. These checks still run every minute; the
-`telemetry_recent_faults` map distinguishes the changed counter classes. No new
-errors in an interval does not establish successful capture. Resource telemetry
-reports its first sample, then hourly or on resource-pressure transitions. Local
-30-second resource sampling, logs, leak detection and five-second recording-coverage
-sampling continue unchanged. Resource events retain point-in-time fields and add
-`telemetry_window_samples`, CPU/memory window means and maxima, and maximum physical
-footprint so brief sampled peaks survive the reduced remote cadence. Aggregate
-means across windows using their sample counts; hourly point samples are not
-historically comparable to minute-sampled averages. Detailed fault timelines
-remain available locally; no recording or search response is throttled.
+Cost reductions must preserve successful-retrieval counts and cohort-relative
+retention windows. A future reduction in diagnostic cadence needs a validated
+replacement for fault timelines, short-session coverage, and resource peaks,
+including shutdown and failed-delivery handling. This change does not reduce
+PostHog event volume or claim billing savings.
 
 Attribution adds fields to existing events and uses the existing analytics
 opt-out. It does not scan running apps or send prompts, search text, or raw

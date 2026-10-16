@@ -17,7 +17,7 @@ use tracing::debug;
 use tracing::trace;
 use tracing::{error, info, warn};
 
-use crate::telemetry_budget::{HealthReportGate, ResourceReportWindow, HEALTH_REPORT_INTERVAL};
+use crate::resource_summary::ResourceReportWindow;
 use crate::telemetry_context::TelemetryContext;
 
 const RESOURCE_PROCESS_GROUPS: [(&str, &str); 5] = [
@@ -535,18 +535,6 @@ impl ResourceTelemetryReporter {
         // Avoid unnecessary cloning by using references
         let mut properties = Map::new();
         properties.insert(
-            "telemetry_sampling".to_string(),
-            json!("hourly_or_pressure_transition"),
-        );
-        properties.insert(
-            "telemetry_min_heartbeat_seconds".to_string(),
-            json!(HEALTH_REPORT_INTERVAL.as_secs()),
-        );
-        properties.insert(
-            "telemetry_resource_pressure".to_string(),
-            json!(snapshot.process_breakdown.should_warn()),
-        );
-        properties.insert(
             "telemetry_window_samples".to_string(),
             json!(window.samples),
         );
@@ -803,10 +791,8 @@ impl ResourceTelemetryReporter {
         // Always run locally so resource-pressure warnings still fire when
         // analytics/debug/file logging are disabled.
         let monitor = Arc::clone(self);
-        let posthog_interval = posthog_interval
-            .unwrap_or(HEALTH_REPORT_INTERVAL)
-            .max(HEALTH_REPORT_INTERVAL);
-        let mut reports = HealthReportGate::new(posthog_interval);
+        let posthog_interval = posthog_interval.unwrap_or(interval);
+        let mut last_posthog_update = Instant::now();
         let mut window = ResourceReportWindow::default();
 
         tokio::spawn(async move {
@@ -848,12 +834,11 @@ impl ResourceTelemetryReporter {
                             snapshot.total_memory_gb,
                             snapshot.phys_footprint_gb,
                         );
-                        let should_send_to_posthog = reports.should_report(
-                            monitor.start_time.elapsed(),
-                            snapshot.process_breakdown.should_warn(),
-                        );
+                        let now = Instant::now();
+                        let should_send_to_posthog = now.duration_since(last_posthog_update) >= posthog_interval;
 
                         if should_send_to_posthog {
+                            last_posthog_update = now;
                             monitor.log_status(&snapshot, &std::mem::take(&mut window)).await;
                         } else {
                             monitor.log_status_local(&snapshot).await;

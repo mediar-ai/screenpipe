@@ -87,6 +87,7 @@ pub mod recording_config;
 pub mod recording_coverage;
 pub mod recording_detail;
 mod resource_monitor;
+mod resource_summary;
 pub mod retention;
 pub mod routes;
 pub mod schedule_monitor;
@@ -97,7 +98,6 @@ pub mod snapshot_compaction;
 pub mod structured_outputs;
 mod sync_api;
 pub mod sync_provider;
-pub(crate) mod telemetry_budget;
 pub mod telemetry_context;
 pub mod ui_recorder;
 // Exposed publicly so the commercial `screenpipe-sdk` (screenpipe/sdk repo)
