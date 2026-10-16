@@ -353,6 +353,33 @@ pub use export_filter::{ExportFilterReport, ExportRows};
 
 #[async_trait::async_trait]
 pub trait LocalApiClient: Send + Sync {
+    async fn release_replay_pending(
+        &self,
+        _request_id: &str,
+        _streams: &[String],
+        _start: &str,
+        _end: &str,
+        _after: &std::collections::BTreeMap<String, i64>,
+    ) -> Result<bool, EnterpriseSyncError> {
+        Err(EnterpriseSyncError::Configuration(
+            "privacy replay adapter unavailable".into(),
+        ))
+    }
+    async fn prepare_release_replay(
+        &self,
+        _request_id: &str,
+        _streams: &[String],
+        _start: &str,
+        _end: &str,
+        _limit: u32,
+    ) -> Result<bool, EnterpriseSyncError> {
+        Err(EnterpriseSyncError::Configuration(
+            "privacy replay adapter unavailable".into(),
+        ))
+    }
+    async fn finish_release_replay(&self, _request_id: &str) -> Result<(), EnterpriseSyncError> {
+        Ok(())
+    }
     /// Prepare versioned derived payloads before taking the transport token.
     /// Returns true while durable discovery still has work for another page.
     async fn prepare_release_exports(
@@ -377,6 +404,7 @@ pub trait LocalApiClient: Send + Sync {
         _kind: &str,
         _after: i64,
         _cutoff: &str,
+        _end: Option<&str>,
         _limit: u32,
     ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
         Err(EnterpriseSyncError::Configuration(
@@ -1146,9 +1174,6 @@ async fn run_one_sync_page(
     }
 
     let protected = local.privacy_release_required().await?;
-    if protected && backfill.is_some() {
-        return Err(EnterpriseSyncError::Configuration("Historical replay is unavailable until privacy completion can be bounded to the requested range".into()));
-    }
     let mut privacy_more = false;
     let mut privacy_next = cursor.privacy.clone();
     let mut ready = std::collections::HashMap::new();
@@ -1196,7 +1221,24 @@ async fn run_one_sync_page(
             })
             .map(|(kind, cursor)| (kind.clone(), cursor.cutoff.clone()))
             .collect();
-        privacy_more |= local.prepare_release_exports(&cutoffs, PAGE_LIMIT).await?;
+        if let Some(request) = backfill {
+            let kinds = protected_streams
+                .iter()
+                .filter(|(_, enabled)| *enabled)
+                .map(|(kind, _)| (*kind).to_string())
+                .collect::<Vec<_>>();
+            privacy_more |= local
+                .prepare_release_replay(
+                    &request.id,
+                    &kinds,
+                    &request.start_at.to_rfc3339(),
+                    &request.end_at.to_rfc3339(),
+                    PAGE_LIMIT,
+                )
+                .await?;
+        } else {
+            privacy_more |= local.prepare_release_exports(&cutoffs, PAGE_LIMIT).await?;
+        }
     }
     let export = local.begin_export().await?;
     // Preparation can replace old copies, so admission starts afterward. Check
@@ -1208,17 +1250,44 @@ async fn run_one_sync_page(
         ));
     }
     if protected {
+        let end = backfill.map(|r| r.end_at.to_rfc3339());
         for (kind, enabled) in protected_streams {
             if !enabled {
                 continue;
             }
             let checkpoint = privacy_next.get_mut(kind).expect("enabled stream enrolled");
             let page = local
-                .fetch_release_page(kind, checkpoint.sequence, &checkpoint.cutoff, PAGE_LIMIT)
+                .fetch_release_page(
+                    kind,
+                    checkpoint.sequence,
+                    &checkpoint.cutoff,
+                    end.as_deref(),
+                    PAGE_LIMIT,
+                )
                 .await?;
             privacy_more |= page.more;
             checkpoint.sequence = page.sequence;
             ready.insert(kind, page.rows);
+        }
+        if let Some(request) = backfill {
+            let kinds = protected_streams
+                .iter()
+                .filter(|(_, enabled)| *enabled)
+                .map(|(kind, _)| (*kind).to_string())
+                .collect::<Vec<_>>();
+            let after = privacy_next
+                .iter()
+                .map(|(kind, cursor)| (kind.clone(), cursor.sequence))
+                .collect();
+            privacy_more |= local
+                .release_replay_pending(
+                    &request.id,
+                    &kinds,
+                    &request.start_at.to_rfc3339(),
+                    &request.end_at.to_rfc3339(),
+                    &after,
+                )
+                .await?;
         }
     }
     let mut pending_read = false;
@@ -4033,6 +4102,38 @@ pub(crate) mod tests {
     }
     #[async_trait::async_trait]
     impl LocalApiClient for PrivacyLocal {
+        async fn release_replay_pending(
+            &self,
+            request_id: &str,
+            streams: &[String],
+            start: &str,
+            end: &str,
+            after: &std::collections::BTreeMap<String, i64>,
+        ) -> Result<bool, EnterpriseSyncError> {
+            self.db
+                .release_replay_pending(request_id, streams, start, end, Some(after))
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+        }
+        async fn prepare_release_replay(
+            &self,
+            request_id: &str,
+            streams: &[String],
+            start: &str,
+            end: &str,
+            limit: u32,
+        ) -> Result<bool, EnterpriseSyncError> {
+            self.db
+                .prepare_release_replay(request_id, streams, start, end, limit)
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+        }
+        async fn finish_release_replay(&self, request_id: &str) -> Result<(), EnterpriseSyncError> {
+            self.db
+                .finish_release_replay(request_id)
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+        }
         async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
             Ok(true)
         }
@@ -4059,11 +4160,12 @@ pub(crate) mod tests {
             kind: &str,
             after: i64,
             cutoff: &str,
+            end: Option<&str>,
             limit: u32,
         ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
             let page = self
                 .protected
-                .release_export_page(kind, after, cutoff, limit)
+                .release_export_range_page(kind, after, cutoff, end, limit)
                 .await
                 .unwrap();
             if self.revoke.swap(false, Ordering::SeqCst) {
@@ -4094,6 +4196,87 @@ pub(crate) mod tests {
         ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
             panic!("protected sync must not read legacy audio")
         }
+    }
+
+    #[tokio::test]
+    async fn protected_replay_waits_for_late_completion_and_resumes_its_own_cursor() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _mode = UploadModeEnvGuard::clear();
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        let dir = TempDir::new().unwrap();
+        let db = Arc::new(
+            screenpipe_db::DatabaseManager::new(
+                dir.path().join("recording.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "replay-v1".into(),
+            text: true,
+            images: false,
+        })
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2020-01-01T12:00:00Z','SYNTHETIC_SECRET old'),(2,'2020-01-01T13:00:00Z','SYNTHETIC_SECRET new'),(3,'2020-01-02T00:00:00Z','SYNTHETIC_SECRET outside')").await.unwrap();
+        let local = PrivacyLocal {
+            protected: db.protected_reads().await.unwrap(),
+            db: db.clone(),
+            revoke: Default::default(),
+        };
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let request: backfill::BackfillRequest = serde_json::from_value(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(), "license_id": uuid::Uuid::new_v4().to_string(), "device_id": cfg.device_id,
+            "start_at": "2020-01-01T00:00:00Z", "end_at": "2020-01-02T00:00:00Z", "streams": ["frames"]
+        })).unwrap();
+        let mut cursor = Cursor {
+            last_frame_ts: Some("2020-01-01T00:00:00Z".into()),
+            ..Default::default()
+        };
+        let http = reqwest::Client::new();
+        let page = backfill::run_replay_page(&cfg, &mut cursor, &local, &http, &request)
+            .await
+            .unwrap();
+        assert!(page.may_have_more());
+        assert!(!cursor.boundary.backfill_telemetry_complete);
+        assert!(server.received_requests().await.unwrap().is_empty());
+        let jobs = db.release_pending("frames", 10).await.unwrap();
+        for id in ["2", "1"] {
+            let job = jobs.iter().find(|j| j.id == id).unwrap();
+            let mut safe = job.values.clone();
+            safe.insert("full_text".into(), Some(format!("sanitized {id}")));
+            db.publish_release(job, &safe).await.unwrap();
+            let page = backfill::run_replay_page(&cfg, &mut cursor, &local, &http, &request)
+                .await
+                .unwrap();
+            assert_eq!(page.frames, 1);
+            assert_eq!(page.may_have_more(), id == "2");
+            cursor = Cursor::load(&cfg.cursor_path);
+        }
+        assert!(cursor.boundary.backfill_telemetry_complete);
+        assert!(!db.release_ready("frames", "3").await.unwrap());
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests
+            .iter()
+            .all(|r| !String::from_utf8_lossy(&r.body).contains("SYNTHETIC_SECRET")));
+        local.protected.close().await;
+        db.close().await;
     }
 
     #[tokio::test]

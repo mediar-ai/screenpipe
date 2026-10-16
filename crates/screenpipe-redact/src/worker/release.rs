@@ -13,6 +13,8 @@ pub(super) struct ReleaseScheduler {
     next: usize,
     oldest: Vec<bool>,
     progress: Vec<Option<Progress>>,
+    local_streams: Vec<String>,
+    local_next: usize,
 }
 
 impl Default for ReleaseScheduler {
@@ -23,6 +25,8 @@ impl Default for ReleaseScheduler {
             progress: (0..kinds.len()).map(|_| None).collect(),
             kinds,
             next: 0,
+            local_streams: screenpipe_db::privacy_exports::local_release_streams(),
+            local_next: 0,
         }
     }
 }
@@ -31,6 +35,7 @@ struct Field {
     column: String,
     pointer: Option<String>,
     text: String,
+    session: Option<Box<dyn crate::RequiredRedaction>>,
 }
 
 struct Progress {
@@ -61,6 +66,7 @@ impl Progress {
                     column: column.clone(),
                     pointer: None,
                     text: text.into(),
+                    session: None,
                 });
             }
         }
@@ -72,11 +78,20 @@ impl Progress {
         })
     }
 
-    async fn step(&mut self, redactor: &dyn Redactor) -> Result<(), RedactError> {
-        let Some(field) = self.fields.front() else {
+    async fn step(&mut self, redactor: &std::sync::Arc<dyn Redactor>) -> Result<(), RedactError> {
+        let Some(field) = self.fields.front_mut() else {
             return Ok(());
         };
-        let out = redactor.redact_required(&field.text).await?;
+        if field.session.is_none() {
+            field.session = Some(
+                redactor
+                    .clone()
+                    .required_session(std::mem::take(&mut field.text)),
+            );
+        }
+        let Some(out) = field.session.as_mut().unwrap().step().await? else {
+            return Ok(());
+        };
         if let Some(pointer) = &field.pointer {
             let target = self
                 .json
@@ -113,7 +128,7 @@ impl Worker {
     }
 
     /// Attempts (including failures and partial records) drive CPU accounting.
-    /// A slice yields between detector calls; one inference is indivisible.
+    /// A slice yields between backend steps, including overlapping ONNX windows.
     /// Partial results stay in memory and are never visible until atomic publish.
     pub(super) async fn process_release_slice(
         &self,
@@ -125,6 +140,7 @@ impl Worker {
         let mut scheduler = self.release_scheduler.lock().await;
         let started = Instant::now();
         let (mut attempted, mut completed, mut empty) = (0, 0, 0);
+        let mut preparing = false;
         while attempted < limit
             && empty < scheduler.kinds.len()
             && !self.paused.load(Ordering::SeqCst)
@@ -141,6 +157,15 @@ impl Worker {
                 }
             }
             if scheduler.progress[index].is_none() {
+                if kind == "exports" && db.release_policy().await?.text {
+                    let local = scheduler.local_next;
+                    scheduler.local_next = (local + 1) % scheduler.local_streams.len();
+                    // Reuse the caller's batch budget. Discovery and source
+                    // revisions persist, including when no detector is healthy.
+                    preparing |= db
+                        .prepare_derived_exports(&scheduler.local_streams[local], "", limit)
+                        .await?;
+                }
                 let jobs = match db
                     .release_pending_ordered(kind, 1, 0, scheduler.oldest[index])
                     .await
@@ -175,7 +200,7 @@ impl Worker {
             let progress = scheduler.progress[index].as_mut().unwrap();
             let mut failed = None;
             while !progress.fields.is_empty() && !self.paused.load(Ordering::SeqCst) {
-                if let Err(error) = progress.step(self.redactor.as_ref()).await {
+                if let Err(error) = progress.step(&self.redactor).await {
                     failed = Some(error);
                     break;
                 }
@@ -199,7 +224,7 @@ impl Worker {
                 scheduler.progress[index] = None;
             }
         }
-        Ok((attempted, completed))
+        Ok((attempted + u32::from(preparing), completed))
     }
 
     async fn release_failed(&self, job: &ReleaseJob, error: &RedactError) {
@@ -226,6 +251,7 @@ fn collect(value: &serde_json::Value, column: &str, path: String, out: &mut VecD
             column: column.into(),
             pointer: Some(path),
             text: text.clone(),
+            session: None,
         }),
         serde_json::Value::Array(items) => {
             for (i, item) in items.iter().enumerate() {

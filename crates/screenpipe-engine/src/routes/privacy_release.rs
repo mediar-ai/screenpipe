@@ -74,6 +74,7 @@ pub(crate) struct ReadyQuery {
     #[serde(default)]
     after: i64,
     cutoff: String,
+    end: Option<String>,
     #[serde(default = "page_limit")]
     limit: u32,
 }
@@ -87,7 +88,13 @@ pub(crate) async fn ready_page(
 ) -> Response {
     match state
         .db
-        .release_export_page(&kind, query.after, &query.cutoff, query.limit)
+        .release_export_range_page(
+            &kind,
+            query.after,
+            &query.cutoff,
+            query.end.as_deref(),
+            query.limit,
+        )
         .await
     {
         Ok(page) => Json(page).into_response(),
@@ -173,6 +180,7 @@ mod tests {
         .await
         .unwrap();
         db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,app_name,window_name) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET','Test','Test')").await.unwrap();
+        db.execute_raw_sql_write("INSERT INTO meetings(id,meeting_start,meeting_app,title,note) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET')").await.unwrap();
         db.execute_raw_sql_write("INSERT INTO activity_tasks(id,task_key,kind,title,confidence,producer,user_locked) VALUES(1,'task','task','SYNTHETIC_SECRET',1,'test',1); INSERT INTO activity_intervals(id,interval_key,task_id,start_at,end_at,state,confidence,producer) VALUES(1,'interval',1,'2026-10-14T10:00:00Z','2026-10-14T10:05:00Z','final',1,'test'); INSERT INTO activity_actions(id,action_key,interval_id,occurred_at,action_type,summary,confidence,source_type,source_id) VALUES(1,'action',1,'2026-10-14T10:00:00Z','view','SYNTHETIC_SECRET',1,'frame',1)").await.unwrap();
         let audio = Arc::new(
             screenpipe_audio::audio_manager::AudioManagerBuilder::new()
@@ -209,6 +217,18 @@ mod tests {
         let client = reqwest::Client::new();
         let base = format!("http://{address}");
         let search = format!("{base}/search?content_type=ocr&limit=10");
+        let meeting: serde_json::Value = client
+            .get(format!("{base}/meetings/1"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(!meeting.to_string().contains("SYNTHETIC_SECRET"));
+        assert!(meeting.to_string().contains("Privacy processing"));
         let response = client.get(&search).send().await.unwrap();
         assert!(
             response.status().is_success(),
@@ -310,12 +330,13 @@ mod tests {
             loop {
                 worker.process_release_batch(7).await.unwrap();
                 let ready: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM _privacy_release WHERE kind IN ('frames','activity_tasks','activity_actions') AND id='1' AND policy='synthetic-v1'",
+                    "SELECT COUNT(*) FROM _privacy_release WHERE kind IN ('frames','activity_tasks','activity_actions') AND id='1' AND policy=(SELECT receipt_key FROM _privacy_policy WHERE identity='synthetic-v1')",
                 )
                 .fetch_one(&db.pool)
                 .await
                 .unwrap();
-                if ready == 3 {
+                let local_ready: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_exports e JOIN _privacy_release r ON r.kind='exports' AND r.id=CAST(e.id AS TEXT) JOIN _privacy_policy p ON r.policy=CAST(p.receipt_key AS TEXT) WHERE e.stream='local_meetings' AND e.source_id='1')").fetch_one(&db.pool).await.unwrap();
+                if ready == 3 && local_ready {
                     break;
                 }
                 tokio::task::yield_now().await;
@@ -325,6 +346,18 @@ mod tests {
         .expect("text worker did not certify all fixture surfaces");
         let before = calls.load(Ordering::SeqCst);
         assert!(before > 0);
+        let meeting: serde_json::Value = client
+            .get(format!("{base}/meetings/1"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(meeting.to_string().contains("[PRIVATE]"), "{meeting}");
+        assert!(!meeting.to_string().contains("SYNTHETIC_SECRET"));
         let body: serde_json::Value = client
             .get(&search)
             .send()

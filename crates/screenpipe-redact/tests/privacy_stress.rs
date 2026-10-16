@@ -99,7 +99,7 @@ async fn seed(db: &DatabaseManager, n: usize) {
     }
 }
 async fn certify_fixture(db: &DatabaseManager, n: usize) {
-    db.execute_raw_sql_write(&format!("INSERT INTO _privacy_release(kind,id,policy) SELECT 'frames',CAST(id AS TEXT),'bench:v1' FROM frames; INSERT INTO _privacy_release(kind,id,policy) SELECT 'image',CAST(id AS TEXT),'bench:v1' FROM frames; INSERT INTO _privacy_discovery(kind,policy,after_id,complete) VALUES('frames','bench:v1',{n},1),('image','bench:v1',{n},1)")).await.unwrap();
+    db.execute_raw_sql_write(&format!("INSERT INTO _privacy_release(kind,id,policy) SELECT 'frames',CAST(id AS TEXT),(SELECT receipt_key FROM _privacy_policy WHERE id=1) FROM frames; INSERT INTO _privacy_release(kind,id,policy) SELECT 'image',CAST(id AS TEXT),(SELECT receipt_key FROM _privacy_policy WHERE id=1) FROM frames; INSERT INTO _privacy_discovery(kind,policy,after_id,complete) VALUES('frames','bench:v1',{n},1),('image','bench:v1',{n},1)")).await.unwrap();
 }
 async fn capture(db: &DatabaseManager, sequence: usize) -> Vec<i64> {
     let window = FrameWindowData {
@@ -228,7 +228,7 @@ async fn scale_overhead() {
         db.execute_raw_sql_write(&format!("INSERT INTO _privacy_release(kind,id) SELECT 'frames',CAST(id AS TEXT) FROM frames; INSERT INTO _privacy_release(kind,id) SELECT 'image',CAST(id AS TEXT) FROM frames; INSERT INTO _privacy_discovery(kind,policy,after_id,complete) VALUES('frames','bench:v1',{n},1),('image','bench:v1',{n},1)")).await.unwrap();
     }
     if mode == "sparse" {
-        db.execute_raw_sql_write("UPDATE _privacy_release SET policy='bench:v1' WHERE kind='frames' AND CAST(id AS INTEGER)<=50").await.unwrap();
+        db.execute_raw_sql_write("UPDATE _privacy_release SET policy=(SELECT receipt_key FROM _privacy_policy WHERE id=1) WHERE kind='frames' AND CAST(id AS INTEGER)<=50").await.unwrap();
     }
     db.execute_raw_sql_write("PRAGMA wal_checkpoint(TRUNCATE)")
         .await
@@ -517,14 +517,14 @@ async fn real_text_sustained() {
         t.await.unwrap();
     }
     let images_processed: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM _privacy_release WHERE kind='image' AND policy='bench:v1'",
+        "SELECT COUNT(*) FROM _privacy_release WHERE kind='image' AND policy=(SELECT receipt_key FROM _privacy_policy WHERE id=1)",
     )
     .fetch_one(&db.pool)
     .await
     .unwrap();
     let processed = monitor.status().await.redacted_total;
     let ready: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM _privacy_release WHERE kind='frames' AND policy='bench:v1'",
+        "SELECT COUNT(*) FROM _privacy_release WHERE kind='frames' AND policy=(SELECT receipt_key FROM _privacy_policy WHERE id=1)",
     )
     .fetch_one(&db.pool)
     .await
@@ -740,7 +740,7 @@ async fn frame_ready_count(db: &DatabaseManager) -> i64 {
     // WorkerStatus aggregates all seven streams. OCR capture also creates
     // element records, so that counter is not a frame-throughput numerator.
     sqlx::query_scalar(
-        "SELECT COUNT(*) FROM _privacy_release WHERE kind='frames' AND policy='bench:v1'",
+        "SELECT COUNT(*) FROM _privacy_release WHERE kind='frames' AND policy=(SELECT receipt_key FROM _privacy_policy WHERE id=1)",
     )
     .fetch_one(&db.pool)
     .await
@@ -764,6 +764,7 @@ async fn policy_identity_overhead() {
     let bytes = env_n("PRIVACY_BENCH_POLICY_BYTES", 512);
     assert!((8..=4096).contains(&bytes));
     let identity = "x".repeat(bytes);
+    let legacy = std::env::var_os("PRIVACY_BENCH_LEGACY_RECEIPTS").is_some();
     let (root, db) = db().await;
     seed(&db, history).await;
     db.configure_release(&ReleasePolicy {
@@ -773,13 +774,21 @@ async fn policy_identity_overhead() {
     })
     .await
     .unwrap();
+    let receipt: String = if legacy {
+        identity.clone()
+    } else {
+        sqlx::query_scalar("SELECT CAST(receipt_key AS TEXT) FROM _privacy_policy WHERE id=1")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap()
+    };
     let mut tx = db.begin_immediate_with_retry().await.unwrap();
     for kind in ["frames", "image"] {
         sqlx::query(
             "INSERT INTO _privacy_release(kind,id,policy) SELECT ?,CAST(id AS TEXT),? FROM frames",
         )
         .bind(kind)
-        .bind(&identity)
+        .bind(&receipt)
         .execute(&mut **tx.conn())
         .await
         .unwrap();
@@ -789,12 +798,45 @@ async fn policy_identity_overhead() {
         .await
         .unwrap();
     let read = db.protected_reads().await.unwrap();
+    if legacy {
+        let columns: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM pragma_table_info('frames')")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        let projection = columns.iter().map(|column| {
+            if matches!(column.as_str(), "name" | "snapshot_path" | "video_chunk_id") {
+                format!("CASE WHEN gate.image_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='image' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)) THEN s.\"{column}\" END AS \"{column}\"")
+            } else { format!("s.\"{column}\"") }
+        }).collect::<Vec<_>>().join(",");
+        let view = format!("DROP VIEW temp.frames; CREATE TEMP VIEW frames AS SELECT {projection} FROM _privacy_policy gate CROSS JOIN main.frames s WHERE gate.id=1 AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind='frames' AND r.policy=gate.identity)) AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='frames' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)))");
+        let mut connections = vec![];
+        for _ in 0..read.pool.options().get_max_connections() {
+            let mut connection = read.pool.acquire().await.unwrap();
+            sqlx::query("PRAGMA query_only=OFF")
+                .execute(&mut *connection)
+                .await
+                .unwrap();
+            sqlx::raw_sql(sqlx::AssertSqlSafe(view.clone()))
+                .execute(&mut *connection)
+                .await
+                .unwrap();
+            sqlx::query("PRAGMA query_only=ON")
+                .execute(&mut *connection)
+                .await
+                .unwrap();
+            connections.push(connection);
+        }
+        drop(connections);
+    }
+
     let start = Instant::now();
     let cpu = usage().0;
     let mut latest = vec![];
     let mut queries = vec![];
     let mut counts = vec![];
-    for _ in 0..30 {
+    let read_samples = env_n("PRIVACY_BENCH_READ_SAMPLES", 30);
+    for _ in 0..read_samples {
         let t = Instant::now();
         let ids: Vec<i64> =
             sqlx::query_scalar("SELECT id FROM frames ORDER BY timestamp DESC LIMIT 50")
@@ -854,11 +896,43 @@ async fn policy_identity_overhead() {
     assert_eq!(visible, 0);
     emit(
         "identity_sensitivity",
-        &json!({"history":history,"policy_bytes":bytes,"profile":if cfg!(debug_assertions){"debug"}else{"release"},"read_samples":30,"capture_samples":1000}),
+        &json!({"history":history,"policy_bytes":bytes,"legacy_receipts":legacy,"profile":if cfg!(debug_assertions){"debug"}else{"release"},"read_samples":read_samples,"capture_samples":1000}),
         start,
         cpu,
         json!({"latest":distribution(latest),"fts_search":distribution(queries),"count":distribution(counts),"capture":distribution(writes),"capture_s":capture_s,"capture_cpu_s":capture_cpu_s,"db_bytes":std::fs::metadata(root.path().join("db.sqlite")).unwrap().len(),"wal_bytes":std::fs::metadata(root.path().join("db.sqlite-wal")).map(|m|m.len()).unwrap_or(0)}),
     );
     read.close().await;
     db.close().await;
+}
+
+#[tokio::test]
+#[ignore = "manual real-model before/after equivalence and step latency"]
+async fn resumable_model_windows() {
+    use screenpipe_redact::adapters::onnx::{OnnxConfig, OnnxRedactor};
+    let model = Arc::new(OnnxRedactor::load(OnnxConfig::default()).unwrap());
+    let text = "Technical project planning. Contact Alice Smith at alice@example.com. "
+        .repeat(env_n("PRIVACY_BENCH_REPEAT", 128));
+    let started = Instant::now();
+    let before = model.redact_required(&text).await.unwrap();
+    let before_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let mut session = model.required_session(text.clone());
+    let mut steps = vec![];
+    let after = loop {
+        let started = Instant::now();
+        let output = session.step().await.unwrap();
+        steps.push(started.elapsed().as_secs_f64() * 1000.0);
+        if let Some(output) = output {
+            break output;
+        }
+        tokio::task::yield_now().await;
+    };
+    assert_eq!(
+        before, after,
+        "window scheduling must preserve every detection and offset"
+    );
+    assert!(steps.len() > 1);
+    println!(
+        "PRIVACY_WINDOW_METRIC {}",
+        json!({"bytes":text.len(),"before_indivisible_ms":before_ms,"after_steps":distribution(steps)})
+    );
 }

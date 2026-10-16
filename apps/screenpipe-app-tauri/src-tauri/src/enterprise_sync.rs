@@ -333,6 +333,76 @@ mod imp {
 
     #[async_trait::async_trait]
     impl LocalApiClient for ScreenpipeLocalClient {
+        async fn release_replay_pending(
+            &self,
+            request_id: &str,
+            streams: &[String],
+            start: &str,
+            end: &str,
+            after: &std::collections::BTreeMap<String, i64>,
+        ) -> Result<bool, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.release_replay_pending(request_id, streams, start, end, Some(after))
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "check protected historical replay",
+                    cause: e.to_string(),
+                })
+        }
+        async fn prepare_release_replay(
+            &self,
+            request_id: &str,
+            streams: &[String],
+            start: &str,
+            end: &str,
+            limit: u32,
+        ) -> Result<bool, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.prepare_release_replay(request_id, streams, start, end, limit)
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "prepare protected historical replay",
+                    cause: e.to_string(),
+                })
+        }
+
+        async fn finish_release_replay(&self, request_id: &str) -> Result<(), EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.finish_release_replay(request_id)
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "finish protected historical replay",
+                    cause: e.to_string(),
+                })
+        }
+
         async fn prepare_release_exports(
             &self,
             cutoffs: &std::collections::BTreeMap<String, String>,
@@ -422,18 +492,23 @@ mod imp {
             kind: &str,
             after: i64,
             cutoff: &str,
+            end: Option<&str>,
             limit: u32,
         ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
+            let mut query = vec![
+                ("after", after.to_string()),
+                ("cutoff", cutoff.to_string()),
+                ("limit", limit.to_string()),
+            ];
+            if let Some(end) = end {
+                query.push(("end", end.to_string()));
+            }
             let response = self
                 .auth(
                     self.http
                         .get(format!("{}/privacy/ready/{kind}", self.api_url_base)),
                 )
-                .query(&[
-                    ("after", after.to_string()),
-                    ("cutoff", cutoff.to_string()),
-                    ("limit", limit.to_string()),
-                ])
+                .query(&query)
                 .send()
                 .await
                 .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
@@ -2581,6 +2656,101 @@ mod imp {
             assert!(screenpipe_db::storage::is_revision_change_message(
                 &error.to_string()
             ));
+        }
+
+        #[tokio::test]
+        async fn protected_export_filter_never_refreshes_from_raw_sources() {
+            use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
+            use crate::enterprise::sync::{ExportFilter, ExportRows};
+            use std::sync::Arc;
+            struct Protected;
+            #[async_trait::async_trait]
+            impl LocalApiClient for Protected {
+                async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                    Ok(true)
+                }
+                async fn fetch_frames_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    panic!("a processed export must never refresh from raw capture APIs")
+                }
+                async fn fetch_audio_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                    Ok(vec![])
+                }
+            }
+            for hybrid in [false, true] {
+                let root = tempfile::tempdir().unwrap();
+                let db = Arc::new(if hybrid {
+                    let mut options = screenpipe_db::storage::MigrationOptions::default();
+                    options.budget.disk_reserve_bytes = 0;
+                    screenpipe_db::DatabaseManager::new_hybrid(
+                        root.path(),
+                        Default::default(),
+                        options,
+                    )
+                    .await
+                    .unwrap()
+                } else {
+                    screenpipe_db::DatabaseManager::new(
+                        root.path().join("db.sqlite").to_str().unwrap(),
+                        Default::default(),
+                    )
+                    .await
+                    .unwrap()
+                });
+                db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                    identity: "v1".into(),
+                    text: true,
+                    images: false,
+                })
+                .await
+                .unwrap();
+                db.execute_raw_sql_write(
+                    "INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','safe')",
+                )
+                .await
+                .unwrap();
+                let job = db.release_pending("frames", 1).await.unwrap().remove(0);
+                assert!(db.publish_release(&job, &job.values).await.unwrap());
+                let export = StorageExport::begin_storage(db.clone()).await.unwrap();
+                let mut frames = vec![FrameRow {
+                    frame_id: 1,
+                    timestamp: "2026-10-16".into(),
+                    text: Some("safe".into()),
+                    app_name: None,
+                    window_name: None,
+                    browser_url: None,
+                    accessibility_tree: None,
+                }];
+                let mut rows = ExportRows {
+                    frames: &mut frames,
+                    audio: &mut vec![],
+                    ui: &mut vec![],
+                    snapshots: &mut vec![],
+                    memories: &mut vec![],
+                    parsed: &mut vec![],
+                    activities: &mut vec![],
+                    starred: &mut vec![],
+                    feedback: &mut vec![],
+                };
+                export.filter(&mut rows, &Protected).await.unwrap();
+                assert_eq!(rows.frames[0].text.as_deref(), Some("safe"));
+                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-16','new capture')").await.unwrap();
+                export.filter(&mut rows, &Protected).await.unwrap();
+                db.execute_raw_sql_write("UPDATE frames SET full_text='PRIVATE edit' WHERE id=1")
+                    .await
+                    .unwrap();
+                assert!(export.filter(&mut rows, &Protected).await.is_err());
+                db.close().await;
+            }
         }
 
         #[tokio::test]

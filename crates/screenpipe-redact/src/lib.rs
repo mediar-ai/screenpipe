@@ -154,6 +154,24 @@ pub struct RedactionOutput {
     pub spans: Vec<RedactedSpan>,
 }
 
+/// One resumable required detection operation. A step is a backend-native unit
+/// (one overlapping model context for local ONNX), never a truncation boundary.
+#[async_trait]
+pub trait RequiredRedaction: Send {
+    async fn step(&mut self) -> Result<Option<RedactionOutput>, RedactError>;
+}
+
+struct RequiredOnce<R: Redactor + ?Sized> {
+    redactor: std::sync::Arc<R>,
+    text: String,
+}
+#[async_trait]
+impl<R: Redactor + ?Sized> RequiredRedaction for RequiredOnce<R> {
+    async fn step(&mut self) -> Result<Option<RedactionOutput>, RedactError> {
+        self.redactor.redact_required(&self.text).await.map(Some)
+    }
+}
+
 /// Anything that takes text and returns redacted text.
 ///
 /// Implementors **must** be safe to call concurrently and **must not**
@@ -163,6 +181,16 @@ pub struct RedactionOutput {
 /// [`redact`](Redactor::redact) from many tasks concurrently.
 #[async_trait]
 pub trait Redactor: Send + Sync {
+    fn required_session(self: std::sync::Arc<Self>, text: String) -> Box<dyn RequiredRedaction>
+    where
+        Self: 'static,
+    {
+        Box::new(RequiredOnce {
+            redactor: self,
+            text,
+        })
+    }
+
     /// A short identifier — historically written into the database
     /// `redaction_version` column. The column is gone (the 20260507
     /// drop-duplicates migration removed re-redaction tracking — the

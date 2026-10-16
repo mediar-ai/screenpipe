@@ -128,7 +128,7 @@ pub fn text_release_kinds() -> Vec<&'static str> {
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS _privacy_policy(id INTEGER PRIMARY KEY CHECK(id=1),identity TEXT NOT NULL,text_required INTEGER NOT NULL,image_required INTEGER NOT NULL,epoch INTEGER NOT NULL DEFAULT 0,revocation INTEGER NOT NULL DEFAULT 0);
-INSERT OR IGNORE INTO _privacy_policy VALUES(1,'',0,0,0,0);
+INSERT OR IGNORE INTO _privacy_policy(id,identity,text_required,image_required,epoch,revocation) VALUES(1,'',0,0,0,0);
 CREATE TABLE IF NOT EXISTS _privacy_release(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,policy TEXT,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER,PRIMARY KEY(kind,id));
 CREATE TABLE IF NOT EXISTS _privacy_ready(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,policy TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS _privacy_certified ON _privacy_release(kind,policy,id);
@@ -167,6 +167,25 @@ impl DatabaseManager {
         }
         let mut tx = self.begin_immediate_with_retry().await?;
         sqlx::raw_sql(SCHEMA).execute(&mut **tx.conn()).await?;
+        // The full model identity is stored once. Receipt keys are local policy
+        // generations, so long remote/model identities cannot multiply across
+        // every captured row and index. Upgrade existing draft receipts in place.
+        let compact: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pragma_table_info('_privacy_policy') WHERE name='receipt_key')")
+            .fetch_one(&mut **tx.conn()).await?;
+        if !compact {
+            sqlx::query(
+                "ALTER TABLE _privacy_policy ADD COLUMN receipt_key INTEGER NOT NULL DEFAULT 1",
+            )
+            .execute(&mut **tx.conn())
+            .await?;
+            sqlx::query("UPDATE _privacy_release SET policy=CASE WHEN policy=(SELECT identity FROM _privacy_policy WHERE id=1) THEN '1' ELSE NULL END WHERE policy IS NOT NULL")
+                .execute(&mut **tx.conn()).await?;
+            sqlx::query("DELETE FROM _privacy_ready WHERE policy!=(SELECT identity FROM _privacy_policy WHERE id=1)")
+                .execute(&mut **tx.conn()).await?;
+            sqlx::query("UPDATE _privacy_ready SET policy='1'")
+                .execute(&mut **tx.conn())
+                .await?;
+        }
         super::privacy_exports::install(&mut **tx.conn()).await?;
         sqlx::query("DELETE FROM _privacy_export_scan WHERE EXISTS(SELECT 1 FROM _privacy_policy WHERE identity!=? OR text_required!=? OR image_required!=?)")
             .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
@@ -174,7 +193,7 @@ impl DatabaseManager {
             .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         sqlx::query("DELETE FROM _privacy_discovery WHERE EXISTS(SELECT 1 FROM _privacy_policy WHERE identity!=? OR text_required!=? OR image_required!=?)")
             .bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
-        sqlx::query("UPDATE _privacy_policy SET identity=?,text_required=?,image_required=?,epoch=epoch+1,revocation=revocation+1 WHERE identity!=? OR text_required!=? OR image_required!=?")
+        sqlx::query("UPDATE _privacy_policy SET identity=?,text_required=?,image_required=?,receipt_key=receipt_key+1,epoch=epoch+1,revocation=revocation+1 WHERE identity!=? OR text_required!=? OR image_required!=?")
             .bind(&policy.identity).bind(policy.text).bind(policy.images).bind(&policy.identity).bind(policy.text).bind(policy.images).execute(&mut **tx.conn()).await?;
         let mut schema_changed = false;
         for surface in SURFACES {
@@ -212,8 +231,12 @@ impl DatabaseManager {
             if surface.kind == "exports" {
                 watched.extend(["source_version", "template_json", "timestamp"]);
             }
-            if surface.kind == "image" {
+            // Changes to exported timing revoke an assembled source version too.
+            if matches!(surface.kind, "frames" | "image" | "audio" | "input") {
                 watched.push("timestamp");
+            }
+            if surface.kind == "memory" {
+                watched.push("created_at");
             }
             if physical == "_bulk_element_rows" {
                 watched.push("_archive_deleted");
@@ -558,7 +581,7 @@ impl DatabaseManager {
         .fetch_all(&mut **tx.conn())
         .await?;
         for id in &ids {
-            sqlx::query("INSERT INTO _privacy_release(kind,id) VALUES(?,CAST(? AS TEXT)) ON CONFLICT(kind,id) DO UPDATE SET policy=NULL,attempts=0,retry_at=NULL WHERE policy IS NOT NULL AND policy!=?")
+            sqlx::query("INSERT INTO _privacy_release(kind,id) VALUES(?,CAST(? AS TEXT)) ON CONFLICT(kind,id) DO UPDATE SET policy=NULL,attempts=0,retry_at=NULL WHERE policy IS NOT NULL AND policy!=(SELECT receipt_key FROM _privacy_policy WHERE identity=?)")
                 .bind(surface.kind).bind(id).bind(policy).execute(&mut **tx.conn()).await?;
             // Also enroll pending receipts written by earlier draft versions.
             sqlx::query("INSERT OR IGNORE INTO _privacy_work(kind,id,available_at) SELECT kind,id,COALESCE(retry_at,unixepoch()) FROM _privacy_release WHERE kind=? AND id=CAST(? AS TEXT) AND policy IS NULL")
@@ -660,13 +683,32 @@ impl DatabaseManager {
             .execute(&mut **tx.conn())
             .await?;
         }
+        if job.kind == "exports" {
+            let (stream, template): (String, String) =
+                sqlx::query_as("SELECT stream,template_json FROM _privacy_exports WHERE id=?")
+                    .bind(&job.id)
+                    .fetch_one(&mut **tx.conn())
+                    .await?;
+            let row = super::privacy_exports::restore_payload(
+                &template,
+                values["text_json"]
+                    .as_deref()
+                    .ok_or_else(|| err("missing derived text"))?,
+            )?;
+            let row = super::privacy_exports::local_sql_payload(&stream, row);
+            sqlx::query("UPDATE _privacy_exports SET released_json=? WHERE id=?")
+                .bind(row.to_string())
+                .bind(&job.id)
+                .execute(&mut **tx.conn())
+                .await?;
+        }
         certify(&mut **tx.conn(), job).await?;
         tx.commit().await?;
         Ok(true)
     }
 
     pub async fn release_ready(&self, kind: &str, id: &str) -> Result<bool, sqlx::Error> {
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_release r JOIN _privacy_policy p ON p.identity=r.policy WHERE r.kind=? AND r.id=?)")
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_release r JOIN _privacy_policy p ON CAST(p.receipt_key AS TEXT)=r.policy WHERE r.kind=? AND r.id=?)")
             .bind(kind).bind(id).fetch_one(&self.pool).await
     }
 
@@ -675,7 +717,7 @@ impl DatabaseManager {
         after: i64,
         limit: u32,
     ) -> Result<Vec<ReadyChange>, sqlx::Error> {
-        let rows=sqlx::query("SELECT c.sequence,c.kind,c.id,c.revision FROM _privacy_ready c JOIN _privacy_release r ON r.kind=c.kind AND r.id=c.id AND r.revision=c.revision AND r.policy=c.policy JOIN _privacy_policy p ON p.identity=c.policy WHERE c.sequence>? ORDER BY c.sequence LIMIT ?")
+        let rows=sqlx::query("SELECT c.sequence,c.kind,c.id,c.revision FROM _privacy_ready c JOIN _privacy_release r ON r.kind=c.kind AND r.id=c.id AND r.revision=c.revision AND r.policy=c.policy JOIN _privacy_policy p ON CAST(p.receipt_key AS TEXT)=c.policy WHERE c.sequence>? ORDER BY c.sequence LIMIT ?")
             .bind(after).bind(limit).fetch_all(&self.pool).await?;
         rows.iter()
             .map(|r| {
@@ -728,7 +770,7 @@ impl DatabaseManager {
                 .fetch_all(&self.pool)
                 .await?;
             let preserve_structure = matches!(surface.kind, "activity_tasks" | "activity_actions");
-            let ready = format!("gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='{}' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT))", surface.kind);
+            let ready = format!("gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='{}' AND r.policy=CAST(gate.receipt_key AS TEXT) AND r.id=CAST(s.id AS TEXT))", surface.kind);
             let projection=columns.iter().map(|column| {
                 if preserve_structure && surface.columns.contains(&column.as_str()) {
                     let placeholder = match column.as_str() {
@@ -739,7 +781,7 @@ impl DatabaseManager {
                     return format!("CASE WHEN {ready} THEN s.\"{column}\" ELSE {placeholder} END AS \"{column}\"");
                 }
                 if surface.table=="frames" && matches!(column.as_str(),"name"|"snapshot_path"|"video_chunk_id") {
-                    format!("CASE WHEN gate.image_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='image' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)) THEN s.\"{column}\" END AS \"{column}\"")
+                    format!("CASE WHEN gate.image_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='image' AND r.policy=CAST(gate.receipt_key AS TEXT) AND r.id=CAST(s.id AS TEXT)) THEN s.\"{column}\" END AS \"{column}\"")
                 } else {format!("s.\"{column}\"")}
             }).collect::<Vec<_>>().join(",");
             if preserve_structure {
@@ -749,26 +791,21 @@ impl DatabaseManager {
             // Check the singleton policy and indexed existence of any certified
             // row before traversing capture history. An entirely pending backlog
             // must return empty without one receipt lookup per captured row.
-            views.push(format!("DROP VIEW IF EXISTS temp.{t}; CREATE TEMP VIEW {t} AS SELECT {projection} FROM _privacy_policy gate CROSS JOIN main.{source} s WHERE gate.id=1 AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind='{kind}' AND r.policy=gate.identity)) AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='{kind}' AND r.policy=gate.identity AND r.id=CAST(s.id AS TEXT)));",t=surface.table,kind=surface.kind));
+            views.push(format!("DROP VIEW IF EXISTS temp.{t}; CREATE TEMP VIEW {t} AS SELECT {projection} FROM _privacy_policy gate CROSS JOIN main.{source} s WHERE gate.id=1 AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind='{kind}' AND r.policy=CAST(gate.receipt_key AS TEXT))) AND (gate.text_required=0 OR EXISTS(SELECT 1 FROM _privacy_release r INDEXED BY _privacy_certified WHERE r.kind='{kind}' AND r.policy=CAST(gate.receipt_key AS TEXT) AND r.id=CAST(s.id AS TEXT)));",t=surface.table,kind=surface.kind));
         }
-        // These derivatives do not yet carry source-bound receipts. Empty
-        // views prevent alternate joins from bypassing captured-text gates.
-        for table in [
-            "meetings",
-            "speakers",
-            "semantic_actors",
-            "outputs",
-            "feedback",
-            "pipe_executions",
-        ] {
-            let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name=?)")
+        for surface in super::privacy_exports::LOCAL_SURFACES {
+            let table = surface.table;
+            let columns: Vec<(String, bool)> =
+                sqlx::query_as("SELECT name,\"notnull\" FROM pragma_table_info(?)")
                     .bind(table)
-                    .fetch_one(&self.pool)
+                    .fetch_all(&self.pool)
                     .await?;
-            if exists {
-                views.push(format!("DROP VIEW IF EXISTS temp.{table}; CREATE TEMP VIEW {table} AS SELECT * FROM main.{table} WHERE (SELECT text_required=0 FROM _privacy_policy WHERE id=1);"));
-            }
+            let projection = columns.iter().map(|(column, required)| {
+                if !surface.columns.contains(&column.as_str()) { return format!("s.\"{column}\""); }
+                let pending = if !required { "NULL" } else if surface.json.contains(&column.as_str()) { "'{}'" } else { "'Privacy processing'" };
+                format!("CASE WHEN gate.text_required=0 THEN s.\"{column}\" WHEN r.policy=CAST(gate.receipt_key AS TEXT) THEN json_extract(e.released_json,'$.{column}') ELSE {pending} END AS \"{column}\"")
+            }).collect::<Vec<_>>().join(",");
+            views.push(format!("DROP VIEW IF EXISTS temp.{table}; CREATE TEMP VIEW {table} AS SELECT {projection} FROM _privacy_policy gate CROSS JOIN main.{table} s LEFT JOIN _privacy_exports e ON e.stream='local_{table}' AND e.source_id=CAST(s.id AS TEXT) LEFT JOIN _privacy_release r ON r.kind='exports' AND r.id=CAST(e.id AS TEXT) WHERE gate.id=1;"));
         }
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(self.pool.options().get_max_connections())
@@ -853,7 +890,7 @@ impl DatabaseManager {
             ("audio", "audio_transcriptions", "timestamp"),
         ] {
             let pending: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-                "SELECT EXISTS(SELECT 1 FROM {table} s CROSS JOIN _privacy_policy p WHERE p.id=1 AND s.{timestamp}>=? AND s.{timestamp}<? AND julianday(s.{timestamp}) BETWEEN julianday(?) AND julianday(?) AND NOT EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=? AND r.id=CAST(s.id AS TEXT) AND r.policy=p.identity))")))
+                "SELECT EXISTS(SELECT 1 FROM {table} s CROSS JOIN _privacy_policy p WHERE p.id=1 AND s.{timestamp}>=? AND s.{timestamp}<? AND julianday(s.{timestamp}) BETWEEN julianday(?) AND julianday(?) AND NOT EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=? AND r.id=CAST(s.id AS TEXT) AND r.policy=CAST(p.receipt_key AS TEXT)))")))
                 .bind(start.format("%Y-%m-%d").to_string()).bind((end + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()).bind(start.to_rfc3339()).bind(end.to_rfc3339()).bind(kind).fetch_one(&owner.pool).await?;
             if pending {
                 return Ok(false);
@@ -878,7 +915,7 @@ pub(crate) async fn certify(
     conn: &mut sqlx::SqliteConnection,
     job: &ReleaseJob,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO _privacy_release(kind,id,revision,policy) VALUES(?,?,0,?) ON CONFLICT(kind,id) DO UPDATE SET policy=excluded.policy,attempts=0,retry_at=NULL")
+    sqlx::query("INSERT INTO _privacy_release(kind,id,revision,policy) VALUES(?,?,0,(SELECT receipt_key FROM _privacy_policy WHERE identity=?)) ON CONFLICT(kind,id) DO UPDATE SET policy=excluded.policy,attempts=0,retry_at=NULL")
         .bind(&job.kind).bind(&job.id).bind(&job.policy).execute(&mut *conn).await?;
     sqlx::query("UPDATE _privacy_policy SET epoch=epoch+1 WHERE id=1")
         .execute(&mut *conn)
@@ -948,27 +985,44 @@ impl DatabaseManager {
         cutoff: &str,
         limit: u32,
     ) -> Result<ReleasePage, sqlx::Error> {
+        self.release_export_range_page(kind, after, cutoff, None, limit)
+            .await
+    }
+
+    pub async fn release_export_range_page(
+        &self,
+        kind: &str,
+        after: i64,
+        cutoff: &str,
+        end: Option<&str>,
+        limit: u32,
+    ) -> Result<ReleasePage, sqlx::Error> {
         if !self.protected_reads_enabled() {
             return Err(err("protected read adapter required"));
         }
         if matches!(kind, "activities" | "parsed" | "feedback") {
-            return self.derived_release_page(kind, after, cutoff, limit).await;
+            return self
+                .derived_release_page(kind, after, cutoff, end, limit)
+                .await;
         }
         let (table,projection,time)=match kind {
-            "frames"=>("frames","s.id AS frame_id,s.timestamp,s.app_name,s.window_name,s.browser_url,COALESCE(s.full_text,s.accessibility_text,'') AS text","timestamp"),
+            "frames"=>("frames","s.id AS frame_id,s.timestamp,s.app_name,s.window_name,s.browser_url,s.accessibility_tree_json AS accessibility_tree,COALESCE(s.full_text,s.accessibility_text,'') AS text","timestamp"),
             "audio"=>("audio_transcriptions","s.id AS transcription_id,s.timestamp,s.transcription,NULL AS speaker,s.device","timestamp"),
             "input"=>("ui_events","s.id AS event_id,s.timestamp,s.event_type,s.app_name,s.window_title,s.browser_url,s.element_role,s.element_name,s.text_content","timestamp"),
             "memory"=>("memories","s.id AS memory_id,s.created_at,s.updated_at,s.content,s.source,s.tags,s.importance,s.frame_id","created_at"),
             _=>return Err(err("privacy export surface is not supported")),
         };
-        let sequence:i64=sqlx::query_scalar("SELECT COALESCE(MAX(sequence),?) FROM (SELECT sequence FROM _privacy_ready WHERE kind=? AND sequence>? ORDER BY sequence LIMIT ?)")
-            .bind(after).bind(kind).bind(after).bind(limit.min(500)).fetch_one(&self.pool).await?;
-        let sql=format!("SELECT {projection} FROM _privacy_ready c JOIN _privacy_release r ON r.kind=c.kind AND r.id=c.id AND r.revision=c.revision AND r.policy=c.policy JOIN _privacy_policy p ON p.identity=c.policy JOIN {table} s ON s.id=c.id WHERE c.kind=? AND c.sequence>? AND c.sequence<=? AND julianday(s.{time})>=julianday(?) ORDER BY c.sequence");
+        let (sequence, more) = self
+            .ready_range_window(kind, table, time, None, after, cutoff, end, limit)
+            .await?;
+        let sql=format!("SELECT {projection} FROM _privacy_ready c JOIN _privacy_release r ON r.kind=c.kind AND r.id=c.id AND r.revision=c.revision AND r.policy=c.policy JOIN _privacy_policy p ON CAST(p.receipt_key AS TEXT)=c.policy JOIN {table} s ON s.id=c.id WHERE c.kind=? AND c.sequence>? AND c.sequence<=? AND julianday(s.{time})>=julianday(?) AND (? IS NULL OR julianday(s.{time})<julianday(?)) ORDER BY c.sequence");
         let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
             .bind(kind)
             .bind(after)
             .bind(sequence)
             .bind(cutoff)
+            .bind(end)
+            .bind(end)
             .fetch_all(&self.pool)
             .await?;
         let mut rows = Self::raw_sql_rows(&rows);
@@ -981,13 +1035,21 @@ impl DatabaseManager {
                     }
                 }
             }
+            if kind == "frames" {
+                for item in items.iter_mut() {
+                    if let Some(tree) = item["accessibility_tree"].as_str() {
+                        item["accessibility_tree"] = serde_json::from_str(tree)
+                            .map_err(|_| err("invalid accessibility tree"))?;
+                    }
+                }
+            }
             if kind == "frames" && self.storage.is_some() {
                 let ids = items
                     .iter()
                     .filter_map(|i| i["frame_id"].as_i64())
                     .collect::<Vec<_>>();
                 let payloads = self
-                    .frame_payloads(&ids, crate::storage::Projection::Search)
+                    .frame_payloads(&ids, crate::storage::Projection::All)
                     .await?;
                 for item in items.iter_mut() {
                     let id = item["frame_id"]
@@ -996,6 +1058,13 @@ impl DatabaseManager {
                     let payload = payloads
                         .get(&id)
                         .ok_or_else(|| err("frame changed during export"))?;
+                    item["accessibility_tree"] = payload
+                        .accessibility_tree_json
+                        .as_deref()
+                        .map(serde_json::from_str::<serde_json::Value>)
+                        .transpose()
+                        .map_err(|_| err("invalid accessibility tree"))?
+                        .unwrap_or(serde_json::Value::Null);
                     item["text"] = serde_json::json!(payload
                         .full_text
                         .as_ref()
@@ -1003,13 +1072,6 @@ impl DatabaseManager {
                 }
             }
         }
-        let more: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM _privacy_ready WHERE kind=? AND sequence>?)",
-        )
-        .bind(kind)
-        .bind(sequence)
-        .fetch_one(&self.pool)
-        .await?;
         Ok(ReleasePage {
             sequence,
             rows,
@@ -1060,6 +1122,19 @@ impl DatabaseManager {
                     pending: pending.min(1000) as u32,
                     pending_capped: pending > 1000,
                     deferred: deferred.min(1000) as u32,
+                });
+            }
+        }
+        if policy.text {
+            for stream in super::privacy_exports::local_release_streams() {
+                let complete: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_export_scan WHERE stream=? AND complete=1)").bind(&stream).fetch_one(&self.pool).await?;
+                let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM (SELECT 1 FROM _privacy_export_sources WHERE stream=? AND pending=1 LIMIT 1001)").bind(&stream).fetch_one(&self.pool).await?;
+                surfaces.push(ReleaseSurfaceStatus {
+                    kind: stream,
+                    discovering: !complete,
+                    pending: pending.min(1000) as u32,
+                    pending_capped: pending > 1000,
+                    deferred: 0,
                 });
             }
         }

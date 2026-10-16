@@ -531,7 +531,7 @@ async fn privacy_queue_benchmark() {
         let mut indexed = Vec::new();
         for _ in 0..30 {
             let start = Instant::now();
-            let rows: Vec<i64>=sqlx::query_scalar("SELECT s.id FROM frames s LEFT JOIN _privacy_release r ON r.kind='frames' AND r.id=CAST(s.id AS TEXT) WHERE r.policy IS NULL OR r.policy!='bench' ORDER BY s.id DESC LIMIT 16").fetch_all(&db.pool).await.unwrap();
+            let rows: Vec<i64>=sqlx::query_scalar("SELECT s.id FROM frames s LEFT JOIN _privacy_release r ON r.kind='frames' AND r.id=CAST(s.id AS TEXT) WHERE r.policy IS NULL OR r.policy!=(SELECT receipt_key FROM _privacy_policy WHERE identity='bench') ORDER BY s.id DESC LIMIT 16").fetch_all(&db.pool).await.unwrap();
             assert!(rows.is_empty());
             legacy.push(start.elapsed().as_secs_f64() * 1000.);
             let start = Instant::now();
@@ -1753,4 +1753,553 @@ async fn derived_capture_journal_benchmark() {
             }
         }
     }
+}
+
+#[tokio::test]
+async fn compact_receipts_preserve_identity_timestamp_edits_and_policy_cycles() {
+    let (_root, db) = database().await;
+    let identity = "remote-policy".repeat(500);
+    let policy = ReleasePolicy {
+        identity: identity.clone(),
+        text: true,
+        images: false,
+    };
+    db.configure_release(&policy).await.unwrap();
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,accessibility_tree_json) VALUES(1,'2026-10-14T10:00:00Z','safe','[{\"role\":\"button\",\"text\":\"safe\"}]')").await.unwrap();
+    let job = db.release_pending("frames", 1).await.unwrap().remove(0);
+    assert_eq!(job.policy, identity);
+    assert!(db.publish_release(&job, &job.values).await.unwrap());
+    let key: String =
+        sqlx::query_scalar("SELECT policy FROM _privacy_release WHERE kind='frames' AND id='1'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert!(key.parse::<i64>().is_ok());
+    assert_eq!(db.release_policy().await.unwrap(), policy);
+    let read = db.protected_reads().await.unwrap();
+    let page = read
+        .release_export_page("frames", 0, "2026-01-01T00:00:00Z", 50)
+        .await
+        .unwrap();
+    assert_eq!(page.rows[0]["accessibility_tree"][0]["role"], "button");
+    db.execute_raw_sql_write("UPDATE frames SET timestamp='2026-10-15T10:00:00Z' WHERE id=1")
+        .await
+        .unwrap();
+    assert!(!db.release_ready("frames", "1").await.unwrap());
+    let job = db.release_pending("frames", 1).await.unwrap().remove(0);
+    assert!(db.publish_release(&job, &job.values).await.unwrap());
+    let timestamp: String = sqlx::query_scalar("SELECT timestamp FROM frames WHERE id=1")
+        .fetch_one(&read.pool)
+        .await
+        .unwrap();
+    assert_eq!(timestamp, "2026-10-15T10:00:00Z");
+    db.configure_release(&ReleasePolicy {
+        identity: "another".into(),
+        ..policy.clone()
+    })
+    .await
+    .unwrap();
+    db.configure_release(&policy).await.unwrap();
+    assert!(
+        !db.release_ready("frames", "1").await.unwrap(),
+        "returning to an identity must not resurrect a prior generation"
+    );
+    read.close().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn model_windows_yield_without_releasing_partial_text_and_restart_recovers() {
+    struct Windowed;
+    struct Session {
+        remaining: u32,
+        text: String,
+    }
+    #[async_trait::async_trait]
+    impl screenpipe_redact::RequiredRedaction for Session {
+        async fn step(
+            &mut self,
+        ) -> Result<Option<screenpipe_redact::RedactionOutput>, screenpipe_redact::RedactError>
+        {
+            self.remaining -= 1;
+            Ok(
+                (self.remaining == 0).then(|| screenpipe_redact::RedactionOutput {
+                    input: self.text.clone(),
+                    redacted: self.text.replace("PRIVATE", "safe"),
+                    spans: vec![],
+                }),
+            )
+        }
+    }
+    #[async_trait::async_trait]
+    impl Redactor for Windowed {
+        fn name(&self) -> &str {
+            "windowed"
+        }
+        fn version(&self) -> u32 {
+            1
+        }
+        fn provides_model_detection(&self) -> bool {
+            true
+        }
+        fn required_session(
+            self: Arc<Self>,
+            text: String,
+        ) -> Box<dyn screenpipe_redact::RequiredRedaction> {
+            Box::new(Session { remaining: 3, text })
+        }
+        async fn redact_batch(
+            &self,
+            _: &[String],
+        ) -> Result<Vec<screenpipe_redact::RedactionOutput>, screenpipe_redact::RedactError>
+        {
+            panic!("worker must use resumable detector")
+        }
+    }
+    let (root, db) = database().await;
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-14T10:00:00Z','PRIVATE first and PRIVATE tail')").await.unwrap();
+    let make_worker = |db: Arc<DatabaseManager>| {
+        screenpipe_redact::worker::Worker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            Arc::new(Pipeline::regex_then_ai(
+                Arc::new(Windowed),
+                Default::default(),
+            )),
+            screenpipe_redact::worker::WorkerConfig {
+                target_batch_duration: std::time::Duration::ZERO,
+                ..Default::default()
+            },
+        )
+        .with_frame_storage(db)
+    };
+    let worker = make_worker(db.clone());
+    assert_eq!(worker.process_release_batch(1).await.unwrap(), 0);
+    assert!(!db.release_ready("frames", "1").await.unwrap());
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-14T10:01:00Z','PRIVATE during backlog')").await.unwrap();
+    drop(worker);
+    db.close().await;
+    let db = Arc::new(
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap(),
+    );
+    db.configure_release(&ReleasePolicy {
+        identity: "test:model-v1".into(),
+        text: true,
+        images: true,
+    })
+    .await
+    .unwrap();
+    let worker = make_worker(db.clone());
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while !db.release_ready("frames", "1").await.unwrap()
+            || !db.release_ready("frames", "2").await.unwrap()
+        {
+            worker.process_release_batch(1).await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    let texts: Vec<String> = sqlx::query_scalar("SELECT full_text FROM frames ORDER BY id")
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(texts, ["safe first and safe tail", "safe during backlog"]);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn legacy_receipt_identity_migration_preserves_current_completions() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("db.sqlite");
+    let db = Arc::new(
+        DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap(),
+    );
+    // Reproduce the draft's on-disk schema, including a current and an old receipt.
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16T00:00:00Z','processed'),(2,'2026-10-16T00:01:00Z','pending new policy');
+CREATE TABLE _privacy_policy(id INTEGER PRIMARY KEY CHECK(id=1),identity TEXT NOT NULL,text_required INTEGER NOT NULL,image_required INTEGER NOT NULL,epoch INTEGER NOT NULL DEFAULT 0,revocation INTEGER NOT NULL DEFAULT 0);
+INSERT INTO _privacy_policy VALUES(1,'current',1,0,5,3);
+CREATE TABLE _privacy_release(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,policy TEXT,attempts INTEGER NOT NULL DEFAULT 0,retry_at INTEGER,PRIMARY KEY(kind,id));
+INSERT INTO _privacy_release(kind,id,revision,policy) VALUES('frames','1',4,'current'),('frames','2',2,'superseded');
+CREATE TABLE _privacy_ready(sequence INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,policy TEXT NOT NULL);
+INSERT INTO _privacy_ready(kind,id,revision,policy) VALUES('frames','1',4,'current'),('frames','2',2,'superseded');").await.unwrap();
+    let policy = ReleasePolicy {
+        identity: "current".into(),
+        text: true,
+        images: false,
+    };
+    db.configure_release(&policy).await.unwrap();
+    assert!(db.release_ready("frames", "1").await.unwrap());
+    assert!(!db.release_ready("frames", "2").await.unwrap());
+    let changes = db.ready_changes(0, 10).await.unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].id, "1");
+    assert_eq!(changes[0].revision, 4);
+    let pending = db.release_pending("frames", 10).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, "2");
+    db.close().await;
+    let db = Arc::new(
+        DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap(),
+    );
+    db.configure_release(&policy).await.unwrap();
+    assert!(db.release_ready("frames", "1").await.unwrap());
+    assert_eq!(
+        db.ready_changes(0, 10).await.unwrap()[0].sequence,
+        changes[0].sequence
+    );
+    db.close().await;
+}
+
+#[tokio::test]
+async fn local_derived_views_preserve_sources_structure_and_recover_after_restart() {
+    for hybrid in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let open = || async {
+            Arc::new(if hybrid {
+                DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+                    .await
+                    .unwrap()
+            } else {
+                DatabaseManager::new(
+                    root.path().join("local.sqlite").to_str().unwrap(),
+                    Default::default(),
+                )
+                .await
+                .unwrap()
+            })
+        };
+        let db = open().await;
+        let policy = ReleasePolicy {
+            identity: "local-v1".into(),
+            text: true,
+            images: false,
+        };
+        db.configure_release(&policy).await.unwrap();
+        db.execute_raw_sql_write(r#"
+INSERT INTO meetings(id,meeting_start,meeting_app,title,attendees,note) VALUES(1,'2020-01-01T00:00:00Z','SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET');
+INSERT INTO speakers(id,name,metadata) VALUES(1,'SYNTHETIC_SECRET','{"nested":["SYNTHETIC_SECRET",7,true]}');
+INSERT INTO semantic_actors(id,name) VALUES(1,'SYNTHETIC_SECRET');
+INSERT INTO semantic_actor_aliases(id,actor_id,source_key,source_label,normalized_label,observed_label) VALUES(1,1,'SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET');
+INSERT INTO outputs(id,source,title,original_path,output_path,preview,metadata) VALUES(1,'SYNTHETIC_SECRET','SYNTHETIC_SECRET','/SYNTHETIC_SECRET/original','/SYNTHETIC_SECRET/output','SYNTHETIC_SECRET','{"nested":["SYNTHETIC_SECRET",7,true]}');
+INSERT INTO feedback(id,target_kind,target_id,actor_id,rating,comment,snapshot,context,created_at,updated_at) VALUES('one','activity','stable-id','actor-id','up','SYNTHETIC_SECRET','{"nested":["SYNTHETIC_SECRET",7,true]}','{"nested":["SYNTHETIC_SECRET",7,true]}','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z');
+INSERT INTO pipe_executions(id,pipe_name,stdout,stderr,error_message,session_path,trigger_event,trigger_key) VALUES(1,'SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET','/SYNTHETIC_SECRET/session','{"nested":["SYNTHETIC_SECRET",7,true]}','SYNTHETIC_SECRET');
+"#).await.unwrap();
+        let tables = [
+            "meetings",
+            "speakers",
+            "semantic_actors",
+            "semantic_actor_aliases",
+            "outputs",
+            "feedback",
+            "pipe_executions",
+        ];
+        let protected = db.protected_reads().await.unwrap();
+        for table in tables {
+            let rows = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT * FROM {table}")))
+                .fetch_all(&protected.pool)
+                .await
+                .unwrap();
+            assert_eq!(rows.len(), 1, "pending {table} must retain identity");
+        }
+        let title: Option<String> = sqlx::query_scalar("SELECT title FROM meetings WHERE id=1")
+            .fetch_one(&protected.pool)
+            .await
+            .unwrap();
+        assert_eq!(title, None);
+        // Leave accepted local work pending and resume through a new worker/DB.
+        db.prepare_derived_exports("local_meetings", "", 1)
+            .await
+            .unwrap();
+        protected.close().await;
+        db.close().await;
+        drop(protected);
+        drop(db);
+        let db = Arc::new(
+            DatabaseManager::new(
+                root.path()
+                    .join(if hybrid { "db.sqlite" } else { "local.sqlite" })
+                    .to_str()
+                    .unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&policy).await.unwrap();
+        let worker = screenpipe_redact::worker::Worker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            Arc::new(CountingDetector {
+                calls: Arc::new(Default::default()),
+                fail: Arc::new(Default::default()),
+                delay: Default::default(),
+            }),
+            Default::default(),
+        )
+        .with_frame_storage(db.clone());
+        tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                worker.process_release_batch(8).await.unwrap();
+                let status = db.release_queue_status().await.unwrap();
+                if status
+                    .surfaces
+                    .iter()
+                    .filter(|s| s.kind.starts_with("local_") || s.kind == "exports")
+                    .all(|s| !s.discovering && s.pending == 0)
+                {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let protected = db.protected_reads().await.unwrap();
+        for (table, column) in [
+            ("meetings", "meeting_app"),
+            ("speakers", "name"),
+            ("semantic_actors", "name"),
+            ("semantic_actor_aliases", "source_key"),
+            ("outputs", "output_path"),
+            ("feedback", "comment"),
+            ("pipe_executions", "stdout"),
+        ] {
+            let safe: String =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT {column} FROM {table}")))
+                    .fetch_one(&protected.pool)
+                    .await
+                    .unwrap();
+            assert_eq!(safe, "[PRIVATE]", "{table}");
+            let raw: String =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT {column} FROM {table}")))
+                    .fetch_one(&db.pool)
+                    .await
+                    .unwrap();
+            assert!(raw.contains("SYNTHETIC_SECRET"), "source {table} changed");
+        }
+        for (table, column) in [
+            ("speakers", "metadata"),
+            ("outputs", "metadata"),
+            ("feedback", "context"),
+            ("pipe_executions", "trigger_event"),
+        ] {
+            let json: String =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT {column} FROM {table}")))
+                    .fetch_one(&protected.pool)
+                    .await
+                    .unwrap();
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                value,
+                serde_json::json!({"nested":["[PRIVATE]",7,true]}),
+                "{table}"
+            );
+        }
+        db.execute_raw_sql_write("INSERT INTO meetings(meeting_start,meeting_end,meeting_app,title) VALUES('2020-01-01T12:00:00Z','2020-01-01T13:00:00Z','SYNTHETIC_SECRET','SYNTHETIC_SECRET')").await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                worker.process_release_batch(8).await.unwrap();
+                let title: Option<String> =
+                    sqlx::query_scalar("SELECT title FROM meetings WHERE id=2")
+                        .fetch_one(&protected.pool)
+                        .await
+                        .unwrap();
+                if title.as_deref() == Some("[PRIVATE]") {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let token = db.storage_export_token().await.unwrap();
+        db.execute_raw_sql_write(
+            "UPDATE semantic_actor_aliases SET source_key='SYNTHETIC_SECRET edited' WHERE id=1",
+        )
+        .await
+        .unwrap();
+        assert!(token.admit(&db.pool).await.is_err());
+        let pending: String =
+            sqlx::query_scalar("SELECT source_key FROM semantic_actor_aliases WHERE id=1")
+                .fetch_one(&protected.pool)
+                .await
+                .unwrap();
+        assert_eq!(pending, "Privacy processing");
+        db.configure_release(&ReleasePolicy {
+            identity: "local-v2".into(),
+            ..policy
+        })
+        .await
+        .unwrap();
+        let pending: Option<String> = sqlx::query_scalar("SELECT title FROM meetings WHERE id=1")
+            .fetch_one(&protected.pool)
+            .await
+            .unwrap();
+        assert_eq!(pending, None);
+        protected.close().await;
+        db.close().await;
+    }
+}
+
+#[tokio::test]
+async fn historical_replay_restages_acknowledged_copies_and_waits_only_for_requested_range() {
+    let (root, db) = database().await;
+    let start = "2020-01-01T00:00:00Z";
+    let end = "2020-01-02T00:00:00Z";
+    let streams = vec!["frames".into(), "feedback".into()];
+    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2020-01-01T12:00:00Z','SYNTHETIC_SECRET'),(2,'2020-01-03T12:00:00Z','outside'); INSERT INTO feedback(id,target_kind,target_id,actor_id,rating,comment,created_at,updated_at) VALUES('one','activity','stable','actor','up','SYNTHETIC_SECRET','2020-01-01T12:00:00Z','2020-01-01T12:00:00Z')").await.unwrap();
+    db.prepare_derived_exports("feedback", start, 10)
+        .await
+        .unwrap();
+    // Certify the old ordinary-upload copy, then retire it as a normal ack does.
+    for job in db.release_pending("exports", 10).await.unwrap() {
+        db.publish_release(&job, &job.values).await.unwrap();
+    }
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("feedback", 0, start, 10)
+        .await
+        .unwrap();
+    db.acknowledge_derived_exports("feedback", page.sequence)
+        .await
+        .unwrap();
+    assert!(protected
+        .release_export_page("feedback", 0, start, 10)
+        .await
+        .unwrap()
+        .rows
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(db
+        .prepare_release_replay("request-one", &streams, start, end, 1)
+        .await
+        .unwrap());
+    protected.close().await;
+    db.close().await;
+    drop(protected);
+    drop(db);
+    let db = Arc::new(
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(db
+        .prepare_release_replay("request-one", &streams, start, end, 1)
+        .await
+        .unwrap());
+    for kind in ["frames", "exports"] {
+        for job in db.release_pending(kind, 10).await.unwrap() {
+            if kind == "frames" && job.id == "2" {
+                continue;
+            }
+            let values = job
+                .values
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        v.as_ref()
+                            .map(|s| s.replace("SYNTHETIC_SECRET", "[PRIVATE]")),
+                    )
+                })
+                .collect();
+            db.publish_release(&job, &values).await.unwrap();
+        }
+    }
+    assert!(!db
+        .prepare_release_replay("request-one", &streams, start, end, 10)
+        .await
+        .unwrap());
+    assert!(
+        !db.release_ready("frames", "2").await.unwrap(),
+        "unrelated pending work must not strand replay"
+    );
+    let protected = db.protected_reads().await.unwrap();
+    let page = protected
+        .release_export_page("feedback", 0, start, 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows[0]["comment"], "[PRIVATE]");
+    let frames = protected
+        .release_export_range_page("frames", 0, start, Some(end), 10)
+        .await
+        .unwrap();
+    assert_eq!(frames.rows.as_array().unwrap().len(), 1);
+    let mut after = std::collections::BTreeMap::from([
+        ("frames".to_string(), frames.sequence),
+        ("feedback".to_string(), page.sequence),
+    ]);
+    assert!(!db
+        .release_replay_pending("request-one", &streams, start, end, Some(&after))
+        .await
+        .unwrap());
+    db.execute_raw_sql_write(
+        "INSERT INTO frames(id,timestamp,full_text) VALUES(4,'2020-01-01T14:00:00Z','late source')",
+    )
+    .await
+    .unwrap();
+    let job = db
+        .release_pending("frames", 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|j| j.id == "4")
+        .unwrap();
+    db.publish_release(&job, &job.values).await.unwrap();
+    assert!(
+        db.release_replay_pending("request-one", &streams, start, end, Some(&after))
+            .await
+            .unwrap(),
+        "a completion after page selection must keep replay pending"
+    );
+    let late = protected
+        .release_export_range_page("frames", frames.sequence, start, Some(end), 10)
+        .await
+        .unwrap();
+    assert_eq!(late.rows[0]["frame_id"], 4);
+    after.insert("frames".to_string(), late.sequence);
+    assert!(!db
+        .release_replay_pending("request-one", &streams, start, end, Some(&after))
+        .await
+        .unwrap());
+    db.acknowledge_derived_exports("feedback", page.sequence)
+        .await
+        .unwrap();
+    assert_eq!(
+        protected
+            .release_export_page("feedback", 0, start, 10)
+            .await
+            .unwrap()
+            .rows
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "normal sync must retain an active replay's copies"
+    );
+    db.finish_release_replay("request-one").await.unwrap();
+    db.acknowledge_derived_exports("feedback", page.sequence)
+        .await
+        .unwrap();
+    assert!(protected
+        .release_export_page("feedback", 0, start, 10)
+        .await
+        .unwrap()
+        .rows
+        .as_array()
+        .unwrap()
+        .is_empty());
+    protected.close().await;
+    db.close().await;
 }

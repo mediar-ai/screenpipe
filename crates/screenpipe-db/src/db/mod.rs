@@ -468,8 +468,8 @@ mod meetings;
 mod memories;
 #[cfg(test)]
 mod planner_stats_tests;
-pub mod privacy_release;
 pub mod privacy_exports;
+pub mod privacy_release;
 mod starred;
 pub use starred::StarredSession;
 mod outputs;
