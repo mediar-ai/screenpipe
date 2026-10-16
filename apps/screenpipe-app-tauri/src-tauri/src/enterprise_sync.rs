@@ -25,7 +25,7 @@ mod imp {
     use crate::recording::local_api_context_from_app;
     use ee_sync::{
         ActivityRow, AudioRow, EnterpriseSyncConfig, EnterpriseSyncError, FeedbackRow, FrameRow,
-        LocalApiClient, MemoryRow, ParsedRow, SnapshotRow, UiEventRow,
+        LocalApiClient, MemoryRow, ParsedRow, SnapshotRow, StarredRow, UiEventRow,
     };
     use screenpipe_telemetry_wire::ActivityEvidenceRow;
     use serde::Deserialize;
@@ -512,6 +512,68 @@ mod imp {
             Ok(out)
         }
 
+        async fn fetch_starred_since(
+            &self,
+            after: i64,
+            since: &str,
+            limit: u32,
+        ) -> Result<Vec<StarredRow>, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let since = chrono::DateTime::parse_from_rfc3339(since)
+                .map(|t| t.with_timezone(&chrono::Utc))
+                .map_err(|e| {
+                    EnterpriseSyncError::Configuration(format!("starred interval cursor: {e}"))
+                })?;
+            let since = state
+                .history_access
+                .cutoff(chrono::Utc::now())
+                .map_or(since, |c| since.max(c));
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|server| Arc::clone(&server.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration(
+                        "starred intervals: recording database is not ready".into(),
+                    )
+                })?;
+            let rows = db
+                .starred_sessions_for_sync(
+                    after,
+                    &since.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                    limit,
+                )
+                .await
+                .map_err(|error| EnterpriseSyncError::Storage {
+                    operation: "read starred intervals",
+                    cause: error.to_string(),
+                })?;
+            Ok(rows
+                .into_iter()
+                .map(
+                    |(
+                        sequence,
+                        starred_id,
+                        start_at,
+                        end_at,
+                        hd_requested,
+                        revision,
+                        timestamp,
+                    )| StarredRow {
+                        sequence,
+                        starred_id,
+                        timestamp,
+                        start_at,
+                        end_at,
+                        hd_requested,
+                        revision,
+                    },
+                )
+                .collect())
+        }
+
         async fn fetch_activities_since(
             &self,
             since_ts: Option<&str>,
@@ -945,6 +1007,8 @@ mod imp {
         #[serde(default)]
         activities: bool,
         #[serde(default = "default_enabled_sync_stream")]
+        starred: bool,
+        #[serde(default = "default_enabled_sync_stream")]
         audio: bool,
         #[serde(default = "default_enabled_sync_stream")]
         ui_events: bool,
@@ -964,6 +1028,7 @@ mod imp {
                 frames: true,
                 parsed: false,
                 activities: false,
+                starred: true,
                 audio: true,
                 ui_events: true,
                 memories: true,
@@ -1006,6 +1071,7 @@ mod imp {
                 self.frame_images_mode(),
             );
             crate::enterprise_policy::set_activity_sync_enabled(self.activities);
+            crate::enterprise_policy::set_starred_sync_enabled(self.starred);
         }
     }
 
@@ -2626,6 +2692,7 @@ mod imp {
                     frames: true,
                     parsed: true,
                     activities: true,
+                    starred: true,
                     audio: false,
                     ui_events: true,
                     memories: false,
@@ -2886,6 +2953,7 @@ mod imp {
             .unwrap();
 
             assert_eq!(response.sync_streams, NativeSyncStreams::default());
+            assert!(response.sync_streams.starred);
             assert_eq!(response.sync_streams.frame_images_mode(), "off");
             assert_eq!(response.sync_streams.feedback_mode(), "off");
         }

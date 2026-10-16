@@ -75,6 +75,19 @@ pub struct ActivityEvidenceRow {
     pub label: String,
 }
 
+/// Current user-marked interval. Consumers reconcile by source + starred_id
+/// and retain the highest revision; retries and older uploads are harmless.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StarredRow {
+    pub sequence: i64,
+    pub starred_id: String,
+    pub timestamp: String,
+    pub start_at: String,
+    pub end_at: String,
+    pub hd_requested: bool,
+    pub revision: i64,
+}
+
 /// One AI-interpreted Activity persisted by the desktop scheduler.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ActivityRow {
@@ -201,6 +214,12 @@ pub enum TelemetryRecord {
         #[serde(flatten)]
         parsed: ParsedRow,
     },
+    Starred {
+        device_id: String,
+        device_label: String,
+        #[serde(flatten)]
+        starred: StarredRow,
+    },
     Activity {
         device_id: String,
         device_label: String,
@@ -244,6 +263,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { device_id, .. }
             | Self::Parsed { device_id, .. }
+            | Self::Starred { device_id, .. }
             | Self::Activity { device_id, .. }
             | Self::Audio { device_id, .. }
             | Self::Ui { device_id, .. }
@@ -257,6 +277,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { device_label, .. }
             | Self::Parsed { device_label, .. }
+            | Self::Starred { device_label, .. }
             | Self::Activity { device_label, .. }
             | Self::Audio { device_label, .. }
             | Self::Ui { device_label, .. }
@@ -272,6 +293,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { frame, .. } => &frame.timestamp,
             Self::Parsed { parsed, .. } => &parsed.timestamp,
+            Self::Starred { starred, .. } => &starred.timestamp,
             Self::Activity { activity, .. } => &activity.end_at,
             Self::Audio { audio, .. } => &audio.timestamp,
             Self::Ui { ui, .. } => &ui.timestamp,
@@ -286,6 +308,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { .. } => "frame",
             Self::Parsed { .. } => "parsed",
+            Self::Starred { .. } => "starred",
             Self::Activity { .. } => "activity",
             Self::Audio { .. } => "audio",
             Self::Ui { .. } => "ui",
@@ -294,6 +317,21 @@ impl TelemetryRecord {
             Self::Feedback { .. } => "feedback",
         }
     }
+}
+
+pub fn build_starred_jsonl(device_id: &str, device_label: &str, rows: &[StarredRow]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for row in rows {
+        let record = TelemetryRecord::Starred {
+            device_id: device_id.into(),
+            device_label: device_label.into(),
+            starred: row.clone(),
+        };
+        // Starred rows contain only strings and integers, so serialization is infallible.
+        serde_json::to_writer(&mut out, &record).expect("serialize starred interval");
+        out.push(b'\n');
+    }
+    out
 }
 
 /// Serialize feedback rows separately so adding the new stream does not

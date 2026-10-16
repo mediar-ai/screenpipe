@@ -719,6 +719,7 @@ mod tests {
                 frames: 1,
                 parsed: 0,
                 activities: 0,
+                starred: 0,
                 audio: 0,
                 ui: 0,
                 snapshots: 0,
