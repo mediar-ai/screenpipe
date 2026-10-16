@@ -55,6 +55,7 @@ mod audio_exclusions;
 #[cfg(all(test, target_os = "windows", feature = "vulkan"))]
 mod whisper_vulkan_tests;
 mod auth_token;
+mod acquisition_handoff;
 mod brain_views;
 mod calendar;
 mod capture_session;
@@ -2333,6 +2334,8 @@ async fn main() {
                 any(target_os = "macos", target_os = "windows")
             ))]
             enterprise_autostart::spawn(&app_handle);
+
+            acquisition_handoff::spawn(app_handle.clone());
 
             // Use persistent analytics_id for PostHog (consistent across frontend and backend)
             let unique_id = store.recording.analytics_id.clone();

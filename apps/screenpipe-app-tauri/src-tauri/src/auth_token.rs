@@ -122,7 +122,15 @@ async fn load_session_token_at(data_dir: &Path, key: Option<[u8; 32]>) -> Option
 pub async fn store_cloud_token(token: Option<&str>) -> anyhow::Result<()> {
     let normalized = normalize_cloud_token(token.map(str::to_string));
     let token = normalized.as_deref();
+    let previous = cached_cloud_token().as_deref().and_then(crate::acquisition_handoff::subject);
+    let next = token.and_then(crate::acquisition_handoff::subject);
+    if token.is_none() || (previous.is_some() && previous != next) {
+        // Retire attribution before changing accounts. The worker cannot overwrite
+        // the independent retirement marker if an HTTP request is already in flight.
+        crate::acquisition_handoff::retire();
+    }
     seed_cloud_token(normalized.clone());
+    crate::acquisition_handoff::wake();
     let dir = crate::config::app_data_dir();
     match token {
         Some(t) => store_token_at(dir, write_encryption_key()?, Some(t)).await,
