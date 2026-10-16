@@ -7,10 +7,12 @@ import hashlib
 import json
 from pathlib import Path
 import plistlib
+import os
 import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import zipfile
 
@@ -108,18 +110,33 @@ def package_filename(artifact, output, platform, release):
         raise ValueError('valid release required')
     if not re.search(r'(?:^|[_-])' + re.escape(release) + r'(?:[_-]|\.)', artifact.name):
         raise ValueError('release must match the versioned artifact filename')
-    if platform != 'linux':
+    if platform not in ('linux', 'windows', 'windows-arm'):
         raise ValueError('unsupported filename platform')
-    with artifact.open('rb') as source:
-        header = source.read(20)
-    if (artifact.suffix != '.AppImage' or header[:6] != b'\x7fELF\x02\x01' or
-            header[8:11] != b'AI\x02' or len(header) != 20 or struct.unpack_from('<H', header, 18)[0] != 62):
-        raise ValueError('Linux x86_64 type-2 AppImage required')
+    if platform == 'linux':
+        with artifact.open('rb') as source:
+            header = source.read(20)
+        if (artifact.suffix != '.AppImage' or header[:6] != b'\x7fELF\x02\x01' or
+                header[8:11] != b'AI\x02' or len(header) != 20 or struct.unpack_from('<H', header, 18)[0] != 62):
+            raise ValueError('Linux x86_64 type-2 AppImage required')
+    else:
+        if artifact.suffix.lower() != '.exe':
+            raise ValueError('Windows installer .exe required')
+        arch = (r'(?:^|[_-])(?:x64|x86_64|amd64)(?:[_-]|\.)' if platform == 'windows'
+                else r'(?:^|[_-])(?:arm64|aarch64)(?:[_-]|\.)')
+        if not re.search(arch, artifact.name, re.IGNORECASE):
+            raise ValueError('versioned release filename lacks target architecture evidence')
+        metadata = windows_metadata(artifact)
+        if metadata.get('Status') != 'Valid':
+            raise ValueError('installer must have a valid Authenticode signature')
+        versions = {str(metadata.get(key, '')).strip() for key in ('ProductVersion', 'FileVersion')}
+        if release not in versions:
+            raise ValueError('release must match Windows version metadata')
     size = artifact.stat().st_size
     if not 100 <= size <= 2147483647:
         raise ValueError('carrier size outside streaming limit')
     output.mkdir(parents=True, exist_ok=True)
-    target = output / ('screenpipe-attribution' + artifact.suffix)
+    target = output / ('screenpipe-attribution.exe' if platform.startswith('windows')
+                       else 'screenpipe-attribution.AppImage')
     manifest = output / 'screenpipe-attribution.json'
     if target.exists() or manifest.exists():
         raise ValueError('refusing to overwrite prepared artifacts')
@@ -140,13 +157,28 @@ def package_filename(artifact, output, platform, release):
     return target, manifest
 
 
+def windows_metadata(artifact):
+    """Read signature and version using Windows' supported PowerShell APIs."""
+    if sys.platform != 'win32':
+        raise ValueError('Windows packaging requires a Windows host')
+    script = ("$ErrorActionPreference='Stop';$p=$env:SCREENPIPE_ATTRIBUTION_ARTIFACT;"
+              "$s=Get-AuthenticodeSignature -LiteralPath $p;"
+              "$v=[Diagnostics.FileVersionInfo]::GetVersionInfo($p);"
+              "@{Status=[string]$s.Status;ProductVersion=$v.ProductVersion;"
+              "FileVersion=$v.FileVersion}|ConvertTo-Json -Compress")
+    output = subprocess.check_output([
+        'powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script
+    ], text=True, timeout=30, env={**os.environ, 'SCREENPIPE_ATTRIBUTION_ARTIFACT': str(artifact)})
+    return json.loads(output)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument('--app')
     inputs.add_argument('--artifact')
     parser.add_argument('--output', required=True)
-    parser.add_argument('--platform', choices=['macos-arm', 'macos-intel', 'linux'], required=True)
+    parser.add_argument('--platform', choices=['macos-arm', 'macos-intel', 'linux', 'windows', 'windows-arm'], required=True)
     parser.add_argument('--release', required=True)
     args = parser.parse_args()
     prepare = package if args.app else package_filename

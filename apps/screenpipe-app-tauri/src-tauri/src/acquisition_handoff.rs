@@ -31,7 +31,7 @@ struct Pending {
 
 fn uuid4(value: &str) -> bool {
     uuid::Uuid::parse_str(value)
-        .map(|v| v.get_version_num() == 4 && v.to_string() == value && value != PLACEHOLDER)
+        .map(|v| v.get_version_num() == 4 && v.get_variant() == uuid::Variant::RFC4122 && v.to_string() == value && value != PLACEHOLDER)
         .unwrap_or(false)
 }
 
@@ -158,7 +158,24 @@ fn grant_from_filename(name: &str, extension: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn carrier() -> Option<String> { None } // Filled by the Windows installer adapter.
+fn carrier() -> Option<String> {
+    carrier_from(std::env::current_exe().ok()?.parent()?)
+}
+
+#[cfg(target_os = "windows")]
+fn carrier_from(directory: &std::path::Path) -> Option<String> {
+    // The installer writes this once. Keep the read bounded so an untrusted or
+    // corrupt install directory cannot turn startup into an unbounded read.
+    let path = directory.join("acquisition-grant");
+    let metadata = std::fs::metadata(&path).ok()?;
+    if metadata.len() != 36 { return None; }
+    use std::io::Read;
+    let mut bytes = Vec::with_capacity(37);
+    std::fs::File::open(path).ok()?.take(37).read_to_end(&mut bytes).ok()?;
+    if bytes.len() != 36 { return None; }
+    let grant = String::from_utf8(bytes).ok()?;
+    uuid4(&grant).then_some(grant)
+}
 
 #[cfg(target_os = "linux")]
 fn carrier() -> Option<String> {
@@ -305,6 +322,27 @@ mod tests {
                 assert!(grant_from_filename(&name, extension).is_none());
             }
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn installed_windows_carrier_is_exact_and_bounded() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("acquisition-grant");
+        let grant = "12345678-1234-4234-8234-123456789012";
+        std::fs::write(&path, grant).unwrap();
+        assert_eq!(carrier_from(dir.path()), Some(grant.into()));
+        for invalid in [
+            PLACEHOLDER,
+            "12345678-1234-4234-7234-123456789012",
+            "12345678-1234-4234-C234-123456789012",
+            "12345678-1234-4234-8234-12345678901X",
+        ] {
+            std::fs::write(&path, invalid).unwrap();
+            assert!(carrier_from(dir.path()).is_none());
+        }
+        std::fs::write(&path, format!("{grant}\n")).unwrap();
+        assert!(carrier_from(dir.path()).is_none());
     }
 
     #[tokio::test]
