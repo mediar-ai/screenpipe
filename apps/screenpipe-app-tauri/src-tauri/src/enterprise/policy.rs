@@ -120,8 +120,8 @@ impl AiToolPolicy {
 }
 static POLICY_UPDATE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-/// Per-stream sync policy. Established streams preserve their historical
-/// defaults, while richer semantic streams require an explicit opt-in. The
+/// Per-stream sync policy. Text/event streams and parsed app data default on;
+/// Activities, feedback, and screenshot pixels require explicit opt-in. The
 /// frontend pulls the admin's choices from `GET /api/enterprise/policy`
 /// (`syncStreams` field) on
 /// the 5-min poll and pushes them in via `set_sync_streams`. The sync state
@@ -211,7 +211,7 @@ impl Default for SyncStreams {
     fn default() -> Self {
         Self {
             frames: true,
-            parsed: false,
+            parsed: true,
             activities: false,
             audio: true,
             ui_events: true,
@@ -1019,12 +1019,10 @@ mod tests {
     }
 
     #[test]
-    fn sync_streams_default_keeps_parsed_data_off() {
-        // Existing streams preserve deployed behavior; the new structured
-        // data class requires an explicit admin choice.
+    fn sync_streams_default_enables_parsed_data() {
         let s = SyncStreams::default();
         assert!(s.frames);
-        assert!(!s.parsed);
+        assert!(s.parsed);
         assert!(!s.activities);
         assert!(s.audio);
         assert!(s.ui_events);
@@ -1066,6 +1064,8 @@ mod tests {
             "off".to_string(),
             "off".to_string(),
         );
+        assert!(!current_sync_streams().parsed);
+        *SYNC_STREAMS.write().unwrap() = SyncStreams::default();
     }
 }
 
