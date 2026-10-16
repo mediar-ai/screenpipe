@@ -1194,11 +1194,79 @@ mod imp {
         Ok(policy)
     }
 
+    #[derive(Default, Deserialize)]
+    struct RecordingMeasurement {
+        frame_status: Option<String>,
+        audio_status: Option<String>,
+    }
+
+    // The recurring native watcher owns this measurement even when Home has
+    // been destroyed. Enrollment during startup/IPC remains measurement-free:
+    // the recorder cannot start until its seat has been authorized.
+    async fn measure_recording(
+        http: &reqwest::Client,
+        api: &crate::recording::LocalApiContext,
+        logs: Option<&std::path::Path>,
+    ) -> RecordingMeasurement {
+        let result = async {
+            let response = api
+                .apply_auth(http.get(api.url("/health")))
+                .header("Cache-Control", "no-cache")
+                // Reuse the frontend heartbeat's existing two-second local
+                // health budget. Failure must not prevent seat enrollment.
+                .timeout(std::time::Duration::from_secs(2))
+                .send()
+                .await
+                .map_err(|error| format!("local health request: {error:?}"))?;
+            let status = response.status();
+            // /health returns 503 with real channel measurements when degraded.
+            // Auth failures and unrelated error responses are not measurements.
+            if !status.is_success() && status != reqwest::StatusCode::SERVICE_UNAVAILABLE {
+                return Err(format!("local health HTTP {status}"));
+            }
+            let measured = response
+                .json::<RecordingMeasurement>()
+                .await
+                .map_err(|error| format!("local health HTTP {status}: {error:?}"))?;
+            if ![&measured.frame_status, &measured.audio_status]
+                .iter()
+                .any(|channel| {
+                    channel.as_deref().is_some_and(|value| {
+                        !value.trim().is_empty() && !value.trim().eq_ignore_ascii_case("unknown")
+                    })
+                })
+            {
+                return Err(format!(
+                    "local health HTTP {status}: missing channel measurements"
+                ));
+            }
+            Ok(measured)
+        }
+        .await;
+        match result {
+            Ok(measured) => measured,
+            Err(cause) => {
+                warn!(
+                    "enterprise: recording measurement unavailable; enrollment continues: {cause}"
+                );
+                if let Some(logs) = logs {
+                    crate::recording::recovery_log::append(
+                        logs,
+                        "enterprise_recording_measurement_failed",
+                        &format!("cause={cause}; outcome=enrollment_only; previous_measurement_not_refreshed"),
+                    );
+                }
+                RecordingMeasurement::default()
+            }
+        }
+    }
+
     async fn send_enrollment_heartbeat(
         http: &reqwest::Client,
         heartbeat_url: &str,
         device_id: &str,
         credential: &EnterprisePolicyCredential,
+        measurement: Option<&RecordingMeasurement>,
     ) -> Result<(), NativePolicyFetchError> {
         let request = http.post(heartbeat_url).json(&serde_json::json!({
             "device_id": device_id,
@@ -1207,8 +1275,8 @@ mod imp {
             "app_version": env!("CARGO_PKG_VERSION"),
             "recording_lifecycle": crate::search_only::recording_lifecycle(),
             "recording_status": {
-                "frame_status": "unknown",
-                "audio_status": "unknown",
+                "frame_status": measurement.and_then(|value| value.frame_status.as_deref()).unwrap_or("unknown"),
+                "audio_status": measurement.and_then(|value| value.audio_status.as_deref()).unwrap_or("unknown"),
             },
         }));
         let request = apply_enterprise_credential(request, credential);
@@ -1240,6 +1308,7 @@ mod imp {
         policy_url: &str,
         heartbeat_url: &str,
         device_id: &str,
+        measurement: Option<&RecordingMeasurement>,
     ) -> NativeAuthorizationResult {
         let credentials = current_policy_credentials();
         if credentials.is_empty() {
@@ -1269,8 +1338,14 @@ mod imp {
                         policy.require_account_login,
                     ) =>
                 {
-                    match send_enrollment_heartbeat(http, heartbeat_url, device_id, &credential)
-                        .await
+                    match send_enrollment_heartbeat(
+                        http,
+                        heartbeat_url,
+                        device_id,
+                        &credential,
+                        measurement,
+                    )
+                    .await
                     {
                         Ok(()) => return NativeAuthorizationResult::Authorized(policy),
                         Err(NativePolicyFetchError::RecordingDisabled) => {
@@ -1362,6 +1437,7 @@ mod imp {
                             &policy_url,
                             &heartbeat_url,
                             &device_id,
+                            None,
                         ),
                     )
                     .await
@@ -1476,8 +1552,14 @@ mod imp {
                     policy.require_account_login,
                 ) && policy.recording_allowed =>
             {
-                match send_enrollment_heartbeat(&http, &heartbeat_url, &device_id, &credential)
-                    .await
+                match send_enrollment_heartbeat(
+                    &http,
+                    &heartbeat_url,
+                    &device_id,
+                    &credential,
+                    None,
+                )
+                .await
                 {
                     Ok(()) => {
                         // Save native settings before the UI can start capture;
@@ -1590,9 +1672,19 @@ mod imp {
             loop {
                 let was_hidden = crate::enterprise_policy::is_app_ui_hidden();
                 let device_id = settings_device_id(&app).unwrap_or_else(|| "unknown".to_string());
-                let authorization =
-                    resolve_native_authorization(&http, &policy_url, &heartbeat_url, &device_id)
-                        .await;
+                // Re-resolve the live instance port and auth key each turn:
+                // startup/restart may replace either after this task starts.
+                let api = local_api_context_from_app(&app);
+                let logs = crate::log_files::get_screenpipe_data_dir(&app).ok();
+                let measurement = measure_recording(&http, &api, logs.as_deref()).await;
+                let authorization = resolve_native_authorization(
+                    &http,
+                    &policy_url,
+                    &heartbeat_url,
+                    &device_id,
+                    Some(&measurement),
+                )
+                .await;
                 // Also release the first-pass barrier after an offline/rejected
                 // response; an unknown policy keeps its documented default,
                 // while a cached disable remains disabled.
@@ -1984,6 +2076,205 @@ mod imp {
         };
         use std::collections::HashMap;
 
+        async fn native_health_fixture(
+            status: axum::http::StatusCode,
+            body: &str,
+            heartbeat_status: axum::http::StatusCode,
+        ) -> (
+            crate::recording::LocalApiContext,
+            String,
+            std::sync::Arc<std::sync::Mutex<Option<serde_json::Value>>>,
+            tokio::task::JoinHandle<()>,
+        ) {
+            use axum::{
+                http::HeaderMap,
+                routing::{get, post},
+                Json, Router,
+            };
+            let received = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let output = received.clone();
+            let health_body = body.to_string();
+            let router = Router::new()
+                .route(
+                    "/health",
+                    get(move |headers: HeaderMap| async move {
+                        assert_eq!(headers["authorization"], "Bearer local-test-key");
+                        assert_eq!(headers["cache-control"], "no-cache");
+                        (status, health_body)
+                    }),
+                )
+                .route(
+                    "/heartbeat",
+                    post(
+                        move |headers: HeaderMap, Json(body): Json<serde_json::Value>| async move {
+                            assert_eq!(headers["x-license-key"], "test-key");
+                            assert!(
+                                !headers.contains_key("authorization"),
+                                "local credentials must stay local"
+                            );
+                            *output.lock().unwrap() = Some(body);
+                            (
+                                heartbeat_status,
+                                Json(serde_json::json!({"ok": heartbeat_status.is_success()})),
+                            )
+                        },
+                    ),
+                );
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = tokio::spawn(async move {
+                axum::Server::from_tcp(listener)
+                    .unwrap()
+                    .serve(router.into_make_service())
+                    .await
+                    .unwrap();
+            });
+            (
+                crate::recording::LocalApiContext {
+                    api_key: Some("local-test-key".into()),
+                    port,
+                },
+                format!("http://127.0.0.1:{port}/heartbeat"),
+                received,
+                server,
+            )
+        }
+
+        #[tokio::test]
+        async fn native_health_reports_actual_channels_without_a_webview() {
+            use axum::http::StatusCode;
+            let http = reqwest::Client::new();
+            // Exercise the real authenticated HTTP read and enrollment writer,
+            // with no AppHandle, renderer, recording uploads or UI timer.
+            for (status, frame, audio) in [
+                (StatusCode::OK, "ok", "ok"),
+                (StatusCode::SERVICE_UNAVAILABLE, "stale", "error"),
+                (StatusCode::OK, "disabled", "disabled"),
+                (StatusCode::OK, "permission_denied", "no_data"),
+            ] {
+                let body = serde_json::json!({"frame_status": frame, "audio_status": audio,
+                    "observed_at": "1999-01-01T00:00:00Z", "message": "private recording content"})
+                .to_string();
+                let (api, url, received, server) =
+                    native_health_fixture(status, &body, StatusCode::OK).await;
+                let measurement = super::measure_recording(&http, &api, None).await;
+                super::send_enrollment_heartbeat(
+                    &http,
+                    &url,
+                    "test-device",
+                    &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                    Some(&measurement),
+                )
+                .await
+                .unwrap();
+                let sent = received.lock().unwrap().take().unwrap();
+                assert_eq!(
+                    sent["recording_status"],
+                    serde_json::json!({"frame_status": frame, "audio_status": audio})
+                );
+                assert!(!sent.to_string().contains("private recording content"));
+                assert!(!sent.to_string().contains("1999-01-01"));
+                server.abort();
+            }
+        }
+
+        #[tokio::test]
+        async fn native_health_failures_keep_enrollment_and_retained_support_evidence() {
+            use axum::http::StatusCode;
+            let http = reqwest::Client::new();
+            for (status, body, cause) in [
+                (
+                    StatusCode::UNAUTHORIZED,
+                    r#"{"frame_status":"ok","audio_status":"ok"}"#,
+                    "HTTP 401",
+                ),
+                (StatusCode::SERVICE_UNAVAILABLE, "not JSON", "HTTP 503"),
+                (StatusCode::OK, "{}", "missing channel measurements"),
+                (
+                    StatusCode::OK,
+                    r#"{"frame_status":"unknown","audio_status":"UNKNOWN"}"#,
+                    "missing channel measurements",
+                ),
+            ] {
+                let logs = tempfile::tempdir().unwrap();
+                let (api, url, received, server) =
+                    native_health_fixture(status, body, StatusCode::OK).await;
+                let measurement = super::measure_recording(&http, &api, Some(logs.path())).await;
+                super::send_enrollment_heartbeat(
+                    &http,
+                    &url,
+                    "test-device",
+                    &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                    Some(&measurement),
+                )
+                .await
+                .unwrap();
+                let sent = received.lock().unwrap().take().unwrap();
+                assert_eq!(
+                    sent["recording_status"],
+                    serde_json::json!({"frame_status":"unknown","audio_status":"unknown"})
+                );
+                // Collection after ordinary log rotation/restart retains the
+                // original failure through the actual support redaction path.
+                for day in 1..=7 {
+                    std::fs::write(
+                        logs.path()
+                            .join(format!("screenpipe-app.2026-10-{day:02}.log")),
+                        "app restarted\n",
+                    )
+                    .unwrap();
+                }
+                let report =
+                    crate::diagnostic_logs::collect_redacted_from_dirs(&[logs.path().into()])
+                        .await
+                        .unwrap();
+                assert!(report.contains("enterprise_recording_measurement_failed"));
+                assert!(report.contains(cause), "{report}");
+                assert!(report.contains("enrollment_only"));
+                assert!(report.contains("previous_measurement_not_refreshed"));
+                assert!(!report.contains("local-test-key"));
+                server.abort();
+            }
+        }
+
+        #[tokio::test]
+        async fn native_health_connection_failure_and_seat_rejection_stay_independent() {
+            use axum::http::StatusCode;
+            let http = reqwest::Client::new();
+            let (mut api, url, received, server) =
+                native_health_fixture(StatusCode::OK, "{}", StatusCode::FORBIDDEN).await;
+            // A bound but non-listening socket gives a deterministic refusal
+            // without racing another test for a just-released ephemeral port.
+            let socket = tokio::net::TcpSocket::new_v4().unwrap();
+            socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+            api.port = socket.local_addr().unwrap().port();
+            let logs = tempfile::tempdir().unwrap();
+            let measurement = super::measure_recording(&http, &api, Some(logs.path())).await;
+            let result = super::send_enrollment_heartbeat(
+                &http,
+                &url,
+                "test-device",
+                &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                Some(&measurement),
+            )
+            .await;
+            assert!(matches!(
+                result,
+                Err(super::NativePolicyFetchError::CredentialRejected(_))
+            ));
+            assert_eq!(
+                received.lock().unwrap().take().unwrap()["recording_status"]["frame_status"],
+                "unknown"
+            );
+            let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[logs.path().into()])
+                .await
+                .unwrap();
+            assert!(report.contains("local health request"));
+            assert!(report.contains("enrollment_only"));
+            server.abort();
+        }
+
         #[tokio::test]
         async fn search_only_lifecycle_uses_native_enrollment_without_claiming_capture_health() {
             use axum::{routing::post, Json, Router};
@@ -2012,6 +2303,7 @@ mod imp {
                 &url,
                 "test-device",
                 &super::EnterprisePolicyCredential::LicenseKey("test-key".into()),
+                None,
             )
             .await;
             server.abort();
