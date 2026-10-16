@@ -3771,7 +3771,7 @@ pub(crate) mod tests {
         fn drop(&mut self) {
             crate::enterprise_policy::set_sync_streams(
                 true,
-                false,
+                true,
                 true,
                 true,
                 true,
@@ -5450,15 +5450,17 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn parsed_rows_upload_as_a_separate_gated_stream_end_to_end() {
+    async fn parsed_rows_upload_by_default_and_respect_explicit_opt_out() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        let defaults = crate::enterprise_policy::SyncStreams::default();
         crate::enterprise_policy::set_sync_streams(
-            false,
-            true,
-            false,
-            false,
-            false,
-            false,
+            defaults.frames,
+            defaults.parsed,
+            defaults.audio,
+            defaults.ui_events,
+            defaults.memories,
+            defaults.snapshots,
             "off".to_string(),
             "off".to_string(),
         );
@@ -5527,6 +5529,19 @@ pub(crate) mod tests {
             "off".to_string(),
             "off".to_string(),
         );
+        let before_opt_out = cursor.last_parsed_ts.clone();
+        let disabled_local = MockLocal::new(vec![], vec![]).with_parsed(vec![vec![parsed(
+            43,
+            "2026-05-07T11:00:00Z",
+            "This opted-out record must stay local",
+        )]]);
+        let report = run_one_sync(&cfg, &mut cursor, &disabled_local, &reqwest::Client::new())
+            .await
+            .unwrap();
+        assert_eq!(report.parsed, 0);
+        assert_eq!(cursor.last_parsed_ts, before_opt_out);
+        assert!(disabled_local.last_parsed_since.lock().unwrap().is_none());
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
 
     #[tokio::test]
