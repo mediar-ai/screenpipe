@@ -272,7 +272,11 @@ impl ExportRows<'_> {
         for row in self.snapshots.iter() {
             let jpeg = match local.fetch_frame_jpeg(row.frame_id).await {
                 Ok(jpeg) => jpeg,
-                Err(EnterpriseSyncError::BackfillImages("screenshot_policy_disabled")) => None,
+                Err(EnterpriseSyncError::BackfillImages(
+                    "screenshot_policy_disabled"
+                    | "screenshot_local_settings_disabled"
+                    | "screenshot_settings_unavailable",
+                )) => None,
                 Err(error) => return Err(error),
             };
             if let Some(jpeg) = jpeg {
@@ -511,5 +515,98 @@ mod tests {
             .to_string()
             .contains("database disk image is malformed"));
         assert_eq!(selected, before);
+    }
+}
+
+#[cfg(test)]
+mod snapshot_refusal_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn snapshot_refusal_keeps_allowed_ax_but_transport_failures_remain_retryable() {
+        struct Local(FrameRow, &'static str);
+        #[async_trait::async_trait]
+        impl LocalApiClient for Local {
+            async fn fetch_frames_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Ok(vec![self.0.clone()])
+            }
+            async fn fetch_audio_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                Ok(vec![])
+            }
+            async fn fetch_frame_jpeg(
+                &self,
+                _: i64,
+            ) -> Result<Option<Vec<u8>>, EnterpriseSyncError> {
+                Err(EnterpriseSyncError::BackfillImages(self.1))
+            }
+        }
+        let frame = FrameRow {
+            frame_id: 1,
+            timestamp: "2026-01-01T01:00:00Z".into(),
+            app_name: None,
+            window_name: None,
+            browser_url: None,
+            text: Some("allowed AX".into()),
+            accessibility_tree: Some(
+                serde_json::json!([{ "role": "Button", "text": "", "properties": { "automation_id": "retained" } }]),
+            ),
+        };
+        for cause in [
+            "screenshot_policy_disabled",
+            "screenshot_local_settings_disabled",
+            "screenshot_settings_unavailable",
+            "screenshot_fetch_failed",
+        ] {
+            let local = Local(frame.clone(), cause);
+            let mut frames = vec![frame.clone()];
+            let mut snapshots = vec![SnapshotRow {
+                frame_id: 1,
+                timestamp: frame.timestamp.clone(),
+                mime: "image/jpeg".into(),
+                image_b64: "AAAA".into(),
+                width: 1,
+                height: 1,
+            }];
+            let result = ExportRows {
+                frames: &mut frames,
+                snapshots: &mut snapshots,
+                audio: &mut vec![],
+                ui: &mut vec![],
+                memories: &mut vec![],
+                parsed: &mut vec![],
+                activities: &mut vec![],
+                feedback: &mut vec![],
+            }
+            .refresh(&local)
+            .await;
+            if cause == "screenshot_fetch_failed" {
+                assert!(
+                    result.is_err(),
+                    "technical failure must retain the page for retry"
+                );
+                continue;
+            }
+            result.unwrap();
+            assert!(snapshots.is_empty(), "refused pixels must be removed");
+            let body = build_jsonl("device", "label", &frames, &[], &[], &snapshots, &[]);
+            let records = screenpipe_telemetry_wire::parse_jsonl(&body);
+            assert_eq!(records.records.len(), 1);
+            let row: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(
+                row["accessibility_tree"],
+                frame.accessibility_tree.clone().unwrap()
+            );
+            assert_eq!(row["text"], "allowed AX");
+        }
     }
 }

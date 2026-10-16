@@ -256,6 +256,10 @@ struct CursorBoundary {
     backfill_records: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     backfill_images: Option<backfill::ImageProgress>,
+    #[serde(default)]
+    backfill_telemetry_complete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    backfill_image_replay: Option<Box<backfill::ImageReplay>>,
     frames: u32,
     audio: u32,
     ui: u32,
@@ -678,7 +682,7 @@ pub async fn post_jsonl(
     license_key: &str,
     body: Vec<u8>,
 ) -> Result<(), EnterpriseSyncError> {
-    post_jsonl_with_identity(client, url, license_key, body, None, false).await
+    post_jsonl_with_identity(client, url, license_key, body, None, false, false).await
 }
 
 async fn post_jsonl_with_identity(
@@ -688,6 +692,7 @@ async fn post_jsonl_with_identity(
     body: Vec<u8>,
     stable_device_id: Option<&str>,
     backfill: bool,
+    independent_images: bool,
 ) -> Result<(), EnterpriseSyncError> {
     // A single retained AX record can exceed the hosted HTTP body limit even
     // after splitting the page. Keep every byte and use the same ticketed
@@ -709,20 +714,37 @@ async fn post_jsonl_with_identity(
         }
         let mut headers = HeaderMap::new();
         for (key, value) in identity_headers {
-            headers.insert(key, value.parse().map_err(|_| EnterpriseSyncError::Configuration(
-                "invalid hosted upload identity header".into(),
-            ))?);
+            headers.insert(
+                key,
+                value.parse().map_err(|_| {
+                    EnterpriseSyncError::Configuration(
+                        "invalid hosted upload identity header".into(),
+                    )
+                })?,
+            );
         }
         headers.insert("x-screenpipe-ingest-transfer", "1".parse().unwrap());
-        if backfill { headers.insert("x-screenpipe-backfill", "1".parse().unwrap()); }
+        if backfill {
+            headers.insert("x-screenpipe-backfill", "1".parse().unwrap());
+            if independent_images {
+                headers.insert(
+                    "x-screenpipe-backfill-images",
+                    backfill::INDEPENDENT_IMAGES.parse().unwrap(),
+                );
+            }
+        }
         let ticket = serde_json::json!({"action": "ticket", "device_id": source.device_id,
             "content_length": body.len(), "sha256": screenpipe_core::sync::crypto::compute_checksum(&body)});
         let mut complete = ticket.clone();
         complete["action"] = serde_json::json!("complete");
-        TicketedPipeline::new(TicketedConfig::new(url, url)
-            .with_http(client.clone()).with_control_headers(headers)
-            .with_pinned_upload_hosts(enterprise_upload::pinned_hosts_from_env()))
-            .upload(&body, "application/x-ndjson", &ticket, &complete).await?;
+        TicketedPipeline::new(
+            TicketedConfig::new(url, url)
+                .with_http(client.clone())
+                .with_control_headers(headers)
+                .with_pinned_upload_hosts(enterprise_upload::pinned_hosts_from_env()),
+        )
+        .upload(&body, "application/x-ndjson", &ticket, &complete)
+        .await?;
         return Ok(());
     }
     let mut request = client
@@ -731,6 +753,9 @@ async fn post_jsonl_with_identity(
         .header("Content-Type", "application/x-ndjson");
     if backfill {
         request = request.header("X-Screenpipe-Backfill", "1");
+        if independent_images {
+            request = request.header("X-Screenpipe-Backfill-Images", backfill::INDEPENDENT_IMAGES);
+        }
     }
     if let Some(device) = stable_device_id {
         request = request.header("X-Screenpipe-Stable-Device-Id", device);
@@ -997,7 +1022,9 @@ async fn run_one_sync_page(
             // Pin this recovery to its database without resetting the admin's
             // historical start to the normal first-run safety window.
             cursor.source_id = Some(cfg.device_id.clone());
-            cursor.save(&cfg.cursor_path)?;
+            if !backfill.is_some_and(|request| request.images_only) {
+                cursor.save(&cfg.cursor_path)?;
+            }
         } else {
             *cursor = Cursor {
                 source_id: Some(cfg.device_id.clone()),
@@ -1281,17 +1308,31 @@ async fn run_one_sync_page(
         ));
     }
 
-    // The history cursor is the retry checkpoint for images as well as text.
-    // Store this page's images first: the existing server sees them as already
-    // resolved, so it need not accumulate another historical request backlog.
-    let images = if backfill.is_some()
-        && streams.frame_images == crate::enterprise_policy::FrameImagesMode::All
+    // Accept image recovery durably before advancing telemetry. Its independent
+    // timestamp/tie cursor keeps a failed image page retryable after AX moves on.
+    if backfill.is_some_and(|request| !request.images_only)
         && matches!(
             cfg.upload_mode,
             EnterpriseUploadMode::HostedIngest | EnterpriseUploadMode::DirectReadable(_)
         )
         && !frames.is_empty()
     {
+        if let Some(replay) = cursor.boundary.backfill_image_replay.as_mut() {
+            // A later telemetry page may observe additional retained frames in
+            // this accepted range. Recheck its tail before declaring completion.
+            replay.complete = false;
+            cursor.save(&cfg.cursor_path)?;
+        } else if backfill.is_some_and(|request| {
+            request
+                .recover_images
+                .unwrap_or(streams.frame_images == crate::enterprise_policy::FrameImagesMode::All)
+        }) {
+            cursor.boundary.backfill_image_replay =
+                Some(Box::new(backfill::ImageReplay::new(cursor)));
+            cursor.save(&cfg.cursor_path)?;
+        }
+    }
+    let images = if backfill.is_some_and(|request| request.images_only) && !frames.is_empty() {
         Some(backfill::upload_page_images(cfg, local, http, &frames).await?)
     } else {
         None
@@ -1401,6 +1442,7 @@ async fn run_one_sync_page(
     ));
     let bytes = body.len();
 
+    let independent_images = cursor.boundary.backfill_image_replay.is_some();
     let mut uploaded = None;
     if !body.is_empty() && !backfill.is_some_and(|request| request.images_only) {
         match &cfg.upload_mode {
@@ -1446,6 +1488,7 @@ async fn run_one_sync_page(
                             request_body,
                             cfg.stable_device_id.as_deref(),
                             backfill.is_some(),
+                            independent_images,
                         )
                         .await?;
                     }
@@ -1493,6 +1536,7 @@ async fn run_one_sync_page(
                     counts,
                     enterprise_upload::direct_upload_cursors(&next_cursor),
                     backfill.is_some(),
+                    independent_images,
                 );
                 upload.await?;
             }
@@ -1533,7 +1577,11 @@ async fn run_one_sync_page(
 
     // Advance cursor only on success — partial failure must not skip records.
     *cursor = next_cursor;
-    cursor.save(&cfg.cursor_path)?;
+    // The backfill caller commits an image-only cursor with its parent (or
+    // its standalone continuation); it must never overwrite telemetry here.
+    if !backfill.is_some_and(|request| request.images_only) {
+        cursor.save(&cfg.cursor_path)?;
+    }
 
     Ok(report)
 }
@@ -3765,7 +3813,7 @@ pub(crate) mod tests {
 
     /// Restore the process-global stream policy even when an intentionally
     /// red regression test panics on its assertion.
-    struct RestoreDefaultSyncStreams;
+    pub(super) struct RestoreDefaultSyncStreams;
 
     impl Drop for RestoreDefaultSyncStreams {
         fn drop(&mut self) {
@@ -5765,15 +5813,12 @@ pub(crate) mod tests {
                     last_parsed_ts: None,
                     boundary: CursorBoundary::default(),
                 };
-                let local = MockLocal::new(
-                    vec![vec![frame(
-                        1,
-                        "2026-05-07T10:00:00Z",
-                        "Arc",
-                        "customer-readable text",
-                    )]],
-                    vec![vec![]],
-                );
+                let rows = vec![frame(1, "2026-05-07T10:00:00Z", "Arc", "customer-readable text")];
+                // The image cursor independently rereads the retained page.
+                let pages = if readable && historical && frame_mode == "all" {
+                    vec![rows.clone(), rows]
+                } else { vec![rows] };
+                let local = MockLocal::new(pages, vec![vec![]]);
                 let http = reqwest::Client::new();
                 let replay: Option<backfill::BackfillRequest> = historical.then(|| serde_json::from_value(serde_json::json!({
                     "id": "11111111-1111-1111-1111-111111111111",
@@ -5781,10 +5826,11 @@ pub(crate) mod tests {
                     "device_id": cfg.device_id,
                     "start_at": "2026-05-07T09:00:00Z", "end_at": "2026-05-07T11:00:00Z", "streams": ["frames"]
                 })).unwrap());
-                let report =
-                    run_one_sync_inner(&cfg, &mut cursor, &local, &http, false, replay.as_ref())
-                        .await
-                        .unwrap();
+                let report = if let Some(replay) = replay.as_ref() {
+                    backfill::run_replay_page(&cfg, &mut cursor, &local, &http, replay).await
+                } else {
+                    run_one_sync_inner(&cfg, &mut cursor, &local, &http, false, None).await
+                }.unwrap();
 
                 assert_eq!(report.frames, 1);
                 assert_eq!(
@@ -5800,6 +5846,8 @@ pub(crate) mod tests {
                     complete.headers.contains_key("x-screenpipe-backfill"),
                     readable && historical
                 );
+                assert_eq!(complete.headers.contains_key("x-screenpipe-backfill-images"),
+                    readable && historical && frame_mode == "all");
                 for request in &requests {
                     if request.url.path() == "/blob" {
                         assert!(!request.headers.contains_key("x-screenpipe-backfill"));
