@@ -3,7 +3,7 @@
 Processing and admission contract for the covered local APIs and enterprise uploads. This is not a universal product privacy guarantee.
 
 <!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-db/src/db/privacy_exports.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-redact/src/image/worker.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
-<!-- doc-verified: b40eda11d44c13791de28dcd9b05926bec8db07d -->
+<!-- doc-verified: c288183019 -->
 
 Capture persists through the existing writer. Background detectors process a source revision under a desired policy, then publish the sanitized replacement and its receipt in one transaction. A read adapter exposes only current receipts. Text and image completion are independent. Optional regex filtering and legacy timestamps cannot certify required model processing.
 
