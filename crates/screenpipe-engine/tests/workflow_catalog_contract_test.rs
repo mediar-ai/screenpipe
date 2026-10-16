@@ -316,7 +316,11 @@ async fn publication_outage_preserves_a_retryable_draft(
     assert_eq!(saved["drafts"][&id]["payload"], payload);
     assert_eq!(saved["drafts"][&id]["publicationRetry"]["retryable"], true);
     assert_eq!(after["checkedThrough"], catalog["checkedThrough"]);
-    assert_eq!(after["analysis"], catalog["analysis"]);
+    // Saving a retryable draft also removes cached recorder pixels. Preserve
+    // the source identity and every other analysis field through the outage.
+    let mut expected_analysis = catalog["analysis"].clone();
+    expected_analysis["workflows"][0]["stages"][0]["screenshot"]["dataUrl"] = json!("");
+    assert_eq!(after["analysis"], expected_analysis);
     let rejected = post(json!({"task":"workflow-review","action":"reject","expected_revision":workspace::revision(&saved),"draft_id":id,"note":"Save failed so reject it"})).await.unwrap();
     assert_eq!(rejected.status(), StatusCode::CONFLICT);
     let unchanged: Value = serde_json::from_slice(&tokio::fs::read(path).await.unwrap()).unwrap();

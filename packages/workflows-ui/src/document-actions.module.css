@@ -1,0 +1,25 @@
+/* screenpipe — AI that knows everything you've seen, said, or heard
+   https://screenpipe.com */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 16px; border-bottom: 1px solid var(--line); margin-bottom: 28px; color: var(--ink); font-size: 13px; }
+.toolbar > div { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.toolbar button, .toolbar summary, .dialog button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 7px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.toolbar button:hover, .toolbar summary:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.toolbar button:disabled { opacity: .5; cursor: default; }
+.toolbar button:focus-visible, .toolbar summary:focus-visible, .dialog button:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
+.toolbar .share { border-color: var(--line); }
+.menu { position: relative; }
+.menu summary { list-style: none; }
+.menu summary::-webkit-details-marker { display: none; }
+.popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 225px; padding: 6px; background: var(--paper, #f6f6f3); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 16px #0001; }
+.popover button { width: 100%; justify-content: flex-start; text-align: left; }
+.dialog { width: min(620px, calc(100vw - 40px)); padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper, #f6f6f3); color: var(--ink); }
+.dialog::backdrop { background: #0005; }
+.dialog header, .dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dialog h2 { font-size: 20px; }
+.dialog p { font-size: 14px; line-height: 1.6; }
+.dialog textarea { width: 100%; min-height: 240px; box-sizing: border-box; color: inherit; background: transparent; border: 1px solid var(--line); padding: 12px; font: 12px/1.6 monospace; }
+.dialog footer { justify-content: flex-end; margin-top: 16px; }
+.dialog footer button { border-color: var(--line); }
+.error { font-size: 12px; max-width: 260px; }
+@media (max-width: 680px) { .toolbar { gap: 8px; } .toolbar > div { gap: 4px; } .actions { margin-left: auto; } }
+@media print { .toolbar, .dialog { display: none !important; } }

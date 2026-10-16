@@ -14,6 +14,7 @@ export function SopDocument({
   onTitleChange,
   onContentChange,
   children,
+  kind = "sop",
 }: {
   title: string;
   subtitle?: ReactNode;
@@ -21,16 +22,17 @@ export function SopDocument({
   onTitleChange?: (title: string) => void;
   onContentChange?: (content: string) => void;
   children?: ReactNode;
+  kind?: "sop" | "skill";
 }) {
   return (
-    <article className={styles.document} aria-label="SOP document">
+    <article className={styles.document} aria-label={kind === "skill" ? "Skill document" : "SOP document"}>
       <header className={styles.heading}>
-        <p className={styles.kind}>Standard operating procedure</p>
+        <p className={styles.kind}>{kind === "skill" ? "Agent skill" : "Standard operating procedure"}</p>
         {onTitleChange ? (
           <InlineText
             className={styles.title}
-            label="SOP title"
-            maxLength={300}
+            label={kind === "skill" ? "Name" : "SOP title"}
+            maxLength={kind === "skill" ? 64 : 300}
             value={title}
             onChange={onTitleChange}
           />
@@ -43,8 +45,8 @@ export function SopDocument({
         <WorkflowRichText
           value={content}
           onChange={onContentChange}
-          label="SOP text"
-          maxLength={60000}
+          label={kind === "skill" ? "Instructions" : "SOP text"}
+          maxLength={kind === "skill" ? 20000 : 60000}
           fullDocument
         />
       )}

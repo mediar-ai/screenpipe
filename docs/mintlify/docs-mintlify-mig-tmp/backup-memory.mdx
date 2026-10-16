@@ -1,0 +1,75 @@
+---
+title: "Recover missed notes with backup memory"
+sidebarTitle: "Backup memory"
+description: "Find a past call, forgotten link, or conversation in available Screenpipe history, verify the sources, and turn the details into notes and action items."
+icon: "history"
+---
+
+{/* screenpipe — AI that knows everything you've seen, said, or heard */}
+{/* https://screenpipe.com */}
+
+Forgot to start your usual meeting recorder? Lost the page you were reading? If Screenpipe captured that moment, you can search the available history and turn it into notes you can use now.
+
+Screenpipe must have been running with the relevant screen or audio capture enabled. Paused recording, excluded apps, missing audio, and deleted history leave gaps it cannot reconstruct. A meeting entry alone does not prove the conversation was captured.
+
+## Find the moment
+
+1. Start with the date, approximate time, timezone, and something you remember: a topic, phrase, app, or page title.
+2. Open the timeline for that period, or ask Screenpipe chat or a [connected assistant](/connect-your-assistant) to search that time window.
+3. For a call, check the available transcript and its coverage. For a link or document, check the captured screen text and any recorded URL. Widen the time window if you cannot find the right moment.
+
+You can use a connected assistant such as Codex or Claude without opening the Screenpipe UI. Verify that its [MCP connection](/mcp-server) can retrieve a real recording first.
+
+## Check the source
+
+Compare the result with the transcript or screen evidence before relying on it. Check names, numbers, decisions, and dates. A page visible on screen does not prove you submitted a form or sent a message. Screen context can help identify a call, but it cannot supply words that were never recorded.
+
+If nothing useful appears, follow [missing recordings](/missing-recordings). If audio exists but the transcript or summary fails, use [meeting recovery troubleshooting](/meeting-recovery).
+
+## Recover your call notes
+
+Replace the bracketed fields and paste this into Screenpipe chat or your connected assistant:
+
+```text
+I forgot to take notes for my call about [topic] on [date], around
+[start time] to [end time], in [timezone].
+
+Search the available Screenpipe transcript and screen history for that period.
+First confirm which parts of the call are available and identify any gaps.
+Then summarize the discussion and list:
+- decisions that were actually agreed
+- action items, with owners and due dates only when explicitly stated
+- open questions and proposals that still need confirmation
+
+Cite source timestamps for decisions and action items. Separate transcript
+evidence from screen context. If something is missing, say so without guessing.
+Return the notes here for review. Do not send messages or update other systems.
+```
+
+After checking the notes, ask for a follow-up draft:
+
+```text
+Draft a short follow-up from these verified notes. Keep agreed actions
+separate from open questions. Do not add promises, owners, or deadlines.
+Return the draft here for my review; do not send it.
+```
+
+## Find a forgotten link or conversation
+
+Use the same approach for something you saw on screen:
+
+```text
+Find the [page or conversation topic] I saw in [app or browser] on [date],
+between [start] and [end] in [timezone]. Show the matching source timestamps
+and any captured title or URL. Tell me what the available evidence says about
+[specific detail]. If the URL or conversation is incomplete, say so.
+Do not invent a link or treat a draft as a sent message.
+```
+
+Open the original source when possible to check its current state. Captured history shows what was available at the time; the page or conversation may have changed since then.
+
+## Save only what you need
+
+Copy the checked notes into your usual notes app, or ask a file-capable assistant to save them to a specific file. Review the destination and contents before sharing with anyone else. Connecting a cloud AI provider or sending an export can transmit selected data; see [privacy data flow](/privacy-data-flow).
+
+For future calls, check your [recording controls](/recording-controls), test the audio sources you need, and follow the meeting's recording policy. Keep enough [history retention](/storage-and-retention) for your review schedule. For a recurring review, continue with [weekly work review](/weekly-work-review).

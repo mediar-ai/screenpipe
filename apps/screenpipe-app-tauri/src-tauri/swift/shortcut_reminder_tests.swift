@@ -547,6 +547,96 @@ private func testLocalizedDisclosure() {
     expect(brand?.1 == "localized right-click", "right-click hint was not translated")
 }
 
+/// Layout follows the typed action, including localized labels. It must not
+/// enlarge unrelated notifications or change the payload sent back to Rust.
+private func testMeetingJoinNotification() {
+    let json = """
+    {"id":"calendar","title":"localized title","body":"Weekly sync","autoDismissMs":30000,"actions":[{"id":"join","label":"Rejoindre et prendre des notes","type":"meeting_join","url":"https://meet.google.com/example","primary":true},{"id":"hd","label":"+ HD","type":"api"}]}
+    """
+    guard let meeting = OverlayNotification.parse(json) else {
+        expect(false, "valid join notification was rejected")
+        return
+    }
+    expect(meeting.isMeetingJoin, "localized join action needs the larger card")
+    expect(meeting.autoDismissMs == 30000, "join timeout must be preserved")
+    let action = try! JSONSerialization.jsonObject(with: Data(meeting.actions[0].payload.utf8)) as! [String: Any]
+    expect(action["type"] as? String == "meeting_join", "join action type changed")
+    expect(action["url"] as? String == "https://meet.google.com/example", "join URL changed")
+    let ordinary = OverlayNotification.parse(json.replacingOccurrences(of: "meeting_join", with: "deeplink"))!
+    expect(!ordinary.isMeetingJoin, "non-join alert must remain compact")
+    for scale: CGFloat in [1, 1.5, 2] {
+        let size = meeting.size(scale: scale)
+        expect(size.width > ordinary.size(scale: scale).width, "join card needs more text width")
+        expect(size.height >= 3 * ordinary.size(scale: scale).height, "join card needs room for separate actions")
+        let y = overlayAttachmentY(pill: NSRect(x: 500, y: 1030, width: 22, height: 16), height: size.height, gap: 4, stacked: 150, disclosureDown: true, visible: visible, edgeInset: 4)
+        expect(y >= visible.minY && y + size.height <= visible.maxY, "join card must stay on screen at scale \(scale)")
+    }
+}
+
+private func testMeetingProviderIcons() {
+    let cases: [(String, MeetingJoinProvider)] = [
+        ("https://meet.google.com/abc-defg-hij", .googleMeet),
+        ("https://MEET.GOOGLE.COM./abc-defg-hij", .googleMeet),
+        ("https://us02web.zoom.us/j/123", .zoom),
+        ("zoommtg://zoom.us/join?confno=123", .zoom),
+        ("https://company.zoom.com/j/123", .zoom),
+        ("https://agency.zoomgov.com/j/123", .zoom),
+        ("https://teams.microsoft.com/l/meetup-join/example", .teams),
+        ("https://teams.live.com/meet/123", .teams),
+        ("https://teams.cloud.microsoft/meet/123", .teams),
+        ("https://company.webex.com/meet/example", .webex),
+        ("https://unknown.example/meet", .other),
+        ("https://zoom.us.example.org/j/123", .other),
+        ("https://notzoom.us/j/123", .other),
+        ("https://zoom.us@evil.example/j/123", .other),
+        ("https://evil.example/?url=https://meet.google.com/abc", .other),
+        ("file://meet.google.com/abc", .other),
+        ("not a URL", .other),
+        ("", .other),
+    ]
+    for (url, provider) in cases {
+        expect(MeetingJoinProvider.from(url: url) == provider, "wrong provider for \(url)")
+    }
+    for provider in MeetingJoinProvider.allCases where provider != .other {
+        expect(provider.image?.isValid == true, "missing embedded icon for \(provider)")
+    }
+    let json = """
+    {"id":"icon","title":"test","actions":[{"label":"Rejoindre","type":"meeting_join","url":"https://meet.google.com/abc"},{"label":"+ HD","type":"api","url":"/capture/hd/start"}]}
+    """
+    let parsed = OverlayNotification.parse(json)!
+    expect(parsed.actions[0].meetingProvider == .googleMeet, "join action needs the provider icon")
+    expect(parsed.actions[1].meetingProvider == nil, "HD action must not get a meeting icon")
+}
+
+private func testJoinScreenDetailChoice() {
+    let json = """
+    {"id":"choice","title":"meeting starting","actions":[{"id":"join-meeting","label":"join and take notes","type":"meeting_join","url":"https://meet.google.com/example","primary":true},{"id":"record-hd","action":"record-hd","label":"+ HD","type":"api","url":"/capture/hd/start","method":"POST","body":{"boundTo":"prewarm_pending"}}]}
+    """
+    let notification = OverlayNotification.parse(json)!
+    let join = notification.actions[0]
+    let displayed = notification.displayActions
+    expect(displayed.count == 2, "meeting must expose two one-click join choices")
+    expect(displayed[0] == join, "ordinary Join must remain unchanged")
+    expect(displayed[1].label == "join + HD", "capture choice must explicitly say it joins")
+    expect(displayed[1].meetingProvider == .googleMeet, "both join choices must show the service icon")
+    let detailPayload = try! JSONSerialization.jsonObject(with: Data(displayed[1].payload.utf8)) as! [String: Any]
+    expect(detailPayload["type"] as? String == "meeting_join", "screen-detail button must join directly")
+    expect((detailPayload["screen_detail"] as? [String: Any])?["boundTo"] as? String == "prewarm_pending", "screen-detail button must include capture in its single dispatch")
+    expect(notification.screenDetailAction != nil, "HD eligibility must expose the option")
+    expect(notification.joining(join, captureScreenDetail: false) == join, "ordinary Join must not enable screen detail")
+    let combined = notification.joining(join, captureScreenDetail: true)
+    let payload = try! JSONSerialization.jsonObject(with: Data(combined.payload.utf8)) as! [String: Any]
+    expect(payload["type"] as? String == "meeting_join", "selected option must still join")
+    expect(payload["url"] as? String == "https://meet.google.com/example", "combined Join lost the call URL")
+    expect((payload["screen_detail"] as? [String: Any])?["boundTo"] as? String == "prewarm_pending", "combined Join lost capture scope")
+    expect(combined.meetingProvider == .googleMeet, "combined Join lost its icon")
+    let withoutHD = OverlayNotification.parse(json.replacingOccurrences(of: "/capture/hd/start", with: "/unrelated"))!
+    expect(withoutHD.screenDetailAction == nil, "unrelated API action must not become a capture setting")
+    expect(withoutHD.displayActions == withoutHD.actions, "ineligible notifications must keep their actions")
+    expect(withoutHD.joining(withoutHD.actions[0], captureScreenDetail: true) == withoutHD.actions[0], "capture cannot be added without the offered HD action")
+    expect(notification.joining(notification.actions[1], captureScreenDetail: true) == notification.actions[1], "non-join actions must stay unchanged")
+}
+
 @main
 struct ShortcutReminderTests {
     static func main() {
@@ -566,6 +656,9 @@ struct ShortcutReminderTests {
         testTieBreaksToCurrent()
         testAttachmentStacking()
         testAttachmentStaysOnScreen()
+        testJoinScreenDetailChoice()
+        testMeetingProviderIcons()
+        testMeetingJoinNotification()
         testWireContract()
         testShortcutGlyphs()
         testLocalizedDisclosure()

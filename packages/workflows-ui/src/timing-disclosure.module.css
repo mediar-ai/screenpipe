@@ -10,3 +10,5 @@
 .content small { color: var(--muted); font-size: 11px; }
 
 .anchor[data-above] { top: auto; bottom: 100%; padding-top: 0; padding-bottom: 4px; }
+
+.root .trigger.withDuration { width: auto; gap: 4px; white-space: nowrap; font: inherit; }

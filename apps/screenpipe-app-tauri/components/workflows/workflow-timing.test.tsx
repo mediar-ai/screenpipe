@@ -30,6 +30,19 @@ describe("workflow elapsed timing", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("30m median duration");
     expect(screen.getByRole("tooltip")).not.toHaveTextContent("on average");
   });
+  it("omits empty timing in documents and shows the duration when evidence exists", () => {
+    const view = render(<TimingDisclosure value={null} label="Timing" hideWhenUnknown showDuration />);
+    expect(screen.queryByRole("button", { name: "Timing" })).not.toBeInTheDocument();
+    view.rerender(<TimingDisclosure value={workflow.timing} label="Timing" hideWhenUnknown showDuration />);
+    const trigger = screen.getByRole("button", { name: "Timing" });
+    expect(trigger).toHaveTextContent("24m");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("3 observed runs");
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    view.rerender(<TimingDisclosure value={null} label="Timing" hideWhenUnknown showDuration measured={{ minutes: 30, samples: 1 }} />);
+    expect(screen.queryByRole("button", { name: "Timing" })).not.toBeInTheDocument();
+  });
   it("filters by average time, without classifying unknowns as short runs", () => {
     const unknown = { ...workflow, timing: null, durationSource: "unknown" as const };
     expect(filterWorkflows([workflow, unknown], { ...defaultWorkflowFilters, duration: "medium" })).toEqual([workflow]);
@@ -38,17 +51,15 @@ describe("workflow elapsed timing", () => {
   it("keeps step timing tied to its source on reorder and hides stale timing while editing", async () => {
     sessionStorage.clear();
     render(<WorkflowEditor workflow={workflow} save={() => new Promise(() => {})} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "Move step 1" }), { key: "ArrowDown", altKey: true });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Step 1 actions" }), { key: "ArrowDown", altKey: true });
     const moved = screen.getByRole("button", { name: "Timing for step 2" });
     fireEvent.mouseEnter(moved);
     expect(screen.getByRole("tooltip")).toHaveTextContent("5m on average");
     fireEvent.mouseLeave(moved);
     fireEvent.change(screen.getByRole("textbox", { name: "Step 2 title" }), { target: { value: "Different scope" } });
-    fireEvent.mouseEnter(moved);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Time not measured yet");
-    fireEvent.mouseLeave(moved);
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "Workflow timing" }));
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Time not measured yet");
+    expect(screen.queryByRole("button", { name: "Timing for step 2" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Workflow timing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
   it("shows average, single and unknown cards without the removed evidence diagnostics", async () => {
     window.history.replaceState(null, "", "/home?mode=workflows");
@@ -89,8 +100,7 @@ describe("workflow elapsed timing", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("5m on average");
     expect(screen.getByRole("tooltip")).toHaveTextContent("2 observed runs · 4m to 6m");
     fireEvent.mouseLeave(step);
-    fireEvent.focus(screen.getByRole("button", { name: "Timing for step 2" }));
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Time not measured yet");
+    expect(screen.queryByRole("button", { name: "Timing for step 2" })).not.toBeInTheDocument();
     // Removing diagnostic chrome must not discard the persisted run boundaries.
     expect(workflowTiming(workflow.timing)).toMatchObject({ averageMinutes: 24, sampleCount: 3 });
   });

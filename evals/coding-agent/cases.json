@@ -6441,6 +6441,179 @@
         ],
         "command": "cd screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-settings-falsy.config.mjs"
       }
+    },
+    {
+      "id": "app-browser-native-consent-navigation",
+      "name": "Show native browser session consent without losing ownership safeguards",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "0cf9a64a5d7684b00c318154b249400bc007fd38"
+      },
+      "base_ref": "a71e821de98615c9bafde1574298cb592b664634",
+      "oracle_ref": "0cf9a64a5d7684b00c318154b249400bc007fd38",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "privacy",
+        "browser",
+        "react"
+      ],
+      "prompt": "The browser sidebar can stay on a loading view when native navigation pauses for permission to use a browser login. Fix the existing consent flow so a valid session-access request for the current chat and navigation presents the explicit Use browser session and Continue logged out choices. Accept native snake_case navigation_id and the existing camelCase navigationId event format, for both the default browser and user-created tabs. Pause loading while permission is pending and hide the native user tab so it cannot cover the choices. Do not resolve the request or change cookie-access/settings state before the user chooses. Each explicit choice must resolve the original request once with the selected boolean, set cookie access to that choice (mark denial when declined), update browserCookieAccessGranted, and dismiss the prompt. Preserve rejection of stale or absent navigation IDs and foreign or absent owners, with no prompt or permission/settings effects. The hidden checks mount the actual component with synthetic native events, persistence and presentation ports. Native webview geometry and cookie extraction are outside this case. Keep the existing ownership protections and add or update relevant tests.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 120,
+        "fixtures": [
+          {
+            "local_path": "graders/browser-consent.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/components/.eval-browser-consent.test.tsx"
+          },
+          {
+            "local_path": "graders/browser-consent.bootstrap.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-browser-consent-bootstrap.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node .eval-browser-consent-bootstrap.mjs"
+      },
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/browser-sidebar.tsx"
+      ],
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ]
+    },
+    {
+      "id": "ai-gateway-vertex-stream-fallback",
+      "name": "Keep reasoning-only Vertex streams visibly readable",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "65f7928a294cc847534cb1adfe693e8553addfa1"
+      },
+      "base_ref": "dec32b804203013868d99a87ba94b6bac61d00e9",
+      "oracle_ref": "65f7928a294cc847534cb1adfe693e8553addfa1",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "streaming",
+        "provider-compatibility"
+      ],
+      "prompt": "The public Vertex MaaS streaming completion can return no visible answer when a thinking model supplies only reasoning_content. Preserve the original reasoning deltas and expose their complete text as content exactly once when the stream finishes, sends [DONE], or closes without either, provided no nonempty content was delivered. Handle empty content deltas, CRLF lines and arbitrary byte boundaries including split Unicode. Preserve response id, model and choice index; fallback content must precede an existing [DONE] marker. Ordinary content and reasoning followed by a real answer must remain exact without appended reasoning. Empty streams must not invent text. Preserve tool-call deltas, usage records, comments, malformed data lines and ordinary upstream client-error refusal. For the existing glm-4.7 endpoint, retain one completion POST, bearer authorization, user messages, zero temperature, max_tokens and stream:true without changing caller input. Use synthetic authentication and transport only; never call live providers. No particular helper or transform implementation is required. This task covers one-choice streaming transport, not non-streaming JSON parsing, multiple-choice multiplexing, live model output, billing or desktop rendering.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/vertex-stream-fallback.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
+      }
+    },
+    {
+      "id": "app-recording-status-authority",
+      "name": "Recover unavailable recording status without changing capture authority",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "dd332af338ba8302b3df12ef424d8a4c7e7bf291"
+      },
+      "base_ref": "bbc17e34d453abb9449be47e0cfc9d7a9ecd8565",
+      "oracle_ref": "dd332af338ba8302b3df12ef424d8a4c7e7bf291",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/recording-status.tsx"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/recording-status.tsx"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "recording",
+        "user-pause",
+        "status-recovery"
+      ],
+      "prompt": "The recording status popover offers the wrong controls when device information is empty or stale. Preserve the RecordingStatus public interface. For a running session with no reported devices, provide accessible Check again and Open settings actions, without offering a global pause/resume action or changing capture. Check again calls onRefreshDevices once, keeps an accessible Check again or Checking button disabled while pending, prevents duplicate requests, and becomes usable again after either success or rejection. Open settings invokes onOpenRecordingSettings. Global pause must take precedence over an empty device list or stale active devices: show an accessible Resume all recording action that invokes onResumeRecording once, with no individual Pause/Resume controls or device requests. When settings disable all capture, show no capture or status-retry controls, but keep Open settings available, regardless of reported device or global-pause state. Preserve existing behavior: a live session whose devices are individually paused resumes those devices through POST /vision/device/start with monitor_id and POST /audio/device/start with device_name, without global callbacks; active or mixed devices pause through onPauseRecording; a globally paused session resumes through the global callback. A monitor without an id must issue no request while eligible audio devices still resume. Failed individual requests must restore their previous paused state. Hide the global control when both callbacks are absent; an unavailable global resume callback must leave its action disabled or absent. Preserve accessible action names pause all recording, resume all recording and resume (case-insensitive). No private function names, test attributes or implementation structure are required. This task covers frontend controls with synthetic callback/API boundaries, not Home wiring or native recording.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/recording-status-authority.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume.test.tsx"
+          },
+          {
+            "local_path": "graders/recording-resume-config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume.config.mjs"
+          },
+          {
+            "local_path": "graders/recording-resume-translation.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume-translation.ts"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/recording-resume.config.mjs"
+      }
+    },
+    {
+      "id": "app-pipe-watch-switch-preservation",
+      "name": "Keep authoritative watched-pipe text when switching conversations",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "3a427b22626db983406d917b43abe4888c647dfc"
+      },
+      "base_ref": "6b4edca9b022ddfdc5c489e6175507f626298f71",
+      "oracle_ref": "3a427b22626db983406d917b43abe4888c647dfc",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/hooks/use-chat-conversations.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/hooks/use-chat-conversations.ts",
+        "apps/screenpipe-app-tauri/lib/stores/chat-store.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "data-preservation",
+        "pipe-history"
+      ],
+      "prompt": "Switching conversations can replace a watched pipe's newer streamed text with the panel's stale copy when both copies have the same message count. Repair the actual useChatConversations loadConversation path so leaving a pipe-watch session retains its authoritative store messages. Preserve normal chat ownership: an equally sized panel transcript must still replace the normal chat's older store transcript, while a shorter panel snapshot must not discard additional stored messages. Loading a warm incoming chat must restore its stored messages and update both the current store identity and the panel session reference to that incoming chat. Keep the public hook and session-store interfaces compatible. Checks mount the real React hook with its real store and synthetic native, storage and translation ports. No particular guard, helper, or reducer architecture is required. New-chat creation, stream-event delivery, native rendering, disk durability and crash recovery are outside this historical task.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/pipe-watch-switch.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/pipe-watch-switch.test.tsx"
+          },
+          {
+            "local_path": "graders/pipe-watch-switch-config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/pipe-watch-switch.config.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/pipe-watch-switch.config.mjs"
+      }
     }
   ]
 }

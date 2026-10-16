@@ -1,5 +1,39 @@
 # Coding-agent regression evals
 
+`app-recording-status-authority` mounts the actual recording popover with
+synthetic device, settings and callback inputs. Fourteen outcomes distinguish
+empty or stale status from capture authority, preserve global/device actions,
+and require status retry without capture mutation. The parent fails four and
+preserves ten; the historical fix and current component pass fourteen.
+Run `bun test evals/coding-agent/calibrate-recording-status-authority.test.js`
+for equivalent, unused-fix, retry, routing, rollback and setup-error controls.
+Fixtures and dependency links appear only at grading. This does not execute
+Home wiring, native recording, enforced isolation or model trials.
+
+`ai-gateway-vertex-stream-fallback` executes the public streaming provider with
+synthetic authentication and transport. Twelve outcomes cover reasoning-only
+finish, terminal marker, EOF, split Unicode, CRLF and empty deltas, while
+preserving ordinary answers, reasoning events, tools, usage and refusals.
+Run `bun test evals/coding-agent/calibrate-vertex-stream-fallback.test.js` for ten
+controls, including equivalent guards, disconnected correct code, duplicate
+fallback, overwritten answers, lost reasoning and missing-source setup errors.
+Hidden fixtures appear only at grading; no dependency links are needed.
+This does not test live models, multiple-choice streams, full HTTP gateway
+admission, billing, desktop rendering, execution isolation or model trials.
+
+`app-browser-native-consent-navigation` mounts the actual browser sidebar,
+event hook and ownership helpers with synthetic native and persistence ports.
+Twelve outcomes cover native and compatible event formats, default/user tabs,
+explicit allow/decline, pending-state effects and stale/foreign refusals.
+The parent fails four native-event outcomes and preserves eight; the historical
+fix and current component pass twelve. Run
+`bun test evals/coding-agent/calibrate-browser-consent.test.js` for calibration.
+Hidden fixtures and dependency links appear only at grading. This does not test
+native cookie extraction, webview geometry, execution isolation or model trials.
+The associated shared-runner fix classifies failed Vitest source transforms as
+setup errors only with a non-failure test summary and compiler diagnostics;
+executed assertion failures retain their behavioral classification.
+
 `app-historical-analytics-false-persistence` mounts the historical settings hook
 with synthetic native storage. Fourteen outcomes cover explicit false, zero and
 empty strings, accepted updates across remount, missing/null defaults, ordinary
@@ -1940,3 +1974,5 @@ unresponsive startup stop collection as setup errors. Calibrate with
 ### Vertex upstream JSON failures
 
 The Vertex upstream JSON case executes public JSON and streaming completion methods with synthetic OAuth and completion transport. Empty or malformed successful bodies must produce status 502 while valid content, reasoning fallback, client refusal and streaming remain intact. It does not prove gateway retry behavior, live provider reliability or agent isolation.
+
+`app-pipe-watch-switch-preservation` mounts the real conversation-switch hook and session store. It distinguishes equal-count stale pipe-watch text from normal panel ownership, preserves longer stored transcripts, and checks incoming chat identity. This is separate from saved terminal pipe transcripts and overlapping-load races. Run `bun test evals/coding-agent/calibrate-pipe-watch-switch.test.js` for calibration. Native delivery and disk durability are outside its scope.

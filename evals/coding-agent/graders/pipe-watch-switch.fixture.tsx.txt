@@ -1,0 +1,30 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import {afterEach,beforeEach,expect,test,vi} from 'vitest';
+import {act,cleanup,renderHook} from '@testing-library/react';
+import {useChatConversations} from '../components/hooks/use-chat-conversations';
+import {useChatStore} from '../lib/stores/chat-store';
+vi.mock('@/lib/utils/tauri',()=>({commands:{}}));
+vi.mock('@/lib/hooks/use-settings',()=>({getStore:async()=>({get:async()=>undefined,set:async()=>{},save:async()=>{}})}));
+vi.mock('@/lib/chat-storage',()=>({saveConversationFile:vi.fn(),deleteConversationFile:vi.fn(),loadAllConversations:async()=>[],loadConversationFile:async()=>null,migrateFromStoreBin:async()=>{},listConversations:async()=>[],searchConversations:async()=>[],CHAT_HISTORY_INITIAL_LIMIT:50}));
+afterEach(cleanup);
+beforeEach(()=>{useChatStore.setState({sessions:{},currentId:null});globalThis.fetch=vi.fn(()=>{throw Error('network disabled')}) as any;});
+const msg=(id:string,content:string)=>({id,role:'assistant',content,timestamp:1});
+function session(id:string,kind='chat',messages:any[]=[]){useChatStore.getState().actions.upsert({id,kind,title:id,preview:'',status:'streaming',messageCount:messages.length,createdAt:1,updatedAt:1,pinned:false,unread:false,messages,hydratedAt:1} as any);}
+function mount(kind:string){
+ const fresh=[msg('one','first turn with newly streamed text')],stale=[msg('one','first')];session('outgoing',kind,fresh);session('incoming','chat',[msg('target','incoming complete')]);useChatStore.getState().actions.setCurrent('outgoing');
+ const opts:any={messages:stale,conversationId:'outgoing',setMessages:vi.fn(),setConversationId:vi.fn(),setInput:vi.fn(),inputRef:{current:null},isLoading:true,isStreaming:true,piInfo:null,piStreamingTextRef:{current:'stale'},piMessageIdRef:{current:'one'},piContentBlocksRef:{current:[]},piSessionSyncedRef:{current:true},piSessionIdRef:{current:'outgoing'},setIsLoading:vi.fn(),setIsStreaming:vi.fn(),setPastedImages:vi.fn(),settings:{chatHistory:{historyEnabled:false}}};
+ const hook=renderHook(()=>useChatConversations(opts));return {hook,opts,fresh,stale};
+}
+test('switch from watched pipe preserves newer authoritative messages',async()=>{const p=mount('pipe-watch');await act(async()=>{await p.hook.result.current.loadConversation({id:'incoming',title:'incoming',messages:[]} as any)});expect(useChatStore.getState().sessions.outgoing.messages).toEqual(p.fresh);});
+test('switch from normal chat preserves the panel-owned messages',async()=>{const p=mount('chat');await act(async()=>{await p.hook.result.current.loadConversation({id:'incoming',title:'incoming',messages:[]} as any)});expect(useChatStore.getState().sessions.outgoing.messages).toEqual(p.stale);});
+test('incoming warm chat restores messages and foreground identity',async()=>{const p=mount('pipe-watch');await act(async()=>{await p.hook.result.current.loadConversation({id:'incoming',title:'incoming',messages:[]} as any)});expect(p.opts.setMessages).toHaveBeenLastCalledWith([msg('target','incoming complete')]);expect(useChatStore.getState().currentId).toBe('incoming');expect(p.opts.piSessionIdRef.current).toBe('incoming');});
+
+test('shorter panel snapshot cannot discard additional normal-chat messages',async()=>{const p=mount('chat');const full=[...p.fresh,msg('two','second turn')];useChatStore.getState().actions.setMessages('outgoing',full as any);await act(async()=>{await p.hook.result.current.loadConversation({id:'incoming',title:'incoming',messages:[]} as any)});expect(useChatStore.getState().sessions.outgoing.messages).toEqual(full);});
+
+vi.mock('@tauri-apps/api/event',()=>({emit:async()=>{},listen:async()=>()=>{}}));
+vi.mock('@/lib/utils/generate-title-with-preset',()=>({titleCreatedByAI:async()=>null}));
+vi.mock('@/lib/browser-state-cache',()=>({getCachedBrowserStateEntry:()=>null,resolveNewestBrowserState:()=>null}));
+vi.mock('@/components/chat/archive-undo-toast',()=>({showChatArchiveUndoToast:()=>{}}));
+vi.mock('@/lib/i18n/provider',()=>({useUiLocale:()=> 'en'}));
+vi.mock('gt-react',()=>({useGT:()=> (s:string)=>s,msg:(s:string)=>s}));

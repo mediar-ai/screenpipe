@@ -2,6 +2,8 @@
 // https://screenpipe.com
 import { desktopQuestionnaireVoice } from "./questionnaire-voice";
 import { workflowModelPreference } from "./model-choice";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { desktopGuides } from "./guides";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -168,6 +170,12 @@ export const desktopWorkflowsPlatform: WorkflowsPlatform = {
   saveWorkflowSkill,
   guides: desktopGuides,
   library: {
+    downloadDocument: async (content, filename) => {
+      const path = await save({ defaultPath: filename, filters: [{ name: "Markdown", extensions: ["md"] }] });
+      if (!path) return false;
+      await writeTextFile(path, content);
+      return true;
+    },
     listSkillDrafts: listSkillDraftsFromDisk,
     saveSkillDraft: saveSkillDraftToDisk,
     listInstalledSkills: async () => {

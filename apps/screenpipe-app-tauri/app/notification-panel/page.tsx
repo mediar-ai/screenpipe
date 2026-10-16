@@ -37,6 +37,8 @@ import { qualifiedValue } from "@/lib/analytics/qualified-value";
 import { NotificationActionButton } from "@/components/notification-action-button";
 import { isNotificationFeedbackEligible } from "@/lib/ai-feedback";
 import { NotificationFeedback } from "@/components/notification-feedback";
+import { MeetingJoinNotification } from "@/components/meeting-join-notification";
+import { showNotificationPanel } from "@/lib/hooks/use-notification-panel";
 import { useGT } from "gt-react";
 
 
@@ -174,12 +176,22 @@ export default function NotificationPanelPage() {
             }
             return;
           }
+          let screenDetailFailed = false;
           await executeNotificationAction(actionObj, {
+            onScreenDetailError: () => { screenDetailFailed = true; },
             pipeName: payload?.pipe_name,
             sourceId: payload?.id,
             sourceUrl: payload?.source_url,
           });
           await hide("action");
+          if (screenDetailFailed) {
+            await showNotificationPanel({
+              id: "meeting-screen-detail-failed", type: "warning",
+              title: ui("Screen detail could not start"),
+              body: ui("You can still join your meeting normally."),
+              actions: [], autoDismissMs: 12000,
+            });
+          }
           return;
         }
 
@@ -272,6 +284,7 @@ export default function NotificationPanelPage() {
       payload?.pipe_name,
       payload?.source_url,
       hide,
+      ui,
     ],
   );
 
@@ -435,6 +448,13 @@ export default function NotificationPanelPage() {
 
   if (!payload || !visible) {
     return null;
+  }
+
+  if (payload.actions.some((action) => action.type === "meeting_join" && action.url)) {
+    return <MeetingJoinNotification key={payload.id} {...payload}
+      onAction={handleAction} onDismiss={() => void hide("explicit")}
+      onMouseEnter={() => { hoveredRef.current = true; }}
+      onMouseLeave={() => { hoveredRef.current = false; }} />;
   }
 
   const visibleActions = payload.actions.filter(

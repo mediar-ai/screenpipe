@@ -1751,14 +1751,8 @@ async fn main() {
             // setup is backgrounded and idempotent: it installs missing MCP +
             // skill entries, refreshes stale screenpipe launchers, and leaves
             // unrelated tool settings alone.
-            if !app_ui_hidden {
-                let local_api = recording::local_api_context_from_app(&app.handle());
-                skills::connect_detected_ai_tools_in_background(
-                    app.handle().clone(),
-                    store.recording.api_auth,
-                    local_api.port,
-                );
-            }
+            let local_api_config = store.to_recording_config(data_dir.clone());
+            skills::connect_detected_ai_tools_in_background(&local_api_config);
 
             // Enterprise hidden-UI deployments always run headless with the
             // recorder only, regardless of user settings or onboarding state.
@@ -2033,12 +2027,11 @@ async fn main() {
                         };
 
                         server_runtime.block_on(async move {
-                            // Resolve + seed the shared api_auth_key cache before building
-                            // the config. `to_recording_config` is sync and reads the
-                            // cache; without this step the server would start with
-                            // `api_auth_key = None` on the app-auto-start path and every
-                            // request would 403. Mirrors the path in `spawn_screenpipe`.
-                            if store_clone.recording.api_auth {
+                            // Use effective auth: LAN access requires a key even when
+                            // the persisted auth toggle is off. Match `spawn_screenpipe`
+                            // and seed the same key the background installer waits for.
+                            let mut config = store_clone.to_recording_config(data_dir_clone.clone());
+                            if config.api_auth {
                                 let settings_key_opt = if store_clone.recording.api_key.is_empty() {
                                     None
                                 } else {
@@ -2050,11 +2043,13 @@ async fn main() {
                                 )
                                 .await
                                 {
-                                    Ok(key) => crate::store::seed_api_auth_key(key),
+                                    Ok(key) => {
+                                        crate::store::seed_api_auth_key(key.clone());
+                                        config.api_auth_key = Some(key);
+                                    },
                                     Err(e) => tracing::error!("failed to resolve api auth key: {}", e),
                                 }
                             }
-                            let config = store_clone.to_recording_config(data_dir_clone.clone());
 
                             // Check if server already running
                             let server_running = tokio::time::timeout(
