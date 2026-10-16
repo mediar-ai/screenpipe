@@ -6697,6 +6697,48 @@
         ],
         "command": "node .eval-audio-drop/audio-drop.mjs && cargo test --locked -p screenpipe-audio --lib eval_audio_drop -- --test-threads=1"
       }
+    },
+    {
+      "id": "app-mcp-browser-boundary",
+      "name": "Reject foreign browser authority at the HTTP MCP boundary",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "52297f8edee9c85ada55581f6ae7287b0643df82"
+      },
+      "base_ref": "6bb753f85c6a01cc3a2fc26890ce68cef5cbad85",
+      "oracle_ref": "52297f8edee9c85ada55581f6ae7287b0643df82",
+      "oracle_paths": [
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "tags": [
+        "regression",
+        "security",
+        "mcp",
+        "privacy",
+        "preserved-behavior"
+      ],
+      "agent_timeout_seconds": 900,
+      "prompt": "The HTTP MCP listener trusts every loopback TCP peer, allowing browser requests with attacker-controlled Host or Origin headers to initialize or use sessions. Repair the actual HTTP boundary. Without a matching configured bearer token, reject foreign authorities, misleading localhost/IP suffixes, userinfo-like authorities, numeric IP aliases, foreign origins and opaque null origins with HTTP 401 and no new session. Apply that protection to initialization, existing-session tools/list and DELETE, including /mcp query URLs; rejected deletion must leave the legitimate session usable. Preserve native clients using literal 127.0.0.1, localhost (case insensitive) or bracketed ::1 authorities with optional ports, and local HTTP/HTTPS origins using those literals. Explicit matching bearer credentials must still authorize otherwise untrusted authorities/origins; wrong or malformed bearer values must not. Successful initialization must return a real usable session and advertise tools, including search_content on listing. Preserve health status/session accounting, unauthenticated /health and OPTIONS, and 404 for unknown authorized routes. Use synthetic loopback traffic with telemetry disabled and no real tool/backend calls. No particular private helper or implementation path is required. This task does not test a real browser/DNS resolver, remote network reachability, all header-parser ambiguities, native recording, telemetry delivery or registry packaging.",
+      "grader_dependency_links": [
+        {
+          "source_path": "packages/screenpipe-mcp/node_modules",
+          "destination_path": "packages/screenpipe-mcp/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/mcp-browser-boundary.fixture.ts.txt",
+            "destination_path": "packages/screenpipe-mcp/src/eval-browser-boundary.test.ts"
+          }
+        ],
+        "command": "cd packages/screenpipe-mcp && SCREENPIPE_DISABLE_TELEMETRY=1 SCREENPIPE_MCP_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 SCREENPIPE_API_URL=http://127.0.0.1:1 node node_modules/vitest/vitest.mjs run src/eval-browser-boundary.test.ts"
+      }
     }
   ]
 }
