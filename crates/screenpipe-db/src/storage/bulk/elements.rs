@@ -29,6 +29,25 @@ pub(super) const TABLE: Table = Table {
 };
 
 pub(super) const TOMBSTONE_INDEX: &str = "_bulk_element_resident_tombstones";
+pub(super) const TOMBSTONE_PREDICATE: &str = "_archive_deleted=1 AND _archive_file IS NULL";
+pub(super) fn tombstone_index_sql() -> String {
+    format!(
+        "CREATE INDEX IF NOT EXISTS {TOMBSTONE_INDEX} \
+         ON _bulk_element_rows(id) WHERE {TOMBSTONE_PREDICATE}"
+    )
+}
+
+pub(super) fn cleanup_sql() -> String {
+    format!(
+        "DELETE FROM _bulk_element_rows
+         INDEXED BY {TOMBSTONE_INDEX}
+         WHERE {TOMBSTONE_PREDICATE} AND id IN (
+         SELECT id FROM _bulk_element_rows
+         INDEXED BY {TOMBSTONE_INDEX}
+         WHERE {TOMBSTONE_PREDICATE} LIMIT {})",
+        super::FILE_ROWS
+    )
+}
 
 pub(super) async fn ensure_cleanup_index(conn: &mut SqliteConnection) -> Result<bool, sqlx::Error> {
     let existed: bool = sqlx::query_scalar(
@@ -37,13 +56,11 @@ pub(super) async fn ensure_cleanup_index(conn: &mut SqliteConnection) -> Result<
     .bind(TOMBSTONE_INDEX)
     .fetch_one(&mut *conn)
     .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS _bulk_element_resident_tombstones \
-         ON _bulk_element_rows(id) \
-         WHERE _archive_deleted=1 AND _archive_file IS NULL",
-    )
-    .execute(&mut *conn)
-    .await?;
+    // Normal startup can share a WAL with active readers. Requiring the
+    // offline construction checkpoint here would reject a valid startup.
+    sqlx::query(sqlx::AssertSqlSafe(tombstone_index_sql()))
+        .execute(&mut *conn)
+        .await?;
     Ok(!existed)
 }
 
@@ -175,7 +192,6 @@ pub(super) async fn bootstrap_mode(
     crate::storage::schema::construction_sql(conn, &format!(
         "CREATE INDEX _bulk_element_staged_frame ON _bulk_element_rows(frame_id);
          CREATE INDEX _bulk_element_staged_file ON _bulk_element_rows(_archive_file) WHERE _archive_file IS NOT NULL;
-         CREATE INDEX _bulk_element_resident_tombstones ON _bulk_element_rows(id) WHERE _archive_deleted=1 AND _archive_file IS NULL;
          CREATE TABLE _bulk_element_ranges(first_id INTEGER PRIMARY KEY,last_id INTEGER NOT NULL,file_id INTEGER NOT NULL UNIQUE REFERENCES _bulk_files(id));
          CREATE TABLE _bulk_element_frames(frame_id INTEGER NOT NULL,file_id INTEGER NOT NULL REFERENCES _bulk_files(id),PRIMARY KEY(frame_id,file_id));
          CREATE INDEX _bulk_element_frames_file ON _bulk_element_frames(file_id);
@@ -195,6 +211,7 @@ pub(super) async fn bootstrap_mode(
          INSERT INTO elements_fts(rowid,text,role,frame_id) SELECT id,text,role,frame_id FROM _bulk_element_rows WHERE text IS NOT NULL AND text!='';
          UPDATE storage_metadata SET staging_bytes=staging_bytes+COALESCE((SELECT SUM({bytes}) FROM _bulk_element_rows),0);",
         bytes=TABLE.all_bytes(""))).await?;
+    crate::storage::schema::construction_sql(conn, &tombstone_index_sql()).await?;
     if in_place {
         sqlx::query(
             "UPDATE sqlite_sequence SET name='elements' WHERE name='_bulk_elements_source'",

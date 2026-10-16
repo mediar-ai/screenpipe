@@ -449,16 +449,9 @@ pub(crate) async fn reclaim(
     // sqlite_stat1 rows that otherwise make SQLite rescan all resident history.
     // One established file-sized batch bounds writer occupancy; later
     // maintenance turns durably drain the remainder.
-    sqlx::query(
-        "DELETE FROM _bulk_element_rows
-         INDEXED BY _bulk_element_resident_tombstones
-         WHERE _archive_deleted=1 AND _archive_file IS NULL AND id IN (
-         SELECT id FROM _bulk_element_rows
-         INDEXED BY _bulk_element_resident_tombstones
-         WHERE _archive_deleted=1 AND _archive_file IS NULL LIMIT 32768)",
-    )
-    .execute(permit.pool())
-    .await?;
+    sqlx::query(sqlx::AssertSqlSafe(super::cleanup_sql()))
+        .execute(permit.pool())
+        .await?;
     sqlx::query(
         "UPDATE _bulk_files SET state='retired' WHERE table_name='elements' AND state='encoding'",
     )
