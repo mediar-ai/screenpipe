@@ -167,9 +167,8 @@ describe("DesktopRemoteControl", () => {
         experimentalCoreaudioSystemAudio: false,
         experimentalMeetingPiggyback: true,
         filterMusic: false,
-        aecMode: "screenpipe",
-        screenpipeAecEnabled: true,
-        macosInputVpioEnabled: false,
+        aecMode: "macos",
+        macosInputVpioEnabled: true,
       }),
     );
     await waitFor(() =>

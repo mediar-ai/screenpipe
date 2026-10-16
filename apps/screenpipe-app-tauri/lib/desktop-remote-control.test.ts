@@ -128,13 +128,6 @@ describe("desktop remote control", () => {
     ).toBe("screenpipe");
   });
 
-  it("migrates saved and managed macOS AEC to software without disabling AEC", () => {
-    const policy = { defaultValue: "off" as const, forceDisabled: false };
-    expect(resolveAecModeRemoteValue("macos", policy, "macos")).toBe("screenpipe");
-    expect(resolveAecModeRemoteValue(null, policy, "macos", "macos")).toBe("screenpipe");
-    expect(resolveAecModeRemoteValue("off", policy, "macos")).toBe("off");
-  });
-
   it("keeps the input-latency optimization Windows-only", () => {
     const defaultOn = { defaultEnabled: true, forceDisabled: false };
     expect(
@@ -318,9 +311,9 @@ describe("desktop remote control", () => {
       experimentalCoreaudioSystemAudio: false,
       experimentalMeetingPiggyback: true,
       filterMusic: false,
-      aecMode: "screenpipe",
-      screenpipeAecEnabled: true,
-      macosInputVpioEnabled: false,
+      aecMode: "macos",
+      screenpipeAecEnabled: false,
+      macosInputVpioEnabled: true,
       windowsInputAecEnabled: false,
     });
     expect(result.changedControls).toEqual([

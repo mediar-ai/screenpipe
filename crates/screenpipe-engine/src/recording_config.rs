@@ -736,9 +736,9 @@ mod tests {
             ..Default::default()
         };
         let c = build(&explicit_macos);
-        assert_eq!(c.screenpipe_aec_enabled, cfg!(target_os = "macos"));
+        assert!(!c.screenpipe_aec_enabled);
         assert!(!c.windows_input_aec_enabled);
-        assert!(!c.macos_input_vpio_enabled);
+        assert!(c.macos_input_vpio_enabled);
     }
 
     #[test]

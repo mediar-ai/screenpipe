@@ -932,7 +932,6 @@
       "label": "Audio device, stream, and lag health",
       "crate": "screenpipe-audio",
       "files": [
-        "src/audio_manager/builder.rs",
         "src/audio_manager/device_monitor.rs",
         "src/audio_manager/manager.rs",
         "src/core/device.rs",
@@ -941,6 +940,7 @@
         "src/core/process_tap/counters.rs",
         "src/core/source_buffer.rs",
         "src/core/stream.rs",
+        "src/core/vpio_process.rs",
         "src/device/device_manager.rs",
         "src/idle_detector.rs",
         "src/lib.rs",

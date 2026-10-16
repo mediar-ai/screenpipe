@@ -82,6 +82,8 @@ pub struct AudioStream {
     stream_control: mpsc::Sender<StreamControl>,
     stream_thread: Option<Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>>,
     pub is_disconnected: Arc<AtomicBool>,
+    /// Native worker exited; recorder flushes its tail before publishing disconnection.
+    pub(crate) capture_failed: Arc<AtomicBool>,
     /// True when this stream is backed by the cpal/ScreenCaptureKit path
     /// (the default), false when it is backed by the CoreAudio Process Tap.
     /// The macOS System Audio liveness watchdog ([`super::sck_output_watchdog`])
@@ -92,7 +94,7 @@ pub struct AudioStream {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum StopMode {
+pub(super) enum StopMode {
     Immediate,
     #[cfg(any(not(all(target_os = "linux", feature = "pulseaudio")), test))]
     DeferredDeviceDisconnect,
@@ -111,7 +113,7 @@ impl StopMode {
     }
 }
 
-enum StreamControl {
+pub(super) enum StreamControl {
     Stop {
         _response: oneshot::Sender<()>,
         _mode: StopMode,
@@ -160,6 +162,7 @@ impl AudioStream {
         let (tx, _) = broadcast::channel::<Vec<f32>>(1000);
         let tx_clone = tx.clone();
         let is_disconnected = Arc::new(AtomicBool::new(false));
+        let capture_failed = Arc::new(AtomicBool::new(false));
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
         #[cfg(all(target_os = "linux", feature = "pulseaudio"))]
@@ -262,6 +265,7 @@ impl AudioStream {
                                 &stream_control_tx,
                                 windows_input_aec,
                                 macos_input_vpio,
+                                &capture_failed,
                             )
                             .await?;
                             (config, thread, true)
@@ -282,6 +286,7 @@ impl AudioStream {
                     &stream_control_tx,
                     windows_input_aec,
                     macos_input_vpio,
+                    &capture_failed,
                 )
                 .await?;
                 (config, thread, true)
@@ -295,6 +300,7 @@ impl AudioStream {
             stream_control: stream_control_tx,
             stream_thread: Some(Arc::new(tokio::sync::Mutex::new(Some(stream_thread)))),
             is_disconnected,
+            capture_failed,
             is_sck_backed,
         })
     }
@@ -312,14 +318,25 @@ impl AudioStream {
         stream_control_tx: &mpsc::Sender<StreamControl>,
         windows_input_aec: bool,
         macos_input_vpio: bool,
+        #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] capture_failed: &Arc<
+            AtomicBool,
+        >,
     ) -> Result<(AudioStreamConfig, tokio::task::JoinHandle<()>)> {
+        #[cfg(target_os = "macos")]
+        if macos_input_vpio && is_default_input_device(device) {
+            return super::vpio_process::start(
+                device.clone(),
+                tx,
+                stream_control_rx,
+                capture_failed.clone(),
+            )
+            .await;
+        }
+
         let (cpal_audio_device, config) = get_cpal_device_and_config(device).await?;
         let is_running_weak = Arc::downgrade(is_running);
         let input_aec = windows_input_aec && device.device_type == super::device::DeviceType::Input;
-        // VPIO can deadlock inside Apple's route reconfiguration. Its internal
-        // workers are outside our lifetime lock; timeouts cannot unwind them. Product
-        // callers migrate legacy native-AEC settings to HAL + software AEC.
-        // Keep this low-level boundary safe for callers passing the old flag.
+        // Native AEC is isolated above. Other CPAL streams stay in-process.
         let _ = macos_input_vpio;
         let input_vpio = false;
 
@@ -598,6 +615,7 @@ impl AudioStream {
             stream_control: stream_control_tx,
             stream_thread: None,
             is_disconnected: Arc::new(AtomicBool::new(false)),
+            capture_failed: Arc::new(AtomicBool::new(false)),
             is_sck_backed: false,
         };
         (stream, tx_arc)
@@ -700,6 +718,7 @@ impl AudioStream {
             // shape so `stop()` can abort the playback task uniformly.
             stream_thread: Some(Arc::new(tokio::sync::Mutex::new(Some(thread)))),
             is_disconnected,
+            capture_failed: Arc::new(AtomicBool::new(false)),
             // wav playback fixture is an input device, never the SCK output path.
             is_sck_backed: false,
         })
@@ -786,7 +805,7 @@ fn first_access_denied_for_device(device: &str) -> bool {
 }
 
 #[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
-fn build_input_stream(
+pub(super) fn build_input_stream(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
     channels: u16,
@@ -851,11 +870,17 @@ fn build_input_stream(
 }
 
 #[cfg(target_os = "macos")]
-fn macos_voice_processing_config(
-    _legacy_enabled: bool,
-) -> Option<cpal::MacosVoiceProcessingInputConfig> {
-    // Always HAL. Software AEC runs after capture, outside the native callback.
-    None
+fn is_default_input_device(device: &AudioDevice) -> bool {
+    use super::device::{default_input_device, DeviceType};
+    device.device_type == DeviceType::Input
+        && default_input_device()
+            .map(|default| default == *device)
+            .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_voice_processing_config(enabled: bool) -> Option<cpal::MacosVoiceProcessingInputConfig> {
+    enabled.then(cpal::MacosVoiceProcessingInputConfig::screenpipe_aec)
 }
 
 #[cfg(not(all(target_os = "linux", feature = "pulseaudio")))]
@@ -1052,26 +1077,22 @@ mod from_wav_tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn legacy_native_aec_cannot_reenter_voiceprocessor() {
-        assert!(macos_voice_processing_config(true).is_none());
+    fn native_aec_remains_enabled_for_capture_worker() {
+        let config = macos_voice_processing_config(true).unwrap();
+        assert!(config.enable_voice_processing);
+        assert_eq!(config.voice_processing_bypass, Some(false));
         assert!(macos_voice_processing_config(false).is_none());
     }
 
-    /// Opt-in hardware proof: repeatedly open a replacement before stopping
-    /// its predecessor, run real mic samples through software AEC, and verify
-    /// the production file writer's output can be decoded. No OS default
-    /// changes, transcription, network calls, or retained microphone files.
     #[cfg(target_os = "macos")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "opens the real default microphone; run explicitly on macOS"]
-    async fn live_legacy_aec_handoffs_persist_microphone_samples() -> Result<()> {
+    #[ignore = "opens the real microphone with native Apple AEC"]
+    async fn live_native_aec_records_and_flushes_audio() -> Result<()> {
         use crate::core::run_record_and_transcribe::run_record_and_transcribe;
         use crate::metrics::AudioPipelineMetrics;
         use crate::utils::ffmpeg::{read_audio_from_file, write_audio_to_file};
-
-        async fn open(device: Arc<AudioDevice>) -> Result<Arc<AudioStream>> {
-            // Deliberately pass the legacy native flag to verify even a raw
-            // caller cannot enter VPIO. Product callers migrate AEC upstream.
+        let device = Arc::new(super::super::device::default_input_device()?);
+        let stream = Arc::new(
             AudioStream::from_device(
                 device,
                 Arc::new(AtomicBool::new(true)),
@@ -1080,67 +1101,50 @@ mod from_wav_tests {
                 true,
                 None,
             )
-            .await
-            .map(Arc::new)
-        }
-        async fn samples(stream: &AudioStream) -> Result<Vec<f32>> {
-            let mut receiver = stream.subscribe().await;
-            let target = stream.device_config.sample_rate().0 as usize / 5;
-            tokio::time::timeout(Duration::from_secs(5), async {
-                let mut audio = Vec::new();
-                while audio.len() < target {
-                    audio.extend(receiver.recv().await?);
-                }
-                anyhow::ensure!(audio.iter().all(|s| s.is_finite()));
-                Ok::<_, anyhow::Error>(audio)
-            })
-            .await?
-        }
-
-        let device = Arc::new(super::super::device::default_input_device()?);
+            .await?,
+        );
+        let mut samples = stream.subscribe().await;
+        let running = Arc::new(AtomicBool::new(true));
+        let (tx, rx) = flume::bounded(8);
+        let recorder = tokio::spawn(run_record_and_transcribe(
+            stream.clone(),
+            Duration::from_secs(30),
+            Arc::new(tx),
+            running.clone(),
+            Arc::new(AudioPipelineMetrics::new()),
+            None,
+            None,
+            false,
+        ));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut count = 0;
+            while count < stream.device_config.sample_rate().0 as usize {
+                count += samples.recv().await?.len();
+            }
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+        running.store(false, Ordering::Relaxed);
+        tokio::time::timeout(Duration::from_secs(2), recorder).await???;
+        stream.stop().await?;
+        let segments: Vec<_> = rx.try_iter().collect();
+        anyhow::ensure!(!segments.is_empty());
+        let rate = segments[0].sample_rate;
+        let captured: Vec<_> = segments
+            .iter()
+            .flat_map(|s| s.data.iter().copied())
+            .collect();
+        anyhow::ensure!(!captured.is_empty());
         let dir = tempfile::tempdir()?;
-        let mut current = open(device.clone()).await?;
-        samples(&current).await?;
-        for cycle in 0..10 {
-            let replacement = open(device.clone()).await?;
-            let running = Arc::new(AtomicBool::new(true));
-            let (segment_tx, segment_rx) = flume::bounded(8);
-            let recorder = tokio::spawn(run_record_and_transcribe(
-                replacement.clone(),
-                Duration::from_secs(30),
-                Arc::new(segment_tx),
-                running.clone(),
-                Arc::new(AudioPipelineMetrics::new()),
-                None,
-                None,
-                true,
-            ));
-            let captured = samples(&replacement).await?;
-            // The predecessor must still deliver until the replacement does.
-            samples(&current).await?;
-            current.stop().await?;
-            running.store(false, Ordering::Relaxed);
-            tokio::time::timeout(Duration::from_secs(2), recorder).await???;
-            let segments: Vec<_> = segment_rx.try_iter().collect();
-            anyhow::ensure!(!segments.is_empty(), "AEC recorder lost microphone samples");
-            let sample_rate = segments[0].sample_rate;
-            let cleaned: Vec<f32> = segments
-                .iter()
-                .flat_map(|s| s.data.iter().copied())
-                .collect();
-            let path = dir.path().join(format!("handoff-{cycle}.m4a"));
-            write_audio_to_file(&cleaned, sample_rate, &path, false)?;
-            let (decoded, rate) = read_audio_from_file(&path)?;
-            anyhow::ensure!(rate == sample_rate && decoded.len() >= cleaned.len());
-            println!(
-                "handoff {cycle}: captured={}, persisted={}, decoded={}, teardown=ok",
-                captured.len(),
-                cleaned.len(),
-                decoded.len()
-            );
-            current = replacement;
-        }
-        current.stop().await?;
+        let path = dir.path().join("native-aec.m4a");
+        write_audio_to_file(&captured, rate, &path, false)?;
+        let (decoded, decoded_rate) = read_audio_from_file(&path)?;
+        anyhow::ensure!(decoded.len() >= captured.len() * decoded_rate as usize / rate as usize);
+        println!(
+            "native AEC actual recorder: captured={}, decoded={}, teardown=ok",
+            captured.len(),
+            decoded.len()
+        );
         Ok(())
     }
 

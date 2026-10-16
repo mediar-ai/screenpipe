@@ -374,8 +374,8 @@ pub struct RecordingSettings {
     #[serde(rename = "windowsInputAecEnabled", default)]
     pub windows_input_aec_enabled: bool,
 
-    /// Legacy native macOS AEC flag, retained for settings compatibility.
-    /// The `macos` AEC mode now uses HAL capture and software echo cancellation.
+    /// Experimental: request Apple VoiceProcessingIO (AEC) on the default macOS microphone.
+    /// Ignored on non-macOS platforms. Only the system default input uses VPIO; other devices use HAL.
     #[serde(rename = "macosInputVpioEnabled", default)]
     pub macos_input_vpio_enabled: bool,
 
@@ -932,11 +932,7 @@ impl RecordingSettings {
             AecMode::Off => (false, false, false),
             AecMode::Screenpipe => (true, false, false),
             AecMode::Windows => (false, true, false),
-            // Compatibility for saved/managed "macos" settings. VPIO can
-            // deadlock inside Apple's route reconfiguration, including its
-            // own VoiceProcessor threads. Keep AEC, but keep that native
-            // lifetime out of the recorder: HAL capture + software AEC.
-            AecMode::Macos => (cfg!(target_os = "macos"), false, false),
+            AecMode::Macos => (false, false, true),
         }
     }
 }
@@ -1308,15 +1304,10 @@ mod tests {
     }
 
     #[test]
-    fn legacy_macos_aec_keeps_echo_cancellation_without_voiceprocessor() {
+    fn native_macos_aec_selection_preserves_native_echo_cancellation() {
         let settings: RecordingSettings =
             serde_json::from_str(r#"{"aecMode":"macos","macosInputVpioEnabled":true}"#).unwrap();
-        // Native route reconfiguration can deadlock inside Apple's VPIO.
-        // Existing installations must use HAL + software AEC on their next start.
-        assert_eq!(
-            settings.effective_aec_flags(),
-            (cfg!(target_os = "macos"), false, false)
-        );
+        assert_eq!(settings.effective_aec_flags(), (false, false, true));
     }
 
     #[test]

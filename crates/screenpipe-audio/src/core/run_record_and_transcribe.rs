@@ -278,6 +278,10 @@ pub async fn run_record_and_transcribe(
                 && is_running.load(Ordering::Relaxed)
                 && !audio_stream.is_disconnected.load(Ordering::Relaxed)
             {
+                if audio_stream.capture_failed.load(Ordering::Acquire) && receiver.is_empty() {
+                    stream_error = Some(anyhow!("native audio capture worker exited"));
+                    break 'capture;
+                }
                 tokio::select! {
                     // Receive mic chunk
                     mic_res = receiver.recv() => {
@@ -442,6 +446,8 @@ pub async fn run_record_and_transcribe(
                 // Publishing disconnected earlier lets the monitor abort this
                 // task while its captured tail is still waiting to be queued.
                 let _ = fail_stream_dead(&audio_stream, &device_name, &metrics);
+            } else if audio_stream.capture_failed.load(Ordering::Acquire) {
+                audio_stream.is_disconnected.store(true, Ordering::Relaxed);
             }
             return Err(error);
         }
@@ -483,10 +489,11 @@ pub async fn run_record_and_transcribe(
         let mut last_non_zero_at = last_non_zero_seed_after_restart(&device_name, Instant::now());
         let mut sck_watchdog = crate::core::sck_output_watchdog::SckOutputWatchdog::default();
         let mut segment_count: u64 = 0;
+        let mut stream_error = None;
 
         let mut was_paused_for_lock = false;
 
-        while is_running.load(Ordering::Relaxed)
+        'capture: while is_running.load(Ordering::Relaxed)
             && !audio_stream.is_disconnected.load(Ordering::Relaxed)
         {
             if screenpipe_config::should_pause_audio_for_lock() {
@@ -530,7 +537,10 @@ pub async fn run_record_and_transcribe(
                     // stream is being torn down either way, so break out and
                     // let the flushes below persist what we have.
                     Err(_) if !is_running.load(Ordering::Relaxed) => break,
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        stream_error = Some(e);
+                        break 'capture;
+                    }
                 };
                 match received {
                     Some(chunk) => {
@@ -592,6 +602,17 @@ pub async fn run_record_and_transcribe(
             warn!("final flush failed for {}: {}", device_name, e);
         }
 
+        if let Some(error) = stream_error {
+            if audio_stream.capture_failed.load(Ordering::Acquire)
+                || error.downcast_ref::<StreamDeath>().is_some()
+            {
+                // The supervisor owns native cleanup. Only now, once
+                // queued audio is safe, may the monitor replace this recorder.
+                audio_stream.is_disconnected.store(true, Ordering::Relaxed);
+            }
+            return Err(error);
+        }
+
         if audio_stream.is_disconnected.load(Ordering::Relaxed) {
             info!("stopped recording for {} (disconnected)", device_name);
             Err(anyhow::anyhow!("device {} disconnected", device_name))
@@ -611,6 +632,11 @@ async fn recv_audio_chunk(
     last_non_zero_at: &mut Option<Instant>,
     sck_watchdog: &mut crate::core::sck_output_watchdog::SckOutputWatchdog,
 ) -> Result<Option<Vec<f32>>> {
+    // Consume packets already queued before the terminal wake-up. A native
+    // worker failure must not expose disconnection until the caller flushes.
+    if audio_stream.capture_failed.load(Ordering::Acquire) && receiver.is_empty() {
+        return Err(anyhow!("native audio capture worker exited"));
+    }
     let recv_result = tokio::time::timeout(
         Duration::from_secs(AUDIO_RECEIVE_TIMEOUT_SECS),
         receiver.recv(),
@@ -650,7 +676,6 @@ async fn recv_audio_chunk(
                         device_name, INPUT_SILENT_BUFFER_TIMEOUT_SECS
                     );
                     metrics.record_stream_timeout(device_name);
-                    audio_stream.is_disconnected.store(true, Ordering::Relaxed);
                     return Err(anyhow!(StreamDeath::ZeroFill {
                         device: device_name.to_string(),
                         secs: INPUT_SILENT_BUFFER_TIMEOUT_SECS,
@@ -704,7 +729,8 @@ async fn recv_audio_chunk(
                     sck_watchdog,
                 )
             } else {
-                fail_stream_dead(audio_stream, device_name, metrics)
+                // The recorder publishes disconnection after flushing its tail.
+                stream_dead_error(device_name, metrics)
             }
         }
     }
@@ -738,12 +764,19 @@ fn fail_stream_dead(
     device_name: &str,
     metrics: &Arc<AudioPipelineMetrics>,
 ) -> Result<Option<Vec<f32>>> {
+    audio_stream.is_disconnected.store(true, Ordering::Relaxed);
+    stream_dead_error(device_name, metrics)
+}
+
+fn stream_dead_error(
+    device_name: &str,
+    metrics: &Arc<AudioPipelineMetrics>,
+) -> Result<Option<Vec<f32>>> {
     warn!(
         "no audio received from {} for {}s - stream dead, triggering reconnect",
         device_name, AUDIO_RECEIVE_TIMEOUT_SECS
     );
     metrics.record_stream_timeout(device_name);
-    audio_stream.is_disconnected.store(true, Ordering::Relaxed);
     // Typed cause so the VPIO runtime-fallback policy can recognize this death
     // by `downcast_ref` rather than message text. Display is unchanged.
     Err(anyhow!(StreamDeath::ReceiveTimeout {
@@ -916,6 +949,57 @@ async fn flush_audio(
 mod tests {
     use super::*;
     use crate::core::device::AudioDevice;
+
+    #[tokio::test]
+    async fn native_worker_failure_flushes_audio_before_publishing_disconnection() {
+        let device = Arc::new(AudioDevice::new(
+            "native worker test".into(),
+            DeviceType::Input,
+        ));
+        let (stream, sender) = AudioStream::from_sender_for_test(device, 16_000, 1);
+        let stream = Arc::new(stream);
+        let (tx, rx) = flume::bounded(0);
+        let task = tokio::spawn(run_record_and_transcribe(
+            stream.clone(),
+            Duration::from_secs(30),
+            Arc::new(tx),
+            Arc::new(AtomicBool::new(true)),
+            Arc::new(AudioPipelineMetrics::new()),
+            None,
+            None,
+            false,
+        ));
+        while sender.receiver_count() == 0 {
+            tokio::task::yield_now().await;
+        }
+        sender.send(vec![0.25; 3_200]).unwrap();
+        stream.capture_failed.store(true, Ordering::Release);
+        sender.send(Vec::new()).unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!task.is_finished());
+        assert!(
+            !stream.is_disconnected(),
+            "monitor must wait for the buffered tail"
+        );
+        let segment = tokio::time::timeout(Duration::from_secs(1), rx.recv_async()).await;
+        if segment.is_err() {
+            task.abort();
+        }
+        let segment = segment
+            .expect("native worker failure must flush captured audio")
+            .unwrap();
+        assert_eq!(segment.data.len(), 3_200);
+        let error = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("native audio capture worker exited"));
+        assert!(stream.is_disconnected());
+        assert!(rx.is_empty());
+    }
 
     #[tokio::test]
     async fn aec_mic_callback_stall_requests_recovery_and_flushes_captured_audio() {

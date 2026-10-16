@@ -3278,7 +3278,7 @@ Your screen is a pipe. Everything you see, hear, and type flows through it. Scre
                     disabled={aecModeRemotePolicy.forceDisabled}
                     onCheckedChange={(checked) => {
                       const mode: AecMode = checked
-                        ? (isWindows ? "windows" : "screenpipe")
+                        ? (isMacOS ? "macos" : isWindows ? "windows" : "screenpipe")
                         : "off";
                       handleAecModeChange(mode);
                     }}

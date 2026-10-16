@@ -492,8 +492,8 @@ pub struct RecordArgs {
     #[arg(long, default_value_t = false)]
     pub windows_input_aec_enabled: bool,
 
-    /// [macOS, legacy alias] Enable software echo cancellation with HAL capture.
-    /// VoiceProcessingIO is no longer used because audio-route changes can deadlock it.
+    /// [experimental, macOS] Request VoiceProcessingIO AEC on the default microphone.
+    /// Ignored on non-macOS platforms and non-default input devices.
     #[arg(long, default_value_t = false)]
     pub macos_input_vpio_enabled: bool,
 
