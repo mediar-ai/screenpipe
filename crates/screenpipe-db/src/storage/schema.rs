@@ -425,6 +425,17 @@ pub(crate) async fn upgrade_recording(
     Ok(true)
 }
 
+pub(crate) async fn ensure_cleanup_indexes(
+    conn: &mut SqliteConnection,
+    has_bulk: bool,
+) -> Result<bool, sqlx::Error> {
+    if has_bulk {
+        super::bulk::ensure_cleanup_indexes(conn).await
+    } else {
+        Ok(false)
+    }
+}
+
 /// Give tables added by ordinary SQLx migrations the same read tracking as
 /// tables present during conversion. Inspect schema metadata only; existing
 /// capture/archive tables keep their specialized triggers.

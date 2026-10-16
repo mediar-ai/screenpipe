@@ -28,6 +28,25 @@ pub(super) const TABLE: Table = Table {
     fts_condition: "text IS NOT NULL AND text!=''",
 };
 
+pub(super) const TOMBSTONE_INDEX: &str = "_bulk_element_resident_tombstones";
+
+pub(super) async fn ensure_cleanup_index(conn: &mut SqliteConnection) -> Result<bool, sqlx::Error> {
+    let existed: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='index' AND name=?)",
+    )
+    .bind(TOMBSTONE_INDEX)
+    .fetch_one(&mut *conn)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS _bulk_element_resident_tombstones \
+         ON _bulk_element_rows(id) \
+         WHERE _archive_deleted=1 AND _archive_file IS NULL",
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(!existed)
+}
+
 pub(super) fn names() -> String {
     TABLE
         .columns
@@ -156,6 +175,7 @@ pub(super) async fn bootstrap_mode(
     crate::storage::schema::construction_sql(conn, &format!(
         "CREATE INDEX _bulk_element_staged_frame ON _bulk_element_rows(frame_id);
          CREATE INDEX _bulk_element_staged_file ON _bulk_element_rows(_archive_file) WHERE _archive_file IS NOT NULL;
+         CREATE INDEX _bulk_element_resident_tombstones ON _bulk_element_rows(id) WHERE _archive_deleted=1 AND _archive_file IS NULL;
          CREATE TABLE _bulk_element_ranges(first_id INTEGER PRIMARY KEY,last_id INTEGER NOT NULL,file_id INTEGER NOT NULL UNIQUE REFERENCES _bulk_files(id));
          CREATE TABLE _bulk_element_frames(frame_id INTEGER NOT NULL,file_id INTEGER NOT NULL REFERENCES _bulk_files(id),PRIMARY KEY(frame_id,file_id));
          CREATE INDEX _bulk_element_frames_file ON _bulk_element_frames(file_id);
