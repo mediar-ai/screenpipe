@@ -1,5 +1,18 @@
 # Coding-agent regression evals
 
+`app-audio-drop-control-dispatch` executes the actual AudioStream destructor
+with synthetic streams and no capture hardware. Three Drop outcomes distinguish
+the broken parent from the reference while two checks preserve live-stream and
+explicit-stop behavior. Run `bun test evals/coding-agent/calibrate-audio-drop.test.js`
+for seven calibration controls, including equivalent ordering, disconnected
+correct code, missing dispatch and missing disconnect state. The historical
+workspace uses its pinned Rust toolchain and locked native dependencies; ONNX
+Runtime must be available through the normal dependency setup. Setup failures
+are infrastructure errors, not intended baseline failures. Fixtures appear only
+at grading. Native worker completion, deferred device teardown timing, capture
+admission, durable recording, execution isolation and model trials are outside
+this case.
+
 `app-telemetry-full-ax-wire` compiles the complete telemetry records module and
 runs its public batch encoder and decoder with synthetic input. Twelve outcomes
 cover retained accessibility trees, empty nodes, nested and unknown properties,
