@@ -366,6 +366,7 @@ mod imp {
             for item in body.data {
                 if let LocalSearchItem::OCR(o) = item {
                     out.push(FrameRow {
+                        accessibility_tree: None,
                         frame_id: o.frame_id,
                         timestamp: o.timestamp.to_rfc3339(),
                         app_name: Some(o.app_name).filter(|s| !s.is_empty()),
@@ -378,6 +379,29 @@ mod imp {
             // /search returns DESC by default — sort ASC so the cursor advances
             // monotonically.
             out.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+            if !out.is_empty() {
+                let state = self.app.state::<crate::recording::RecordingState>();
+                let db = state
+                    .server
+                    .lock()
+                    .await
+                    .as_ref()
+                    .map(|server| Arc::clone(&server.db))
+                    .ok_or_else(|| {
+                        EnterpriseSyncError::LocalApi("recording database is not ready".into())
+                    })?;
+                let settings = crate::store::SettingsStore::get(&self.app)
+                    .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))?
+                    .ok_or_else(|| {
+                        EnterpriseSyncError::Configuration("recording settings are not ready".into())
+                    })?;
+                ee_sync::frame_context::hydrate_frame_trees(
+                    &db,
+                    &mut out,
+                    settings.recording.use_pii_removal,
+                )
+                .await?;
+            }
             Ok(out)
         }
 
@@ -2038,6 +2062,7 @@ mod imp {
                             .unwrap();
                     }
                     Ok(vec![FrameRow {
+                        accessibility_tree: None,
                         frame_id: 1,
                         timestamp: "2026-10-09T00:00:00Z".into(),
                         app_name: None,

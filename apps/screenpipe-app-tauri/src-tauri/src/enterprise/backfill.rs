@@ -382,8 +382,9 @@ mod tests {
         ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
             self.reads.fetch_add(1, Ordering::SeqCst);
             let ts = "2026-01-01T01:00:00+00:00";
-            // 501 rows at one timestamp exercise the durable tie offset.
-            let rows = (1..=501).map(|id| FrameRow {
+            // A full page plus one row at one timestamp exercise the durable tie offset.
+            let rows = (1..=super::FRAME_PAGE_LIMIT as i64 + 1).map(|id| FrameRow {
+                accessibility_tree: Some(serde_json::json!([{"role":"Button","text":"", "properties":{"automation_id":"search"}}])),
                 frame_id: id,
                 timestamp: ts.into(),
                 app_name: None,
@@ -503,12 +504,18 @@ mod tests {
             .into_iter()
             .filter(|r| r.url.path() == "/api/enterprise/ingest")
             .collect();
+        for upload in &uploads {
+            for line in String::from_utf8_lossy(&upload.body).lines() {
+                let record: serde_json::Value = serde_json::from_str(line).unwrap();
+                assert_eq!(record["accessibility_tree"][0]["properties"]["automation_id"], "search");
+            }
+        }
         assert_eq!(
             uploads
                 .iter()
                 .map(|r| String::from_utf8_lossy(&r.body).lines().count())
                 .sum::<usize>(),
-            501
+            super::FRAME_PAGE_LIMIT as usize + 1
         );
         assert_eq!(
             std::fs::read(&cfg.cursor_path).unwrap(),
@@ -519,7 +526,7 @@ mod tests {
             "enterprise_backfill_{}_{}.json",
             req.license_id, req.id
         )));
-        assert_eq!(checkpoint.boundary.backfill_records, Some(501));
+        assert_eq!(checkpoint.boundary.backfill_records, Some(super::FRAME_PAGE_LIMIT as u64 + 1));
     }
 
     #[tokio::test]
@@ -600,7 +607,7 @@ mod tests {
             .collect();
         assert_eq!(manifests[0]["batch_id"], manifests[1]["batch_id"]);
         assert_eq!(manifests[2]["batch_id"], manifests[3]["batch_id"]);
-        assert_eq!(manifests[0]["record_counts"]["frames"], 500);
+        assert_eq!(manifests[0]["record_counts"]["frames"], super::FRAME_PAGE_LIMIT as u64);
     }
 
     #[tokio::test]
@@ -688,7 +695,7 @@ mod tests {
         run_one_sync_inner(&cfg, &mut cursor, &local, &http, false, Some(&request))
             .await
             .unwrap();
-        assert_eq!(cursor.boundary.backfill_records, Some(500));
+        assert_eq!(cursor.boundary.backfill_records, Some(super::FRAME_PAGE_LIMIT as u64));
         let mut restarted = Cursor::load(&cfg.cursor_path);
         assert_eq!(
             restarted
@@ -706,13 +713,13 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .unavailable,
-            500
+            super::FRAME_PAGE_LIMIT as u64
         );
         run_one_sync_inner(&cfg, &mut restarted, &local, &http, false, Some(&request))
             .await
             .unwrap();
-        assert_eq!(restarted.boundary.backfill_records, Some(501));
-        assert_eq!(restarted.boundary.backfill_images.unwrap().unavailable, 501);
+        assert_eq!(restarted.boundary.backfill_records, Some(super::FRAME_PAGE_LIMIT as u64 + 1));
+        assert_eq!(restarted.boundary.backfill_images.unwrap().unavailable, (super::FRAME_PAGE_LIMIT as u64 + 1));
         let requests = server.received_requests().await.unwrap();
         assert!(!requests
             .iter()
@@ -768,6 +775,7 @@ mod tests {
                     .skip(offset as usize)
                     .take(limit as usize)
                     .map(|id| FrameRow {
+                        accessibility_tree: None,
                         frame_id: id,
                         timestamp: "2026-01-01T01:00:00+00:00".into(),
                         app_name: None,
@@ -820,7 +828,7 @@ mod tests {
             .unwrap();
         let history = History(jpeg.into_inner());
         let mut cursor = request.initial_cursor();
-        for _ in 0..6 {
+        for _ in 0..2501_u32.div_ceil(super::FRAME_PAGE_LIMIT) {
             run_one_sync_inner(
                 &cfg,
                 &mut cursor,
@@ -930,7 +938,7 @@ mod tests {
         ));
         assert_eq!(
             Cursor::load(&image_checkpoint).boundary.backfill_records,
-            Some(500)
+            Some(super::FRAME_PAGE_LIMIT as u64)
         );
         fulfill_requests(&cfg, &local, &http, &shutdown)
             .await
@@ -941,7 +949,7 @@ mod tests {
                 .backfill_images
                 .unwrap()
                 .unavailable,
-            501
+            (super::FRAME_PAGE_LIMIT as u64 + 1)
         );
         assert_eq!(
             std::fs::read_to_string(&cfg.cursor_path).unwrap(),
@@ -970,7 +978,7 @@ mod tests {
         assert_eq!(last["status"], "completed");
         assert_eq!(
             last["screenshots"],
-            serde_json::json!({"uploaded": 0, "unavailable": 501})
+            serde_json::json!({"uploaded": 0, "unavailable": (super::FRAME_PAGE_LIMIT as u64 + 1)})
         );
         let mut wrong_source = request();
         wrong_source.images_only = true;
@@ -1095,7 +1103,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(page.frames, 500);
+        assert_eq!(page.frames, super::FRAME_PAGE_LIMIT as usize);
         assert_eq!(cursor.source_id.as_deref(), Some(source));
         assert!(cursor
             .last_frame_ts

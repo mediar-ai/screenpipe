@@ -46,6 +46,8 @@ mod enterprise_upload;
 mod backfill;
 #[path = "sync_diagnostics.rs"]
 mod diagnostics;
+#[path = "frame_context.rs"]
+pub(crate) mod frame_context;
 use enterprise_upload::{
     upload_direct_readable_batch, upload_direct_write_only_batch, DirectUploadRecordCounts,
     EnterpriseUploadMode,
@@ -58,9 +60,12 @@ pub const SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// considered "not enterprise's data" and skipped.
 pub const SAFE_BACKFILL: Duration = Duration::from_secs(15 * 60);
 
-/// Page size when pulling records from the local API. Keeps each upstream
-/// POST under a few hundred KB even on busy machines.
+/// Page size for lightweight local API streams. Hosted uploads are also
+/// split by serialized bytes below, independently of record count.
 pub const PAGE_LIMIT: u32 = 500;
+
+/// Frames include full AX trees; use smaller pages without truncating nodes.
+pub const FRAME_PAGE_LIMIT: u32 = 32;
 
 /// Keep hosted-ingest requests comfortably below Vercel's 4.5 MB function
 /// body limit. This is a transport envelope, not a data cap: every JSONL line
@@ -967,7 +972,7 @@ async fn run_one_sync_inner(
             .fetch_frames_since(
                 cursor.last_frame_ts.as_deref(),
                 cursor.boundary.frames,
-                PAGE_LIMIT,
+                FRAME_PAGE_LIMIT,
             )
             .await?
     } else {
@@ -1372,7 +1377,7 @@ impl SyncTickReport {
     /// behind it. Point-in-time snapshots are deliberately excluded.
     pub fn may_have_more(&self) -> bool {
         let limit = PAGE_LIMIT as usize;
-        self.frames >= limit
+        self.frames >= FRAME_PAGE_LIMIT as usize
             || self.parsed >= limit
             || self.audio >= limit
             || self.ui >= limit
@@ -2772,6 +2777,7 @@ pub(crate) mod tests {
 
     fn frame(id: i64, ts: &str, app: &str, text: &str) -> FrameRow {
         FrameRow {
+            accessibility_tree: None,
             frame_id: id,
             timestamp: ts.to_string(),
             app_name: Some(app.to_string()),
@@ -4455,6 +4461,31 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn ax_read_failure_keeps_cursor_and_uploads_nothing() {
+        struct UnavailableTree;
+        #[async_trait::async_trait]
+        impl LocalApiClient for UnavailableTree {
+            async fn fetch_frames_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Err(EnterpriseSyncError::LocalApi("read frame AX payloads: unavailable".into()))
+            }
+            async fn fetch_audio_since(&self, _: Option<&str>, _: u32, _: u32) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                panic!("failed frame read must abort before other streams")
+            }
+        }
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let server = wiremock::MockServer::start().await;
+        let dir = TempDir::new().unwrap();
+        let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+        let mut cursor = Cursor { last_frame_ts: Some("2026-10-15T00:00:00Z".into()), ..Cursor::default() };
+        cursor.save(&cfg.cursor_path).unwrap();
+        let before = std::fs::read(&cfg.cursor_path).unwrap();
+        assert!(run_one_sync(&cfg, &mut cursor, &UnavailableTree, &reqwest::Client::new()).await.is_err());
+        assert_eq!(cursor.last_frame_ts.as_deref(), Some("2026-10-15T00:00:00Z"));
+        assert_eq!(std::fs::read(&cfg.cursor_path).unwrap(), before);
+        assert!(server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn old_cursor_drains_every_page_without_waiting_for_normal_ticks() {
         let server = wiremock::MockServer::start().await;
         wiremock::Mock::given(wiremock::matchers::method("POST"))
@@ -4464,9 +4495,9 @@ pub(crate) mod tests {
             .mount(&server)
             .await;
 
-        let first = frame_page(1, PAGE_LIMIT as usize);
-        let second = frame_page(501, PAGE_LIMIT as usize);
-        let final_page = frame_page(1001, 37);
+        let first = frame_page(1, FRAME_PAGE_LIMIT as usize);
+        let second = frame_page(FRAME_PAGE_LIMIT as i64 + 1, FRAME_PAGE_LIMIT as usize);
+        let final_page = frame_page(2 * FRAME_PAGE_LIMIT as i64 + 1, 17);
         let expected_last = final_page.last().unwrap().timestamp.clone();
 
         let dir = TempDir::new().unwrap();
@@ -4489,7 +4520,7 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(report.pages, 3);
-        assert_eq!(report.total.frames, 1_037);
+        assert_eq!(report.total.frames, 2 * FRAME_PAGE_LIMIT as usize + 17);
         assert_eq!(
             cursor.last_frame_ts.as_deref(),
             Some(expected_last.as_str())
@@ -4513,7 +4544,7 @@ pub(crate) mod tests {
 
         let tied_at = "2026-08-01T00:00:00Z";
         let local = InclusiveTimestampLocal {
-            frames: (1..=PAGE_LIMIT as i64 + 1)
+            frames: (1..=FRAME_PAGE_LIMIT as i64 + 1)
                 .map(|id| frame(id, tied_at, "Arc", "same timestamp boundary"))
                 .collect(),
         };
@@ -4538,10 +4569,10 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        assert_eq!(first.frames, PAGE_LIMIT as usize);
+        assert_eq!(first.frames, FRAME_PAGE_LIMIT as usize);
         assert_eq!(
             second.frames, 1,
-            "an inclusive timestamp-only cursor repeats the first 500 tied rows instead of reaching row 501"
+            "an inclusive timestamp-only cursor repeats the first full tied page instead of reaching the next row"
         );
     }
 
