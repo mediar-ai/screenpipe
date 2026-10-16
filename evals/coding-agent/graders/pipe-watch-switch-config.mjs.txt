@@ -1,0 +1,3 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import {defineConfig} from 'vitest/config';import {fileURLToPath} from 'node:url';const root=fileURLToPath(new URL('../',import.meta.url));export default defineConfig({root,resolve:{alias:{'@':root}},test:{environment:'jsdom',include:['.eval-hidden/pipe-watch-switch.test.tsx'],maxWorkers:1,minWorkers:1}});

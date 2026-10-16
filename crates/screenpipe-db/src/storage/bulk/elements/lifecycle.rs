@@ -452,11 +452,13 @@ pub(crate) async fn reclaim(
         rewrite(storage, pool, writer, range.0, Some(range)).await?;
     }
     let permit = writer.lock().await?;
-    sqlx::query(
-        "DELETE FROM _bulk_element_rows WHERE _archive_deleted=1 AND _archive_file IS NULL",
-    )
-    .execute(permit.pool())
-    .await?;
+    // Force the narrow partial index: installed databases can have stale
+    // sqlite_stat1 rows that otherwise make SQLite rescan all resident history.
+    // One established file-sized batch bounds writer occupancy; later
+    // maintenance turns durably drain the remainder.
+    sqlx::query(sqlx::AssertSqlSafe(super::cleanup_sql()))
+        .execute(permit.pool())
+        .await?;
     sqlx::query(
         "UPDATE _bulk_files SET state='retired' WHERE table_name='elements' AND state='encoding'",
     )

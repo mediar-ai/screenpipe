@@ -37,6 +37,7 @@ pub use manifest::{
 };
 pub use records::{
     build_feedback_jsonl, build_jsonl, build_jsonl_with_parsed, build_jsonl_with_semantic_streams,
-    parse_jsonl, ActivityEvidenceRow, ActivityRow, AudioRow, FeedbackRow, FrameRow, MemoryRow,
-    ParsedBatch, ParsedRow, SnapshotRow, TelemetryRecord, UiEventRow,
+    build_starred_jsonl, parse_jsonl, ActivityEvidenceRow, ActivityRow, AudioRow, FeedbackRow,
+    FrameRow, MemoryRow, ParsedBatch, ParsedRow, SnapshotRow, StarredRow, TelemetryRecord,
+    UiEventRow,
 };

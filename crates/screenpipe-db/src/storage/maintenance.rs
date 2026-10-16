@@ -398,7 +398,7 @@ pub async fn export_sqlite(
         let mut output=sqlx::SqliteConnection::connect_with(&sqlx::sqlite::SqliteConnectOptions::new().filename(&index)).await?;
         let triggers:Vec<String>=sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'hybrid_%'").fetch_all(&mut output).await?;
         for name in triggers {sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP TRIGGER \"{}\"",name.replace('"',"\"\"")))).execute(&mut output).await?;}
-        sqlx::raw_sql("DROP VIEW IF EXISTS _bulk_element_search; DROP TABLE IF EXISTS _bulk_element_lookup; DROP TABLE IF EXISTS _storage_revocation;").execute(&mut output).await?;
+        sqlx::raw_sql("DROP VIEW IF EXISTS _bulk_element_search; DROP TABLE IF EXISTS _bulk_element_lookup; DROP TABLE IF EXISTS _storage_revocation; DROP TABLE IF EXISTS _storage_revocation_cause;").execute(&mut output).await?;
         super::bulk::export(&source,&mut output).await?;
         sqlx::raw_sql("DROP TABLE frames_fts; DROP TABLE frame_payloads; DROP TABLE payload_files; DROP TABLE upload_bindings; DROP TABLE storage_metadata; DROP TABLE _hybrid_migrations;").execute(&mut output).await?;
         // A standalone export starts a new conversion if imported again. Its

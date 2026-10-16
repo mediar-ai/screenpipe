@@ -757,6 +757,74 @@ async fn query_parsed(db: &DatabaseManager, kq: &KindQuery<'_>) -> Result<Vec<Va
         .collect())
 }
 
+async fn query_starred(
+    db: &DatabaseManager,
+    kq: &KindQuery<'_>,
+) -> Result<Vec<Value>, sqlx::Error> {
+    let order = if kq.newest_first { "DESC" } else { "ASC" };
+    let cmp = if kq.newest_first { "<" } else { ">" };
+    let sql = format!(
+        "SELECT a.device_id, a.device_label, a.timestamp, a.payload_json, a.starred_id
+         FROM gateway_starred_records a
+         WHERE datetime(a.timestamp) >= datetime(?1) AND datetime(a.timestamp) <= datetime(?2)
+           AND (?3 IS NULL OR a.device_id IN (
+               SELECT source_id FROM gateway_source_devices WHERE device_id = ?3 UNION SELECT ?3))
+           AND (?4 IS NULL OR instr(lower(a.starred_id), lower(?4)) > 0
+               OR instr(lower(a.device_label), lower(?4)) > 0)
+           AND (?5 IS NULL OR datetime(a.timestamp) {cmp} datetime(?5)
+               OR (datetime(a.timestamp) = datetime(?5)
+                   AND 'starred:' || a.device_id || ':' || a.starred_id {cmp} ?6))
+         ORDER BY datetime(a.timestamp) {order}, 'starred:' || a.device_id || ':' || a.starred_id {order}
+         LIMIT ?7"
+    );
+    let rows =
+        sqlx::query_as::<_, (String, String, String, String, String)>(sqlx::AssertSqlSafe(sql))
+            .bind(&kq.since)
+            .bind(&kq.until)
+            .bind(kq.device_id)
+            .bind(kq.q)
+            .bind(kq.cursor_t)
+            .bind(kq.cursor_id)
+            .bind(kq.limit)
+            .fetch_all(&db.pool)
+            .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(device, label, timestamp, payload, id)| {
+            let mut summary = record_summary(
+                "starred",
+                Some(timestamp),
+                Some(label),
+                Some(device.clone()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+            if let Ok(Value::Object(row)) = serde_json::from_str::<Value>(&payload) {
+                for key in [
+                    "starred_id",
+                    "start_at",
+                    "end_at",
+                    "revision",
+                    "hd_requested",
+                ] {
+                    summary[key] = row.get(key).cloned().unwrap_or(Value::Null);
+                }
+            }
+            with_cursor_id(summary, format!("starred:{device}:{id}"))
+        })
+        .collect())
+}
+
 async fn query_activities(
     db: &DatabaseManager,
     kq: &KindQuery<'_>,
@@ -1179,6 +1247,7 @@ async fn query_kinds(
         let mut part = match *kind {
             "frame" => query_frames(db, kq).await?,
             "parsed" => query_parsed(db, kq).await?,
+            "starred" => query_starred(db, kq).await?,
             "activity" => query_activities(db, kq).await?,
             "audio" => query_audio(db, kq).await?,
             "ui" => query_ui(db, kq).await?,
@@ -1350,7 +1419,7 @@ async fn search(
     let mut results = match query_kinds(
         &state.db,
         &[
-            "frame", "parsed", "activity", "audio", "ui", "memory", "feedback",
+            "frame", "parsed", "activity", "starred", "audio", "ui", "memory", "feedback",
         ],
         &kq,
     )
@@ -1453,7 +1522,7 @@ async fn records(
     };
     let kinds: Vec<&str> = match kind_filter.as_str() {
         "all" => vec![
-            "frame", "parsed", "activity", "audio", "ui", "memory", "feedback",
+            "frame", "parsed", "activity", "starred", "audio", "ui", "memory", "feedback",
         ],
         k => vec![k],
     };
@@ -2276,6 +2345,7 @@ mod tests {
                 dev,
                 label,
                 &[FrameRow {
+                    accessibility_tree: None,
                     frame_id: 1,
                     timestamp: format!("2026-07-22T{hour}:00:00Z"),
                     app_name: Some("Arc".to_string()),
@@ -2522,6 +2592,37 @@ mod tests {
                 && record["parser_id"].is_null()
                 && record["text"].as_str().unwrap().contains("structured")
         }));
+    }
+
+    #[tokio::test]
+    async fn starred_records_preserve_interval_metadata_and_keyset_pagination() {
+        let dir = tempfile::tempdir().unwrap();
+        let router = seeded_router(&dir).await;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(dir.path().join("gateway.db"))
+                    .read_only(false),
+            )
+            .await
+            .unwrap();
+        for id in ["a", "b"] {
+            sqlx::query("INSERT INTO gateway_starred_records VALUES ('dev-a', ?1, 'Alice Mac', '2026-07-22T10:00:00Z', 2, ?2)")
+                .bind(id).bind(json!({"starred_id": id, "start_at": "2026-07-22T10:00:00Z", "end_at": "2026-07-22T10:05:00Z", "revision": 2, "hd_requested": false}).to_string())
+                .execute(&pool).await.unwrap();
+        }
+        let url = "/api/enterprise/v1/records?kind=starred&since=2026-07-22T00:00:00Z&pagination=keyset&limit=1";
+        let (status, first) = get_json(&router, url).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(first["records"][0]["kind"], "starred");
+        assert_eq!(first["records"][0]["revision"], 2);
+        assert_eq!(first["records"][0]["end_at"], "2026-07-22T10:05:00Z");
+        let cursor = first["next_cursor"].as_str().unwrap();
+        let (_, second) = get_json(&router, &format!("{url}&cursor={cursor}")).await;
+        assert_ne!(
+            first["records"][0]["starred_id"],
+            second["records"][0]["starred_id"]
+        );
     }
 
     #[tokio::test]
@@ -3069,6 +3170,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 9,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: None,

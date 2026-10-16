@@ -145,7 +145,7 @@ describe("isAuthorized", () => {
   });
   const local = (auth?: string) => ({
     socket: { remoteAddress: "127.0.0.1" },
-    headers: auth ? { authorization: auth } : {},
+    headers: { host: "127.0.0.1:3031", ...(auth ? { authorization: auth } : {}) },
   });
 
   it("allows loopback with no api key", () => {

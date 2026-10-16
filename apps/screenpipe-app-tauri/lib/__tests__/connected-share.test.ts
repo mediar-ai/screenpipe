@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildConnectedShareChatPrompt,
+  createLibraryShareArtifact,
   createLiveViewShareArtifact,
   createMeetingShareArtifact,
   createWorkflowShareArtifact,
@@ -179,4 +180,14 @@ describe("connected share artifacts", () => {
     expect(prompt).toContain("ask for approval exactly once");
     expect(prompt).toContain("Never include the absolute vault path");
   });
+});
+
+it("projects skills and recipes into the destination picker without images", () => {
+  for (const kind of ["skill", "sop"] as const) {
+    const document = createLibraryShareArtifact({ kind, title: "Review sources", markdown: "Read **these sources**. ![capture](data:image/png;base64,PRIVATE_IMAGE) ![remote](https://private.example/image.png)" });
+    expect(document.sections[0].body).toContain("Read **these sources**.");
+    expect(document.sections[0].body).not.toContain("PRIVATE_IMAGE");
+    expect(document.sections[0].body).not.toContain("private.example");
+    expect(document.privacyNote).toContain("stay private");
+  }
 });

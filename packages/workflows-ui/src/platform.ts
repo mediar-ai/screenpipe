@@ -98,6 +98,7 @@ export type WorkflowsPlatform = {
     scope?: WorkflowScope,
   ) => Promise<WorkProfile>;
   library?: {
+    downloadDocument?: (content: string, filename: string) => Promise<boolean>;
     listSkillDrafts: () => Promise<Array<{ workflowKey: string; draft: WorkflowSkillDraft }>>;
     saveSkillDraft: (workflowKey: string, draft: WorkflowSkillDraft) => Promise<void>;
     listInstalledSkills?: () => Promise<Array<{ name: string; description: string; path: string }>>;
@@ -172,6 +173,7 @@ export type WorkflowsAppProps = {
   sourceControl?: import("react").ReactNode;
   composerAccessory?: import("./assistant").WorkflowComposerAccessory;
   /** Open the host sharing review; clicking must not send the workflow. */
+  onShareDocument?: (document: import("./document-actions").LibraryShareDocument) => void;
   onShareWorkflow?: (workflow: WorkflowMap) => void;
   /** Optional host integration with the existing external-agent launchers. */
   workflowAgentActions?: (workflow: WorkflowMap) => import("react").ReactNode;

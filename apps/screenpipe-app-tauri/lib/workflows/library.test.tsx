@@ -2,7 +2,7 @@
 // https://screenpipe.com
 import React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { WorkflowLibrary } from "../../../../packages/workflows-ui/src/workflow-library";
 import { fixtureWorkflowAnalysis } from "../../../../packages/workflows-ui/src/fixture-platform";
 import { WorkflowsApp } from "../../../../packages/workflows-ui/src/workflows-app";
@@ -20,7 +20,7 @@ function platform(): WorkflowsPlatform {
     saveWorkflowSkill: vi.fn(),
   };
 }
-beforeEach(() => { window.history.replaceState(null, "", "/?view=library"); localStorage.clear(); });
+beforeEach(() => { window.history.replaceState(null, "", "/?view=library"); localStorage.clear(); sessionStorage.clear(); });
 afterEach(cleanup);
 it("opens a saved SOP with no source workflow without regenerating it", async () => {
   const p = platform();
@@ -53,8 +53,8 @@ it("opens and autosaves a skill without installing it", async () => {
   const p = platform(); render(<WorkflowLibrary platform={p} workflows={[]} />);
   fireEvent.click(screen.getByRole("button", { name: "Skills", exact: true }));
   fireEvent.click(await screen.findByRole("button", { name: /Review skill/ }));
-  fireEvent.change(screen.getByLabelText("Instructions"), { target: { value: "Read and compare sources" } });
-  await waitFor(() => expect(p.library!.saveSkillDraft).toHaveBeenCalledWith("skill-source", expect.objectContaining({ instructions: "Read and compare sources" })));
+  fireEvent.change(screen.getByLabelText("When to use"), { target: { value: "Read and compare sources" } });
+  await waitFor(() => expect(p.library!.saveSkillDraft).toHaveBeenCalledWith("skill-source", expect.objectContaining({ description: "Read and compare sources" })));
   expect(p.saveWorkflowSkill).not.toHaveBeenCalled();
 });
 it("shows saved drafts when installed-skill discovery fails", async () => {
@@ -98,4 +98,57 @@ it("a background workflow revision does not close its open SOP", async () => {
   expect(screen.getByRole("button", { name: "Back to workflow" })).toBeTruthy();
   expect(screen.getByText("Saved summary")).toBeTruthy();
   expect(p.guides!.generate).not.toHaveBeenCalled();
+});
+
+it("shares the current skill only when Share is clicked", async () => {
+  window.history.replaceState(null, "", "/?view=library&libraryTab=skills&libraryItem=skill-source");
+  const p = platform(), share = vi.fn();
+  render(<WorkflowLibrary platform={p} workflows={[]} onShareDocument={share} />);
+  await screen.findByLabelText("Instructions");
+  expect(share).not.toHaveBeenCalled();
+  expect(screen.getByRole("toolbar", { name: "Instructions formatting" })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("When to use"), { target: { value: 'Use: "carefully"' } });
+  fireEvent.click(screen.getByRole("button", { name: "Share", exact: true }));
+  expect(share).toHaveBeenCalledWith(expect.objectContaining({ kind: "skill", title: "Review skill", markdown: expect.stringContaining(`description: ${JSON.stringify('Use: "carefully"')}`) }));
+  expect(p.saveWorkflowSkill).not.toHaveBeenCalled();
+});
+
+it("serializes slow skill saves and keeps the newest edit", async () => {
+  window.history.replaceState(null, "", "/?view=library&libraryTab=skills&libraryItem=skill-source");
+  const p = platform(); let release!: () => void;
+  vi.mocked(p.library!.saveSkillDraft).mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  render(<WorkflowLibrary platform={p} workflows={[]} />);
+  fireEvent.change(await screen.findByLabelText("When to use"), { target: { value: "First edit" } });
+  await waitFor(() => expect(p.library!.saveSkillDraft).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByLabelText("When to use"), { target: { value: "Newest edit" } });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
+  expect(p.library!.saveSkillDraft).toHaveBeenCalledTimes(1);
+  await act(async () => release());
+  await waitFor(() => expect(p.library!.saveSkillDraft).toHaveBeenCalledTimes(2));
+  expect(p.library!.saveSkillDraft).toHaveBeenLastCalledWith("skill-source", expect.objectContaining({ description: "Newest edit", instructions: "Read sources" }));
+  await screen.findByText("All changes saved");
+});
+
+it("retains failed edits across remount and retries the recovered document", async () => {
+  window.history.replaceState(null, "", "/?view=library&libraryTab=skills&libraryItem=skill-source");
+  const p = platform(); vi.mocked(p.library!.saveSkillDraft).mockRejectedValue(new Error("Disk unavailable"));
+  const view = render(<WorkflowLibrary platform={p} workflows={[]} />);
+  fireEvent.change(await screen.findByLabelText("When to use"), { target: { value: "Recover this edit" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("Disk unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Back to Library" }));
+  await waitFor(() => expect(screen.getByLabelText("When to use")).toHaveValue("Recover this edit"));
+  view.unmount();
+  const recovered = platform();
+  render(<WorkflowLibrary platform={recovered} workflows={[]} />);
+  expect(await screen.findByLabelText("When to use")).toHaveValue("Recover this edit");
+  await waitFor(() => expect(recovered.library!.saveSkillDraft).toHaveBeenCalledWith("skill-source", expect.objectContaining({ description: "Recover this edit" })));
+});
+
+it("shares saved recipe edits rather than its source workflow", async () => {
+  const p = platform(), share = vi.fn();
+  window.history.replaceState(null, "", "/?view=library&libraryItem=saved-source");
+  render(<WorkflowLibrary platform={p} workflows={[workflow]} onShareDocument={share} />);
+  fireEvent.change(await screen.findByLabelText("SOP title"), { target: { value: "Reviewed recipe" } });
+  fireEvent.click(screen.getByRole("button", { name: "Share", exact: true }));
+  expect(share).toHaveBeenCalledWith(expect.objectContaining({ kind: "sop", title: "Reviewed recipe", markdown: expect.stringContaining("Keep the useful sources.") }));
 });

@@ -161,6 +161,44 @@ final class OverlayMetrics: ObservableObject {
     @Published var hoveredControl: String? = nil
 }
 
+/// Identify the service from the join destination, never from translated copy.
+enum MeetingJoinProvider: String, CaseIterable {
+    case googleMeet, zoom, teams, webex, other
+
+    static func from(url: String) -> MeetingJoinProvider {
+        guard let destination = URL(string: url),
+              let scheme = destination.scheme?.lowercased(),
+              ["https", "http", "zoommtg", "zoomus", "msteams"].contains(scheme),
+              let rawHost = destination.host else { return .other }
+        let host = rawHost.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        func matches(_ domain: String) -> Bool {
+            host == domain || host.hasSuffix("." + domain)
+        }
+        if host == "meet.google.com" { return .googleMeet }
+        if matches("zoom.us") || matches("zoom.com") || matches("zoomgov.com") { return .zoom }
+        if ["teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft"].contains(host) { return .teams }
+        if matches("webex.com") { return .webex }
+        return .other
+    }
+
+    var image: NSImage? { Self.images[self] }
+
+    // Embedded 48px PNGs keep the static Swift library independent of resource
+    // paths and network access. Source and license: docs/meeting-provider-icons.md.
+    private static let images: [MeetingJoinProvider: NSImage] = {
+        let encoded: [MeetingJoinProvider: String] = [
+            .googleMeet: "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAMKADAAQAAAABAAAAMAAAAAD4/042AAAFRklEQVRoBe1ZXWgcVRQ+92dmZ7O7cTfZpFETk4p5CoJgFPTFVRD786CYlgaLRaIPxYBUtAq+KOKDYB/yYEBain1QgqYBg9WKio+CxiBUbKGhplVry5q22SSb7M/MvZ47m51stjubyWbd7MMemOzM3HvP/b5vzjl37gSgYQ0FGgo0FNhOBchmJp/tecGIDn3/QfCJ64+Y6c2MdO9LsUlIkJTKCyJLTmlPmT+49769xTOB2VjMCGTSo+FH54a0gUsAGTV1FY0BWFlYAVPu509aX3n1zL10lAj+Blse1XU2tGIKoFkAiUdVDf1xH/hNiwyjX88ENpRRKW+Dp2QoJQTIqqIucmbZ1z04h+fIKPsElPL/KuURfNoGvyHfIkQVXJLS4B/4+Jkw97O3KKd90qTvTA1+NqW8uxLIgV8aNShbBV8BmCoNeejTgXslg5PUx2KUUbAsu4Q860ogr3w9gO8f2xcDBsdR+V6RxhjTsGQJuSOvzW0xsQY+Hzb5rrX7xQSwU61/bGAIwU8CJb0ik0uQHAop8mjWhZCM9WDCLo36MWz+94TNIyj65VKI3V/v9sUTgbcJgzexmUqsfG7mEJCxtuBNEhkxCCpvmXYmFZcCaZcHARiGuPK4uXS/b7njWB0kISF0Pb4Y+ITqZJ80cUI1aRlzCLz88ORLd2bnXzRxNXEbQogOkTuufHvEPHxKACnm5zqNhU+fExlCMUdwlFEKE6cCLiSaxNE/e7tlB71PZgtDxtX1WhU6H3mw/TzXwTKzpesY+mA+DTIpuPpq7PAYrpvuXku0yEkIiQA9plgXCqSuGYL/7kYEXr/YQ6/JAO1u8+7beQJMmIIKBkxkSkyfu8Usjjm1UkHwACxpYBhFnimRtlgnr3bAu390QtKi4Dc2jLN1XhwC6+7W4AJDCpKCwvuznfARElBPgpPNgVcwt4UApxKup3V4Y6YbzsxFQMdrO7QKY8ujiDUnQJmAc4kAHLm4E35dDIKB8b8VqxmBoI1SsG/imKwzO+GfNCbFFsErlzUjAEsAJ1IdC+9d7vIvY7L6MGyqYTUjsAv2W5cWElZKLKg1oRrYbR8VlcRKZo9juY+0N4eid4UloQQX2OqQqBkBRRrfIkkgHCStna3ANV4VEjUlYJNA4f0BA9q6oqAb+pZJ1JxAjoQEzdCg7Z4o+EP+LZHYFgJ5ErhJgda7WyDYEqyYhEMA3xIJmvpT/gCtopVn2RdKKeDrDMNJzRfZEYZwexhXY7Ueb86cMrqQXFwBkpISvy65uSA0LYlxpb1/fNegNJsc8m79C++TzHwIAXLcEBbeds6boyHgnJqL80mCVYphwjtt5U4cAn/H4z7gOoEyb6PC5CTY9dueFqrvJWpXsxlDPDZ4F1yqrDa1BJjW5LsmLJlkPla0jSw92RoKFUD4OMuZ3S6xk/oWWMFRzneujRBN47e4gL0iI36kOn6u28DWCGzQsVbNKA376eDEjBTpp2XGGicakiija90RWBWKTD/35Vy0efl5MMUxzAl79S4Q0aFUrwRsrGf3nE1PHTh9VFryFcyRNMGyi2VLHc6es64J5BX/ZXDiQ8z9QRDiL6wE6rPymXzbGgGC+7v6sJJ1avrAxBckRR8Tpvm4TLSO5KE6ZRRH3ST4JWk7jTB8SxVkBjGUJPHzofFZbFOHYw4BDmLSslLDRGvqAeH28V8HwjguRyoWq/vA7FdsU5i4zznhoPNw4mSz6tsx/Hsf7vJek8K6317ji4SQpgaBzmlo6fsc/y+ke3DvsYuNgtwSWXl8+uDpcY+jGt0aCjQUaChQBwr8Bxc8+b54UAZXAAAAAElFTkSuQmCC",
+            .zoom: "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",
+            .teams: "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",
+            .webex: "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAMKADAAQAAAABAAAAMAAAAAD4/042AAAFGUlEQVRoBe2YW6hVVRSGd1eyi0SpPaihQUTQhSi1C5G9JEZWdKEH6QJlvpSFD92sKCoqyqBDDxVBJUQPvUiUGFYPmnRDM6Qo0aKEivKWGpZp9X37zHUaLuZea52zzouwB/x7jjnmGP8Ye8615px7dzp96c9Afwb6M3AwzcA0ih0AX4LdYB/YAlaCRWAiqJNJOOhrzFawH8glp9zmGHWZCuNy8G8N/mL8WTAGlEXbYqBPHY+5zDkqMhuWXaAuaRxfi/+4kF1dW/Sp0815eeAYkTqHqL9BXbLc+FfEnZiyrhkhh7mtYURyGFGfgVxxTW3LiD8EPNCC5w9izwS1MgGP+eB+MBeMBUeCN0DTgnN+txF/BPi6BY8vuBxTwDxQrCzqoFxD404QC/iV/kxwOFgN4thw9N+IPQ7c2ILDfAuBT8UGsBNcC7pyNp97Qa6o37FPBhf2GM/F5GwmdzV/asGzjVgn4pbEYc3ngc5byZBLrO15nZAfQC+fOruxruTTLTjM4UT4KG1PPEtpu4dJVQHf6IS8CaLfO/QXgO9K9ugT9Vn4OWPRton+neDdkj36RN1NRbFw7X6Rzp7UiY5Rdytz+R8OfiZ0d1FOB00Op1e73v+vpDGnJZtc7lgxb07fkfxfSL7W3mgGz8DvuhRk4pNBlFfo5BJGm7PlY/Ry8rWNImfdRGxOAa/Tyr3xUD42JGNV4xdYnxyW0P5Ych4o9XPd4zHOACvS4GupLRo5y7ZirGg/SMq01HZrX0wnzlROfwIfv+xucBbIyTqMudhoexSf8eAXUDyCqENyEtrPIMYUurlPBU5CYfPeNbQtFcZc6/OpPDPYZD/jO5Lj0PZRirw3yzBodLXdOCKHM30RcAeKt4Ob6Xc8B6JzTvdQU9yHe8n5DORio+1PfI4CR/ciSXYPrEvBTeAC4OofC94Gkc/au9+q7uUxyN2mSnxBXeaYIKdfXEWSxk6gdYfyvTHv3cB3JPI5Ga5IVz7mMw7m9DuSb1XzXgOe+6oI0phnQ66GaPtUX5dGWT3YVH7OrhwdHFzVwKfJCsxqwHNAzVcREL9dTt+DzzE1xDMb8OzEx2e8l5jDXLkaou3KSDCWzt4GQUM3wBgc9DENeaaHmLJ6PYZYaE73dtDdUIpHyFk5YEnKrKl/aw+75nOAM7fGTo1cVjE+t2KsGHI73lV0inYhSu7bRtt+fMrXiCL+QxQn5HEQY3L62iKo1E6g3+RJuKsU1+1O5vMfkEsYbY9lgj189DkXXJL0GJPTjSnLIxhyvtFmjRPLgUXfXSQ653R/5DhTUV6io+9DwL1Zn1xstL2ITxQ5fZSjT05fGYPK+rwGBJIuBcVdxgOnOAg/QVeWgFzyaDPGWMVdySt6HO+lzzegl3jEbwe9gqPdQ8tncVPwd3mngCuCLcaUdWMXgPcb+vviVl1nGO50ngPlRMPpLyLea8Xmljy5nMXPW6h7i/9des/IETSxfU+sj8Q9LThyeazJ2hrJU3jlSJrabiDei9iWljwx35NwNRaP840gEgxHX0+sq3B7C46Yz1rqrjG4HCj+bGvzKPlyerCtALGY4erWYC0jkquJanIy5or6PGUcR/styPnU2cztRbOVzCG6ycEUi/GqMD5k9eRcB6JPnb4Df7fjUZFTYFkO6pJ6OLkN534yanOsyYouw28qGHWZAeMA+AJ4qOwDW8Eq8CCYBOrEO5dXDm+U24CHnz9F5XSfnw760p+B/gz0Z+AgmYH/APin+6zmnH9lAAAAAElFTkSuQmCC",
+        ]
+        return encoded.compactMapValues { value in
+            guard let data = Data(base64Encoded: value) else { return nil }
+            return NSImage(data: data)
+        }
+    }()
+}
+
 /// One clickable button on a notification shown from the pill.
 struct OverlayNotificationAction: Identifiable, Equatable {
     /// Opaque payload handed back to Rust verbatim so the pill reuses the same
@@ -169,6 +207,8 @@ struct OverlayNotificationAction: Identifiable, Equatable {
     let label: String
     let primary: Bool
     let payload: String
+    let meetingProvider: MeetingJoinProvider?
+    let screenDetailBody: String?
 }
 
 /// A notification rendered as an extension of the pill rather than as a
@@ -179,6 +219,53 @@ struct OverlayNotification: Equatable {
     let body: String
     let actions: [OverlayNotificationAction]
     let autoDismissMs: Int?
+    let isMeetingJoin: Bool
+
+    func size(scale: CGFloat) -> NSSize {
+        NSSize(
+            width: (isMeetingJoin ? 460 : kBaseNotificationW) * scale,
+            height: (isMeetingJoin ? 124 : kBaseNotificationH) * scale
+        )
+    }
+
+    var screenDetailAction: OverlayNotificationAction? {
+        actions.first { $0.screenDetailBody != nil }
+    }
+
+    /// Both visible meeting buttons join in one click. The screen-detail variant
+    /// replaces the standalone capture action while preserving its eligibility.
+    var displayActions: [OverlayNotificationAction] {
+        guard isMeetingJoin, let detailAction = screenDetailAction,
+              let join = actions.first(where: { $0.meetingProvider != nil })
+        else { return actions }
+        let combined = joining(join, captureScreenDetail: true)
+        return actions.map { action in
+            guard action.id == detailAction.id else { return action }
+            return OverlayNotificationAction(
+                id: action.id, label: uiText("join + HD"), primary: false,
+                payload: combined.payload, meetingProvider: combined.meetingProvider,
+                screenDetailBody: nil
+            )
+        }
+    }
+
+    /// Compose capture and joining into one dispatch, with capture starting first.
+    func joining(_ action: OverlayNotificationAction, captureScreenDetail: Bool) -> OverlayNotificationAction {
+        guard captureScreenDetail, action.meetingProvider != nil,
+              let body = screenDetailAction?.screenDetailBody,
+              let bodyData = body.data(using: .utf8),
+              let detail = try? JSONSerialization.jsonObject(with: bodyData),
+              let data = action.payload.data(using: .utf8),
+              var payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return action }
+        payload["screen_detail"] = detail
+        guard let updated = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: updated, encoding: .utf8) else { return action }
+        return OverlayNotificationAction(
+            id: action.id, label: action.label, primary: action.primary,
+            payload: json, meetingProvider: action.meetingProvider, screenDetailBody: nil
+        )
+    }
 
     static func parse(_ json: String) -> OverlayNotification? {
         guard let data = json.data(using: .utf8),
@@ -196,11 +283,25 @@ struct OverlayNotification: Equatable {
             guard let payloadData = try? JSONSerialization.data(withJSONObject: action),
                   let payload = String(data: payloadData, encoding: .utf8)
             else { return nil }
+            let screenDetailBody: String?
+            if action["type"] as? String == "api",
+               action["url"] as? String == "/capture/hd/start",
+               action["method"] as? String == "POST",
+               let body = action["body"] as? [String: Any],
+               let encoded = try? JSONSerialization.data(withJSONObject: body) {
+                screenDetailBody = String(data: encoded, encoding: .utf8)
+            } else {
+                screenDetailBody = nil
+            }
             return OverlayNotificationAction(
                 id: actionId,
                 label: label,
                 primary: (action["primary"] as? Bool) ?? false,
-                payload: payload
+                payload: payload,
+                meetingProvider: action["type"] as? String == "meeting_join"
+                    ? MeetingJoinProvider.from(url: action["url"] as? String ?? "")
+                    : nil,
+                screenDetailBody: screenDetailBody
             )
         }
 
@@ -217,7 +318,8 @@ struct OverlayNotification: Equatable {
             title: title,
             body: (root["body"] as? String) ?? "",
             actions: actions,
-            autoDismissMs: autoDismiss
+            autoDismissMs: autoDismiss,
+            isMeetingJoin: rawActions.contains { $0["type"] as? String == "meeting_join" }
         )
     }
 }
@@ -1578,10 +1680,115 @@ private struct OverlayNotificationView: View {
     /// Ordered so the primary action lands closest to the right edge, where the
     /// pointer already is after reading the title.
     private var orderedActions: [OverlayNotificationAction] {
-        notification.actions.sorted { !$0.primary && $1.primary }
+        notification.displayActions.sorted { !$0.primary && $1.primary }
     }
 
     var body: some View {
+        Group {
+            if notification.isMeetingJoin {
+                meetingJoinContent
+            } else {
+                compactContent
+            }
+        }
+        .frame(width: notification.size(scale: scale).width, height: notification.size(scale: scale).height)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: s(8)))
+        .overlay(RoundedRectangle(cornerRadius: s(8)).stroke(Color.white.opacity(0.42), lineWidth: 1))
+    }
+
+    private var meetingJoinContent: some View {
+        VStack(alignment: .leading, spacing: s(8)) {
+            HStack(alignment: .top, spacing: s(10)) {
+                Image(systemName: "video.fill")
+                    .font(.system(size: 16 * scale, weight: .medium))
+                    .foregroundColor(.white.opacity(0.75))
+                    .frame(height: s(24))
+                VStack(alignment: .leading, spacing: s(4)) {
+                    Text(notification.title)
+                        .font(Brand.swiftUIMonoFont(size: 14 * scale, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.95))
+                        .lineLimit(1)
+                    if !notification.body.isEmpty {
+                        Text(notification.body)
+                            .font(Brand.swiftUIMonoFont(size: 12 * scale))
+                            .foregroundColor(.white.opacity(0.60))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                dismissButton
+            }
+            HStack(spacing: s(8)) {
+                Spacer(minLength: 0)
+                meetingJoinActions
+            }
+        }
+        .padding(s(14))
+    }
+
+    /// Two immediate actions share one light surface. HD remains one click,
+    /// and its label explicitly includes joining rather than a recording toggle.
+    @ViewBuilder
+    private var meetingJoinActions: some View {
+        if let join = notification.actions.first(where: { $0.meetingProvider != nil }),
+           let detailID = notification.screenDetailAction?.id,
+           let detail = notification.displayActions.first(where: { $0.id == detailID }) {
+            ForEach(orderedActions.filter { $0.id != join.id && $0.id != detailID }) { action in
+                Button(action.label) { onAction(action) }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.white.opacity(0.88))
+            }
+            HStack(spacing: 0) {
+                Button(action: { onAction(join) }) {
+                    HStack(spacing: s(7)) {
+                        if let provider = join.meetingProvider {
+                            if let image = provider.image {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .scaledToFit()
+                                    .frame(width: s(18), height: s(18))
+                                    .accessibilityHidden(true)
+                            } else {
+                                Image(systemName: "video.fill")
+                                    .font(.system(size: 16 * scale))
+                                    .frame(width: s(18), height: s(18))
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        Text(join.label)
+                    }
+                    .padding(.horizontal, s(12))
+                    .frame(height: s(36))
+                    .contentShape(Rectangle())
+                }
+                Rectangle()
+                    .fill(Color.black.opacity(0.15))
+                    .frame(width: 1, height: s(20))
+                    .accessibilityHidden(true)
+                Button(action: { onAction(detail) }) {
+                    Text(detail.label)
+                        .padding(.horizontal, s(12))
+                        .frame(height: s(36))
+                        .contentShape(Rectangle())
+                }
+                .help(uiText("Join and take notes with HD screen recording: more frequent screenshots for smoother replay. Uses more storage."))
+                .accessibilityLabel(uiText("Join and take notes with HD screen recording"))
+            }
+            .font(Brand.swiftUIMonoFont(size: 13 * scale, weight: .medium))
+            .foregroundColor(.black)
+            .buttonStyle(.plain)
+            .background(Color.white.opacity(0.92))
+            .clipShape(RoundedRectangle(cornerRadius: s(6)))
+            .fixedSize()
+        } else {
+            actionButtons
+        }
+    }
+
+    private var compactContent: some View {
         HStack(spacing: s(8)) {
             Image(systemName: "video.fill")
                 .font(.system(size: 10 * scale, weight: .medium))
@@ -1601,44 +1808,66 @@ private struct OverlayNotificationView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            ForEach(orderedActions) { action in
-                Button(action: { onAction(action) }) {
-                    Text(action.label)
-                        .font(Brand.swiftUIMonoFont(size: 9 * scale, weight: .medium))
-                        .foregroundColor(action.primary ? .black : .white.opacity(0.88))
-                        .lineLimit(1)
-                        .padding(.horizontal, s(8))
-                        .frame(height: s(22))
-                        .background(
-                            action.primary
-                                ? Color.white.opacity(0.92)
-                                : Color.white.opacity(0.10)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: s(6)))
-                        .contentShape(RoundedRectangle(cornerRadius: s(6)))
-                }
-                .buttonStyle(.plain)
-                .fixedSize()
-            }
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8 * scale, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.55))
-                    .frame(width: s(14), height: s(22))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(uiText("dismiss notification"))
+            actionButtons
+            dismissButton
         }
         .padding(.horizontal, s(10))
-        .frame(
-            width: kBaseNotificationW * scale,
-            height: kBaseNotificationH * scale
-        )
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: s(8)))
-        .overlay(RoundedRectangle(cornerRadius: s(8)).stroke(Color.white.opacity(0.42), lineWidth: 1))
+    }
+
+    private var actionButtons: some View {
+        ForEach(orderedActions) { action in
+            Button(action: { onAction(action) }) {
+                HStack(spacing: s(7)) {
+                    if let provider = action.meetingProvider {
+                        if let image = provider.image {
+                            Image(nsImage: image)
+                                .resizable()
+                                .interpolation(.high)
+                                .scaledToFit()
+                                .frame(width: s(18), height: s(18))
+                                .background(action.primary ? Color.clear : Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: s(3)))
+                                .accessibilityHidden(true)
+                        } else {
+                            Image(systemName: "video.fill")
+                                .font(.system(size: 16 * scale))
+                                .frame(width: s(18), height: s(18))
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    Text(action.label)
+                        .font(Brand.swiftUIMonoFont(size: (notification.isMeetingJoin ? 12 : 9) * scale, weight: .medium))
+                        .lineLimit(1)
+                }
+                    .foregroundColor(action.primary ? .black : .white.opacity(0.88))
+                    .padding(.horizontal, s(notification.isMeetingJoin ? 10 : 8))
+                    .frame(height: s(notification.isMeetingJoin ? 34 : 22))
+                    .background(
+                        action.primary
+                            ? Color.white.opacity(0.92)
+                            : Color.white.opacity(0.10)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: s(6)))
+                    .contentShape(RoundedRectangle(cornerRadius: s(6)))
+            }
+            .buttonStyle(.plain)
+            .help(notification.isMeetingJoin && action.id == notification.screenDetailAction?.id
+                ? uiText("Join and take notes with more frequent screen capture for smoother replay. Uses more storage.")
+                : action.label)
+            .fixedSize()
+        }
+    }
+
+    private var dismissButton: some View {
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .font(.system(size: (notification.isMeetingJoin ? 11 : 8) * scale, weight: .semibold))
+                .foregroundColor(.white.opacity(0.55))
+                .frame(width: s(notification.isMeetingJoin ? 24 : 14), height: s(notification.isMeetingJoin ? 24 : 22))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(uiText("dismiss notification"))
     }
 }
 
@@ -3211,8 +3440,10 @@ class ShortcutReminderController: NSObject, NSWindowDelegate {
 
     private func ensureNotificationPanel() {
         guard notificationPanel == nil else { return }
-        let w = kBaseNotificationW * gOverlayScale
-        let h = kBaseNotificationH * gOverlayScale
+        guard let notification = activeNotification else { return }
+        let size = notification.size(scale: gOverlayScale)
+        let w = size.width
+        let h = size.height
         let toast = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: Int(w), height: Int(h)),
             styleMask: [.nonactivatingPanel, .borderless],
@@ -3245,6 +3476,8 @@ class ShortcutReminderController: NSObject, NSWindowDelegate {
     private func updateNotificationContent() {
         guard let contentView = notificationPanel?.contentView,
               let notification = activeNotification else { return }
+        // The same panel is reused for compact alerts and larger join cards.
+        notificationPanel?.setContentSize(notification.size(scale: gOverlayScale))
         let view = OverlayNotificationView(
             notification: notification,
             scale: gOverlayScale,

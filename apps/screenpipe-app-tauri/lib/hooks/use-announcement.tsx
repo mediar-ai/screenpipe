@@ -6,6 +6,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import posthog from "posthog-js";
+import {
+  FEATURE_FLAG_REFRESH_INTERVAL_MS,
+  subscribeToFeatureFlagRefresh,
+} from "@/lib/feature-flag-refresh";
 import { useRouter } from "next/navigation";
 import { getIdentifier, getName } from "@tauri-apps/api/app";
 import { useTauriEvent } from "./use-tauri-event";
@@ -45,7 +49,7 @@ import {
  * rendering; it cannot name code, components, scripts, or arbitrary events.
  */
 export const ANNOUNCEMENT_FLAG_KEY = "app-announcement";
-export const ANNOUNCEMENT_REFRESH_INTERVAL_MS = 60_000;
+export const ANNOUNCEMENT_REFRESH_INTERVAL_MS = FEATURE_FLAG_REFRESH_INTERVAL_MS;
 
 interface UseAnnouncementResult {
   announcement: Announcement | null;
@@ -99,7 +103,7 @@ export function useAnnouncement(): UseAnnouncementResult {
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
-    let refreshTimer: ReturnType<typeof setInterval> | undefined;
+    let stopRefreshing: (() => void) | undefined;
 
     const read = () => {
       if (cancelled) return;
@@ -114,22 +118,6 @@ export function useAnnouncement(): UseAnnouncementResult {
       } catch {
         setPayload(null);
       }
-    };
-
-    const refresh = () => {
-      if (cancelled || document.visibilityState === "hidden") return;
-      try {
-        if (!posthog.has_opted_out_capturing?.()) {
-          posthog.reloadFeatureFlags();
-        }
-      } catch {
-        // PostHog is not initialized or the network is unavailable. The
-        // cached one-shot read still keeps the UI usable.
-      }
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
     };
 
     const start = async () => {
@@ -149,13 +137,11 @@ export function useAnnouncement(): UseAnnouncementResult {
       } catch {
         // posthog not ready / disabled — the one-shot read above is enough.
       }
-      // A release webview can stay open for days. Refresh on foreground and
-      // once per minute so a newly enabled PostHog payload reaches an already
-      // running app instead of requiring a restart.
-      window.addEventListener("focus", refresh);
-      document.addEventListener("visibilitychange", onVisibilityChange);
-      refreshTimer = setInterval(refresh, ANNOUNCEMENT_REFRESH_INTERVAL_MS);
-      refresh();
+      // Share the one-minute refresh with other flag consumers. Repeated
+      // focus events reuse fresh cached values instead of forcing new requests.
+      stopRefreshing = subscribeToFeatureFlagRefresh(
+        () => !posthog.has_opted_out_capturing?.(),
+      );
     };
 
     start().catch(() => {
@@ -165,9 +151,7 @@ export function useAnnouncement(): UseAnnouncementResult {
     return () => {
       cancelled = true;
       unsubscribe?.();
-      if (refreshTimer) clearInterval(refreshTimer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopRefreshing?.();
     };
   }, []);
 

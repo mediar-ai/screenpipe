@@ -1,0 +1,30 @@
+{
+  "surface": "Maintained Workflows browser preview, real shared WorkflowEditor with fictional fixture data",
+  "route": "/preview -> Research synthesis",
+  "before_commit": "022d99748",
+  "after_source": "Source files in this PR",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "touch_viewport": {
+    "width": 390,
+    "height": 900
+  },
+  "theme": "Existing light Workflows palette",
+  "states": [
+    "before menu",
+    "after idle",
+    "after step hover",
+    "after handle hover",
+    "after menu",
+    "after keyboard menu focus",
+    "after handle focus",
+    "after mouse leave",
+    "after touch menu",
+    "after measured timing disclosure",
+    "after plus insertion"
+  ],
+  "installed_app_verified": false,
+  "revision": 2
+}

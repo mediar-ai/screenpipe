@@ -95,6 +95,41 @@ Var ElevationResult
 Var RawCommandLine
 Var MaintenanceUninstall
 Var MaintenanceKeep
+Var MachineToUserMigration
+Var MachineInstallDir
+Var MachineMainBinaryName
+Var MigrationError
+
+; Tauri's generic shortcut predicate intentionally compares SLGP_RAWPATH with
+; exact string semantics. Legacy Shell links can resolve to the same executable
+; with different casing or path representation, so migration uses the resolved
+; target and Windows' case-insensitive comparison before changing it in place.
+!macro RetargetMigrationShortcut shortcut old_target new_target
+  ${DisableX64FSRedirection}
+  !insertmacro ComHlpr_CreateInProcInstance ${CLSID_ShellLink} ${IID_IShellLink} r0 ""
+  ${If} $0 P<> 0
+    ${IUnknown::QueryInterface} $0 '("${IID_IPersistFile}", .r1)'
+    ${If} $1 P<> 0
+      ${IPersistFile::Load} $1 '("${shortcut}", ${STGM_READWRITE})'
+      System::Alloc ${MAX_PATH}
+      Pop $2
+      ${IShellLink::GetPath} $0 '(.r2, ${MAX_PATH}, 0, 0)'
+      System::Call 'kernel32::lstrcmpiW(w r2, w "${old_target}") i.r3'
+      ${If} $3 != 0
+        ${WordReplace} "${old_target}" "$PROGRAMFILES64" "$PROGRAMFILES32" "+1" $4
+        System::Call 'kernel32::lstrcmpiW(w r2, w r4) i.r3'
+      ${EndIf}
+      ${If} $3 = 0
+        ${IShellLink::SetPath} $0 '(w "${new_target}")'
+        ${IPersistFile::Save} $1 '("${shortcut}", 1)'
+      ${EndIf}
+      System::Free $2
+      ${IUnknown::Release} $1 ""
+    ${EndIf}
+    ${IUnknown::Release} $0 ""
+  ${EndIf}
+  ${EnableX64FSRedirection}
+!macroend
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -544,13 +579,34 @@ Function DetectExistingInstall
   ${AndIf} $1 != ""
   ${AndIf} ${FileExists} "$1\uninstall.exe"
     ${If} $ExistingInstallDir != ""
-      MessageBox MB_OK|MB_ICONSTOP "Screenpipe has active current-user and all-users installations. Uninstall the copy you no longer want, then run setup again." /SD IDOK
-      SetErrorLevel 2
-      Quit
+      ; The current-user installation owns updates and ordinary setup runs.
+      ; Ignore the orphaned machine registration without requiring cleanup.
+      Goto existing_install_detected
+    ${EndIf}
+    ${If} $UpdateMode = 1
+      ; Ordinary Enterprise updates migrate a legacy machine install without
+      ; modifying its protected files or HKLM uninstall registration.
+      StrCpy $MachineToUserMigration 1
+      StrCpy $MachineInstallDir $1
+      ; InstallLocation is written quote-delimited by this template. Keep the
+      ; detected value intact for normal scope/path preservation, but use a
+      ; filesystem path when repairing links or carrying deployment config.
+      StrCpy $4 $MachineInstallDir
+      System::Call 'shlwapi::PathUnquoteSpacesW(w r4)'
+      StrCpy $MachineInstallDir $4
+      ReadRegStr $MachineMainBinaryName HKLM "${UNINSTKEY}" "MainBinaryName"
+      ${If} $MachineMainBinaryName == ""
+        StrCpy $MachineMainBinaryName "${MAINBINARYNAME}.exe"
+      ${EndIf}
+      Call SetCurrentUserScope
+      StrCpy $ExistingScope ""
+      StrCpy $ExistingInstallDir ""
+      Goto existing_install_detected
     ${EndIf}
     StrCpy $ExistingScope "all"
     StrCpy $ExistingInstallDir $1
   ${EndIf}
+  existing_install_detected:
   ${If} $IncomingInstallDir != ""
   ${AndIf} $ExistingInstallDir != ""
   ${AndIf} $IncomingInstallDir != $ExistingInstallDir
@@ -853,7 +909,9 @@ Function .onInit
 
   !if "${INSTALLMODE}" == "both"
     Call DetectExistingInstall
-    ${If} $IncomingInstallDir != ""
+    ${If} $MachineToUserMigration = 1
+      StrCpy $INSTDIR $CurrentUserDefaultDir
+    ${ElseIf} $IncomingInstallDir != ""
       StrCpy $INSTDIR $IncomingInstallDir
     ${ElseIf} $ExistingInstallDir != ""
       StrCpy $INSTDIR $ExistingInstallDir
@@ -1046,6 +1104,8 @@ Section Install
     File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
 
+  Call PreserveMigrationDeploymentConfig
+
   ; Copy external binaries
   {{#each binaries}}
     File /a "/oname={{this}}" "{{no-escape @key}}"
@@ -1087,6 +1147,16 @@ Section Install
 
   ; Save current MAINBINARYNAME for future updates
   WriteRegStr SHCTX "${UNINSTKEY}" "MainBinaryName" "${MAINBINARYNAME}.exe"
+
+  ${If} $MachineToUserMigration = 1
+    ; The autostart plugin considers an existing Run value enrolled even when
+    ; it still names Program Files. Preserve the user's enrollment choice, but
+    ; make an enrolled value launch the newly managed user copy.
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+    ${If} $0 != ""
+      WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --autostart"
+    ${EndIf}
+  ${EndIf}
 
   ; Registry information for add/remove programs
   WriteRegStr SHCTX "${UNINSTKEY}" "DisplayName" "${PRODUCTNAME}"
@@ -1336,7 +1406,55 @@ Function un.SkipIfPassive
   ${IfThen} $PassiveMode = 1  ${|} Abort ${|}
 FunctionEnd
 
+Function PreserveMigrationDeploymentConfig
+  ${If} $MachineToUserMigration = 1
+  ${AndIf} ${FileExists} "$MachineInstallDir\enterprise.json"
+  ${AndIfNot} ${FileExists} "$INSTDIR\enterprise.json"
+    ; Preserve the optional executable-adjacent deployment configuration.
+    ; A configuration supplied by the candidate installer takes precedence.
+    System::Call 'kernel32::CopyFileW(w "$MachineInstallDir\enterprise.json", w "$INSTDIR\enterprise.json", i 1) i.r0 ?e'
+    Pop $MigrationError
+    ${If} $0 = 0
+      ; CopyFile can leave an incomplete destination on failure. It was absent
+      ; before this attempt; leave a concurrently created file untouched.
+      ; Windows: ERROR_FILE_EXISTS = 80, ERROR_ALREADY_EXISTS = 183.
+      ${If} $MigrationError != 80
+      ${AndIf} $MigrationError != 183
+        Delete "$INSTDIR\enterprise.json"
+      ${EndIf}
+      ; Keep the old app usable when its configuration cannot be carried over.
+      ; This log is included by normal, consented support collection.
+      ReadEnvStr $R0 "SCREENPIPE_DATA_DIR"
+      ${If} $R0 == ""
+        StrCpy $R0 "$PROFILE\.screenpipe"
+      ${EndIf}
+      CreateDirectory "$R0"
+      ClearErrors
+      ${GetOptions} $CMDLINE "/ARGS" $R2
+      ${If} ${Errors}
+        StrCpy $R2 ""
+      ${EndIf}
+      nsis_tauri_utils::RunAsUser "$MachineInstallDir\$MachineMainBinaryName" "$R2"
+      Pop $R1
+      FileOpen $1 "$R0\update-install.log" a
+      FileSeek $1 0 END
+      FileWrite $1 'installer_migration_failed: operation=copy_enterprise_config windows_result=$MigrationError scope=current recovery=original_app_relaunch_result_$R1$\r$\n'
+      FileClose $1
+      SetErrorLevel $MigrationError
+      Quit
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
 Function CreateOrUpdateStartMenuShortcut
+  ${If} $MachineToUserMigration = 1
+    ; Only repair links owned by the current user. Shared links can require
+    ; elevation and intentionally remain outside ordinary update management.
+    !insertmacro RetargetMigrationShortcut "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk" "$MachineInstallDir\$MachineMainBinaryName" "$INSTDIR\${MAINBINARYNAME}.exe"
+    !insertmacro RetargetMigrationShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$MachineInstallDir\$MachineMainBinaryName" "$INSTDIR\${MAINBINARYNAME}.exe"
+    Return
+  ${EndIf}
+
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   StrCpy $R0 0
@@ -1359,8 +1477,7 @@ Function CreateOrUpdateStartMenuShortcut
     Return
   ${EndIf}
 
-  ; Skip creating shortcut if in update mode or no shortcut mode
-  ; but always create if migrating from wix
+  ; Skip creating shortcut on an update, but always create if migrating from wix.
   ${If} $WixMode = 0
     ${If} $UpdateMode = 1
     ${OrIf} $NoShortcutMode = 1
@@ -1379,6 +1496,21 @@ Function CreateOrUpdateStartMenuShortcut
 FunctionEnd
 
 Function CreateOrUpdateDesktopShortcut
+  ${If} $MachineToUserMigration = 1
+    ; Desktop links may have been renamed. Retarget every existing user-owned
+    ; link that actually names the legacy executable, without creating a new
+    ; shortcut or touching the shared desktop.
+    FindFirst $R0 $R1 "$DESKTOP\*.lnk"
+    migration_desktop_shortcut_loop:
+      StrCmp $R1 "" migration_desktop_shortcut_done
+      !insertmacro RetargetMigrationShortcut "$DESKTOP\$R1" "$MachineInstallDir\$MachineMainBinaryName" "$INSTDIR\${MAINBINARYNAME}.exe"
+      FindNext $R0 $R1
+      Goto migration_desktop_shortcut_loop
+    migration_desktop_shortcut_done:
+    FindClose $R0
+    Return
+  ${EndIf}
+
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\$OldMainBinaryName"
@@ -1388,8 +1520,7 @@ Function CreateOrUpdateDesktopShortcut
     Return
   ${EndIf}
 
-  ; Skip creating shortcut if in update mode or no shortcut mode
-  ; but always create if migrating from wix
+  ; Skip creating shortcut on an update, but always create if migrating from wix.
   ${If} $WixMode = 0
     ${If} $UpdateMode = 1
     ${OrIf} $NoShortcutMode = 1

@@ -50,7 +50,7 @@ use screenpipe_db::DatabaseManager;
 use screenpipe_sync::{BlobSource, ListRequest};
 use screenpipe_telemetry_wire::{
     org_telemetry_prefix, parse_jsonl, parse_telemetry_key, ActivityRow, AudioRow, FeedbackRow,
-    FrameRow, MemoryRow, ParsedRow, SnapshotRow, TelemetryRecord, UiEventRow,
+    FrameRow, MemoryRow, ParsedRow, SnapshotRow, StarredRow, TelemetryRecord, UiEventRow,
 };
 use tracing::{debug, info, warn};
 
@@ -158,6 +158,8 @@ pub async fn ensure_gateway_schema(db: &DatabaseManager) -> Result<(), GatewayEr
     )
     .execute(&mut **tx.conn())
     .await?;
+    sqlx::query("CREATE TABLE IF NOT EXISTS gateway_starred_records (device_id TEXT NOT NULL, starred_id TEXT NOT NULL, device_label TEXT NOT NULL, timestamp TEXT NOT NULL, revision INTEGER NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY(device_id, starred_id))")
+        .execute(&mut **tx.conn()).await?;
     // Device registry: backs /v1/devices and supplies device_label for
     // record kinds whose base tables don't carry one (audio, ui, memory).
     sqlx::query(
@@ -546,6 +548,11 @@ impl Ingestor {
                     device_label,
                     parsed,
                 } => insert_parsed(conn, device_id, device_label, parsed).await?,
+                TelemetryRecord::Starred {
+                    device_id,
+                    device_label,
+                    starred,
+                } => insert_starred(conn, device_id, device_label, starred).await?,
                 TelemetryRecord::Activity {
                     device_id,
                     device_label,
@@ -645,6 +652,19 @@ async fn insert_parsed(
     Ok(result.rows_affected() > 0)
 }
 
+async fn insert_starred(
+    conn: &mut Conn,
+    device_id: &str,
+    label: &str,
+    row: &StarredRow,
+) -> Result<bool, GatewayError> {
+    let payload = serde_json::to_string(row).map_err(|e| GatewayError::DbWrite(e.to_string()))?;
+    let result = sqlx::query("INSERT INTO gateway_starred_records(device_id, starred_id, device_label, timestamp, revision, payload_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(device_id, starred_id) DO UPDATE SET device_label=excluded.device_label, timestamp=excluded.timestamp, revision=excluded.revision, payload_json=excluded.payload_json WHERE excluded.revision > gateway_starred_records.revision")
+        .bind(device_id).bind(&row.starred_id).bind(label).bind(&row.timestamp).bind(row.revision).bind(payload)
+        .execute(&mut **conn).await?;
+    Ok(result.rows_affected() > 0)
+}
+
 async fn insert_activity(
     conn: &mut Conn,
     device_id: &str,
@@ -684,7 +704,13 @@ async fn insert_frame(
     frame: &FrameRow,
 ) -> Result<bool, GatewayError> {
     let sid = sync_id(device_id, "frame", frame.frame_id);
-    if frame_row_id_by_sync_id(conn, &sid).await?.is_some() {
+    if let Some(id) = frame_row_id_by_sync_id(conn, &sid).await? {
+        // An explicit backfill may enrich a frame received from a text-only
+        // client. Never let an older replay erase already retained evidence.
+        if let Some(tree) = &frame.accessibility_tree {
+            sqlx::query("UPDATE frames SET accessibility_tree_json = ?1 WHERE id = ?2 AND accessibility_tree_json IS NULL")
+                .bind(tree.to_string()).bind(id).execute(&mut **conn).await?;
+        }
         return Ok(false);
     }
     let chunk_id: i64 = sqlx::query_scalar(
@@ -700,8 +726,8 @@ async fn insert_frame(
     sqlx::query(
         r#"INSERT INTO frames
            (video_chunk_id, offset_index, timestamp, app_name, window_name, browser_url,
-            full_text, device_name, sync_id, machine_id, synced_at)
-           VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"#,
+            full_text, device_name, sync_id, machine_id, synced_at, accessibility_tree_json)
+           VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"#,
     )
     .bind(chunk_id)
     .bind(&frame.timestamp)
@@ -713,6 +739,12 @@ async fn insert_frame(
     .bind(&sid)
     .bind(device_id)
     .bind(chrono::Utc::now().to_rfc3339())
+    .bind(
+        frame
+            .accessibility_tree
+            .as_ref()
+            .map(|tree| tree.to_string()),
+    )
     .execute(&mut **conn)
     .await?;
     Ok(true)
@@ -982,6 +1014,7 @@ mod tests {
             device,
             label,
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 1,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: Some("Arc".to_string()),
@@ -1074,6 +1107,107 @@ mod tests {
         .await
         .unwrap();
         (ingestor, db, src)
+    }
+
+    #[tokio::test]
+    async fn starred_ingest_keeps_latest_revision_across_replay_and_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = test_db(&dir).await;
+        let src = Arc::new(S3BlobSource::from_store(Arc::new(InMemory::new()), None));
+        let ingestor = Ingestor::new(
+            src.clone(),
+            db.clone(),
+            "lic-1".into(),
+            dir.path().join("snapshots"),
+        )
+        .await
+        .unwrap();
+        let mut row = StarredRow {
+            sequence: 1,
+            starred_id: "star-1".into(),
+            timestamp: "2026-10-16T10:00:00Z".into(),
+            start_at: "2026-10-16T10:00:00Z".into(),
+            end_at: "2026-10-16T10:15:00Z".into(),
+            hd_requested: false,
+            revision: 1,
+        };
+        for (batch, source, revision) in [
+            ("first", "dev-a", 1),
+            ("stop", "dev-a", 2),
+            ("retry-old", "dev-a", 1),
+            ("other", "dev-b", 1),
+        ] {
+            row.revision = revision;
+            row.end_at = if revision == 2 {
+                "2026-10-16T10:05:00Z"
+            } else {
+                "2026-10-16T10:15:00Z"
+            }
+            .into();
+            let body =
+                screenpipe_telemetry_wire::build_starred_jsonl(source, "Mac", &[row.clone()]);
+            src.put_for_tests(&direct_batch_key("lic-1", source, batch), body)
+                .await
+                .unwrap();
+            assert_eq!(ingestor.run_once().await.unwrap().lines_unparseable, 0);
+        }
+        let records: Vec<(String, i64, String)> = sqlx::query_as("SELECT device_id, revision, payload_json FROM gateway_starred_records ORDER BY device_id").fetch_all(&db.pool).await.unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].1, 2);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&records[0].2).unwrap()["end_at"],
+            "2026-10-16T10:05:00Z"
+        );
+        assert_eq!(records[1].1, 1);
+        db.close().await;
+    }
+
+    #[tokio::test]
+    async fn full_ax_tree_survives_ingest_backfill_and_legacy_replay() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = test_db(&dir).await;
+        let tree = serde_json::json!([{"role":"Button","text":"","depth":1,
+            "properties":{"automation_id":"search","unknown":{"x":true}}}]);
+        let mut frame = FrameRow {
+            frame_id: 1,
+            timestamp: "2026-10-15T00:00:00Z".into(),
+            app_name: None,
+            window_name: None,
+            browser_url: None,
+            text: Some("Search".into()),
+            accessibility_tree: None,
+        };
+        let mut tx = db.begin_immediate_with_retry().await.unwrap();
+        assert!(insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        frame.accessibility_tree = Some(tree.clone());
+        assert!(!insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        frame.frame_id = 2;
+        assert!(insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        frame.frame_id = 1;
+        frame.accessibility_tree = None;
+        assert!(!insert_frame(tx.conn(), "device", "label", &frame)
+            .await
+            .unwrap());
+        tx.commit().await.unwrap();
+        let rows: Vec<String> =
+            sqlx::query_scalar("SELECT accessibility_tree_json FROM frames ORDER BY id")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(rows.len(), 2);
+        for raw in rows {
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&raw).unwrap(),
+                tree
+            );
+        }
+        db.close().await;
     }
 
     #[tokio::test]
@@ -1319,6 +1453,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 7,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: Some("Arc".to_string()),
@@ -1386,6 +1521,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 1,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: None,
@@ -1438,6 +1574,7 @@ mod tests {
                 "dev-a",
                 "alice-mbp",
                 &[FrameRow {
+                    accessibility_tree: None,
                     frame_id: 2,
                     timestamp: "2026-07-22T10:01:00Z".to_string(),
                     app_name: None,
@@ -1547,6 +1684,7 @@ mod tests {
             "dev-a",
             "alice-mbp",
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: 7,
                 timestamp: "2026-07-22T10:00:00Z".to_string(),
                 app_name: Some("Arc".to_string()),

@@ -1,0 +1,53 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { beforeAll, afterEach, expect, test } from 'bun:test';
+import { VertexMaasProvider } from './src/providers/vertex-maas';
+import { resetTokenCache } from './src/providers/vertex';
+const originalFetch = globalThis.fetch;
+const encoder = new TextEncoder();
+let pem: string;
+beforeAll(async () => {
+  const key = await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
+  pem='-----BEGIN PRIVATE KEY-----\n'+btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('pkcs8',key.privateKey))))+'\n-----END PRIVATE KEY-----';
+});
+afterEach(() => { globalThis.fetch=originalFetch; resetTokenCache(); });
+function event(delta: any, finish_reason: string | null = null) {
+  return 'data: '+JSON.stringify({id:'synthetic-stream',model:'synthetic-model',choices:[{index:0,delta,finish_reason}]})+'\n\n';
+}
+async function stream(text: string, bytewise=false, status=200) {
+  resetTokenCache();let requests=0;
+  const body:any={model:'glm-4.7',messages:[{role:'user',content:'Synthetic request'}],temperature:0,max_tokens:64};
+  const before=JSON.stringify(body);
+  globalThis.fetch=(async (input:any,init:RequestInit={}) => {
+    const url=String(input);
+    if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'synthetic-token',expires_in:3600});
+    expect(url).toBe('https://aiplatform.googleapis.com/v1/projects/synthetic-project/locations/global/endpoints/openapi/chat/completions');
+    expect(init.method).toBe('POST');expect(new Headers(init.headers).get('authorization')).toBe('Bearer synthetic-token');
+    expect(JSON.parse(String(init.body))).toMatchObject({messages:body.messages,temperature:0,max_tokens:64,stream:true});requests++;
+    const bytes=encoder.encode(text);
+    return new Response(new ReadableStream({start(c){if(bytewise){for(const byte of bytes)c.enqueue(Uint8Array.of(byte));}else c.enqueue(bytes);c.close();}}),{status});
+  }) as typeof fetch;
+  const provider=new VertexMaasProvider(JSON.stringify({project_id:'synthetic-project',client_email:'synthetic@eval.invalid',private_key:pem}),'synthetic-project');
+  try{return await new Response(await provider.createStreamingCompletion(body)).text();}
+  finally{expect(requests).toBe(1);expect(JSON.stringify(body)).toBe(before);}
+}
+function parsed(text:string) {
+  return text.split('\n').filter(l=>l.startsWith('data: ')&&l.trim()!=='data: [DONE]').flatMap(l=>{try{return [JSON.parse(l.slice(6))];}catch{return [];}});
+}
+function values(text:string,key:string) {return parsed(text).flatMap(x=>x.choices??[]).map(c=>c.delta?.[key]).filter(x=>typeof x==='string').join('');}
+const reason=event({reasoning_content:'Synthetic '})+event({reasoning_content:'fallback'});
+for(const [label,suffix] of [['finish',event({},'length')+'data: [DONE]\n\n'],['done','data: [DONE]\n\n'],['eof','']])test(`reasoning-only ${label} supplies one visible answer`,async()=>{
+  const out=await stream(reason+suffix);expect(values(out,'content')).toBe('Synthetic fallback');expect(values(out,'reasoning_content')).toBe('Synthetic fallback');
+  const content=parsed(out).filter(x=>x.choices?.some(c=>c.delta?.content));expect(content.length).toBeGreaterThan(0);
+  for(const x of content){expect(x.id).toBe('synthetic-stream');expect(x.model).toBe('synthetic-model');expect(x.choices[0].index).toBe(0);}
+  if(label!=='eof')expect(out.indexOf('"content":')).toBeLessThan(out.indexOf('data: [DONE]'));
+});
+test('split UTF8 bytes preserve fallback text',async()=>{const text='Synthetic café 🧪';const out=await stream(event({reasoning_content:text})+event({},'length')+'data: [DONE]\n\n',true);expect(values(out,'content')).toBe(text);expect(values(out,'reasoning_content')).toBe(text);});
+test('CRLF reasoning stream supplies fallback',async()=>{const out=await stream((reason+'data: [DONE]\n\n').replaceAll('\n','\r\n'));expect(values(out,'content')).toBe('Synthetic fallback');});
+test('empty content delta does not suppress fallback',async()=>{const out=await stream(event({content:''})+reason+event({},'length'));expect(values(out,'content')).toBe('Synthetic fallback');});
+test('ordinary content remains exact without fallback',async()=>{const out=await stream(event({content:'Visible '})+event({content:'answer'})+event({},'stop')+'data: [DONE]\n\n');expect(values(out,'content')).toBe('Visible answer');});
+test('reasoning followed by answer is not duplicated as answer',async()=>{const out=await stream(reason+event({content:'Final answer'})+event({},'stop')+'data: [DONE]\n\n');expect(values(out,'content')).toBe('Final answer');expect(values(out,'reasoning_content')).toBe('Synthetic fallback');});
+test('empty stream does not invent content',async()=>{const out=await stream(event({})+'data: [DONE]\n\n');expect(values(out,'content')).toBe('');});
+test('tool calls and usage survive without invented text',async()=>{const delta={tool_calls:[{index:0,id:'synthetic-call',type:'function',function:{name:'synthetic_tool',arguments:'{}'}}]};const usage={choices:[],usage:{completion_tokens:7}};const out=await stream(event(delta)+event({},'tool_calls')+'data: '+JSON.stringify(usage)+'\n\ndata: [DONE]\n\n');expect(parsed(out)[0].choices[0].delta).toEqual(delta);expect(parsed(out)).toContainEqual(usage);expect(values(out,'content')).toBe('');});
+test('comments and malformed data remain readable',async()=>{const text=': synthetic keepalive\n\ndata: {malformed}\n\n'+event({content:'Visible'})+'data: [DONE]\n\n';const out=await stream(text);expect(out).toContain(': synthetic keepalive');expect(out).toContain('data: {malformed}');expect(values(out,'content')).toBe('Visible');});
+test('upstream client refusal remains an error',async()=>{await expect(stream('synthetic refusal',false,400)).rejects.toThrow();});

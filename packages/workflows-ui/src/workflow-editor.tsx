@@ -1,13 +1,12 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDown,
   ArrowUp,
   GripVertical,
   ChevronDown,
-  MoreHorizontal,
   Plus,
   Trash2,
   Undo2,
@@ -82,6 +81,9 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
   const [announcement, setAnnouncement] = useState("");
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [blockDragOver, setBlockDragOver] = useState<string | null>(null);
+  const [stepMenu, setStepMenu] = useState<string | null>(null);
+  const stepMenuTrigger = useRef<HTMLButtonElement | null>(null);
+  const draggedStep = useRef(false);
   const [blockMenu, setBlockMenu] = useState<string | null>(null);
   const blockMenuTrigger = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -100,14 +102,17 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
   }, [blockMenu]);
   const editorRoot = useRef<HTMLElement | null>(null);
   useEffect(() => {
+    if (!stepMenu) return;
     const dismiss = (event: PointerEvent) => {
-      editorRoot.current?.querySelectorAll<HTMLDetailsElement>("details[data-step-actions][open]").forEach(menu => {
-        if (!(event.target instanceof Node) || !menu.contains(event.target)) menu.open = false;
-      });
+      if (!(event.target instanceof Element) || !event.target.closest("[data-step-actions]")) setStepMenu(null);
     };
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
-  }, []);
+  }, [stepMenu]);
+  function closeStepMenu(restoreFocus = true) {
+    setStepMenu(null);
+    if (restoreFocus) stepMenuTrigger.current?.focus();
+  }
   const dragging = useRef<{ stage: number; detail?: number } | null>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
@@ -164,6 +169,32 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
       stageChange(stage, { ...old, procedure });
       setAnnouncement(`Block moved to position ${to + 1}`);
     }
+  }
+  function addStage(index: number) {
+    if (draft.stages.length >= 100) return;
+    const stages = [...draft.stages];
+    stages.splice(index, 0, { key: crypto.randomUUID(), sourceIndex: null, name: "", description: "", procedure: [] });
+    change({ ...draft, stages });
+    closeStepMenu(false);
+    focusField(`Step ${index + 1} title`);
+  }
+  function addDetail(index: number) {
+    const stage = draft.stages[index];
+    if (stage.procedure.length >= 100 || (singleCheck && stage.procedure.length)) return;
+    stageChange(index, { ...stage, procedure: [...stage.procedure,
+      { key: crypto.randomUUID(), sourceIndex: null, kind: singleCheck ? "check" : "action", text: "" }],
+    });
+    closeStepMenu(false);
+    focusField(`Block ${stage.procedure.length + 1} in step ${index + 1}`);
+  }
+  function insertion(index: number) {
+    return <div className={styles.insertion}>
+      <button type="button" aria-label={index === 0 ? "Add step at start" : `Add step after ${index}`}
+        title="Add step" disabled={draft.stages.length >= 100} onClick={() => addStage(index)}>
+        <Plus size={16} aria-hidden="true" />
+      </button>
+      <span />
+    </div>;
   }
   function focusField(label: string) {
     requestAnimationFrame(() =>
@@ -274,7 +305,7 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
         <div className={styles.intro}>
           <div className={styles.titleRow}>
           {stepsOnly ? <h1 className={styles.title}>{workflow.title}</h1> : <Text title label="Workflow title" value={draft.title} onChange={title => change({ ...draft, title })} />}
-          <TimingDisclosure label="Workflow timing" value={unchangedStages ? workflow.timing : null}
+          <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={unchangedStages ? workflow.timing : null}
             measured={unchangedStages && workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />
           </div>
           {stepsOnly ? <p className={styles.readOnlyText}>{workflow.description}</p> : <Text label="Workflow description" value={draft.description} onChange={description => change({ ...draft, description })} />}
@@ -286,9 +317,10 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
         <div className={styles.stepsHeading}><strong>Steps</strong></div>
         <div className={styles.steps}>
           {draft.stages.map((stage, index) => (
+            <Fragment key={stage.key}>
+            {insertion(index)}
             <article
               className={`${styles.step} ${dragOver === index ? styles.drop : ""}`}
-              key={stage.key}
               aria-label={`Step ${index + 1}`}
               onDragOver={(e) => {
                 if (
@@ -312,19 +344,38 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
               }}
             >
               <div className={styles.stepTop}>
+                <div data-step-actions data-open={stepMenu === stage.key || undefined} className={styles.stepControls}
+                  onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setStepMenu(null); }}
+                  onKeyDown={event => {
+                    if (event.key === "Escape") {
+                      event.preventDefault(); event.stopPropagation(); closeStepMenu();
+                    }
+                  }}>
                 <button
                   type="button"
                   className={styles.grip}
                   draggable
-                  title="Drag step. Alt + Up/Down to reorder."
-                  aria-label={`Move step ${index + 1}`}
+                  title="Click for step actions. Drag or Alt + Up/Down to reorder."
+                  aria-label={`Step ${index + 1} actions`}
+                  aria-expanded={stepMenu === stage.key}
+                  aria-haspopup="dialog"
+                  onPointerDown={() => { draggedStep.current = false; }}
+                  onClick={event => {
+                    if (draggedStep.current) return;
+                    stepMenuTrigger.current = event.currentTarget;
+                    setStepMenu(stepMenu === stage.key ? null : stage.key);
+                    setBlockMenu(null);
+                  }}
                   onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") draggedStep.current = false;
                     if (e.altKey && ["ArrowUp", "ArrowDown"].includes(e.key)) {
                       e.preventDefault();
                       moveStage(index, index + (e.key === "ArrowUp" ? -1 : 1));
                     }
                   }}
                   onDragStart={(e) => {
+                    draggedStep.current = true;
+                    setStepMenu(null);
                     dragging.current = { stage: index };
                     e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer.setData("text/plain", "workflow-step");
@@ -337,6 +388,18 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                 >
                   <GripVertical size={18} />
                 </button>
+                {stepMenu === stage.key && <div className={styles.stepMenu} role="dialog" aria-label={`Actions for step ${index + 1}`}>
+                  <button type="button" disabled={draft.stages.length >= 100} onClick={() => addStage(index + 1)}><Plus size={15} />Add step below</button>
+                  {(!singleCheck || !stage.procedure.length) && <button type="button" disabled={stage.procedure.length >= 100} onClick={() => addDetail(index)}><Plus size={15} />{singleCheck ? "Add expected result" : "Add block"}</button>}
+                  <button type="button" aria-label={`Move step ${index + 1} up`} disabled={index === 0} onClick={() => { closeStepMenu(); moveStage(index, index - 1); }}><ArrowUp size={15} />Move up</button>
+                  <button type="button" aria-label={`Move step ${index + 1} down`} disabled={index === draft.stages.length - 1} onClick={() => { closeStepMenu(); moveStage(index, index + 1); }}><ArrowDown size={15} />Move down</button>
+                  <button type="button" aria-label={`Delete step ${index + 1}`} disabled={draft.stages.length === 1} onClick={() => {
+                    closeStepMenu(false);
+                    change({ ...draft, stages: draft.stages.filter((_, i) => i !== index) });
+                    focusField(`Step ${Math.min(index + 1, draft.stages.length - 1)} title`);
+                  }}><Trash2 size={15} />Delete step</button>
+                </div>}
+                </div>
                 <span className={styles.number}>
                   {String(index + 1).padStart(2, "0")}
                 </span>
@@ -347,49 +410,9 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                 onChange={(name) => stageChange(index, { ...stage, name })}
               />
                 <div className={styles.stepActions}>
-                <TimingDisclosure label={`Timing for step ${index + 1}`} value={stage.sourceIndex !== null &&
+                <TimingDisclosure hideWhenUnknown showDuration label={`Timing for step ${index + 1}`} value={stage.sourceIndex !== null &&
                   isUnchangedStage(stage, workflow.stages[stage.sourceIndex])
                     ? workflow.stages[stage.sourceIndex]?.timing : null} />
-                <details data-step-actions className={styles.controls} onKeyDown={event => {
-                  if (event.key === "Escape") {
-                    event.preventDefault(); event.stopPropagation();
-                    event.currentTarget.open = false;
-                    event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
-                  }
-                }}><summary aria-label={`Step ${index + 1} actions`} title="Step actions"><MoreHorizontal size={16} /></summary><div className={styles.stepMenu}>
-                  <button
-                    type="button"
-                    aria-label={`Move step ${index + 1} up`}
-                    title="Move up"
-                    disabled={index === 0}
-                    onClick={() => moveStage(index, index - 1)}
-                  >
-                    <ArrowUp size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move step ${index + 1} down`}
-                    title="Move down"
-                    disabled={index === draft.stages.length - 1}
-                    onClick={() => moveStage(index, index + 1)}
-                  >
-                    <ArrowDown size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Delete step ${index + 1}`}
-                    title="Delete step"
-                    disabled={draft.stages.length === 1}
-                    onClick={() =>
-                      change({
-                        ...draft,
-                        stages: draft.stages.filter((_, i) => i !== index),
-                      })
-                    }
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div></details>
                 </div>
               </div>
               <Text
@@ -526,45 +549,21 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                   </div>
                 ))}
               </div>
-              {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && <div className={styles.source}>{renderSource?.(workflow.stages[stage.sourceIndex])}</div>}
-              {(!singleCheck || !stage.procedure.length) && <button
-                type="button"
-                className={styles.add}
-                title="Add block"
-                disabled={stage.procedure.length >= 100}
-                onClick={() => {
-                  stageChange(index, {
-                    ...stage,
-                    procedure: [
-                      ...stage.procedure,
-                      { key: crypto.randomUUID(), sourceIndex: null, kind: singleCheck ? "check" : "action", text: "" },
-                    ],
-                  });
-                  focusField(
-                    `Block ${stage.procedure.length + 1} in step ${index + 1}`,
-                  );
-                }}
-              >
-                <Plus size={14} />
-                Add block
+              {(!singleCheck || !stage.procedure.length) && <button type="button" className={styles.addDetail}
+                aria-label={singleCheck ? `Add expected result to step ${index + 1}` : `Add detail to step ${index + 1}`}
+                disabled={stage.procedure.length >= 100} onClick={() => addDetail(index)}>
+                <Plus size={14} aria-hidden="true" />{singleCheck ? "Add expected result" : "Add detail"}
               </button>}
+              {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && <div className={styles.source}>{renderSource?.(workflow.stages[stage.sourceIndex])}</div>}
             </article>
+            </Fragment>
           ))}
         </div>
         <button
           type="button"
           className={styles.addStep}
           disabled={draft.stages.length >= 100}
-          onClick={() => {
-            change({
-              ...draft,
-              stages: [
-                ...draft.stages,
-                { key: crypto.randomUUID(), sourceIndex: null, name: "", description: "", procedure: [] },
-              ],
-            });
-            focusField(`Step ${draft.stages.length + 1} title`);
-          }}
+          onClick={() => addStage(draft.stages.length)}
         >
           <Plus size={16} />
           Add step
@@ -602,7 +601,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
     <div className={styles.intro}>
       <div className={styles.titleRow}>
         <h1 className={styles.title}>{workflow.title}</h1>
-        <TimingDisclosure label="Workflow timing" value={workflow.timing}
+        <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={workflow.timing}
           measured={workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />
       </div>
       <p className={styles.readOnlyText}>{workflow.description}</p>
@@ -614,7 +613,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
         <div className={styles.stepTop}>
           <span className={styles.number}>{String(index + 1).padStart(2, "0")}</span>
           <h2 className={`${styles.title} ${styles.readOnlyText}`}>{stage.name}</h2>
-          <div className={styles.stepActions}><TimingDisclosure label={`Timing for step ${index + 1}`} value={stage.timing} /></div>
+          <div className={styles.stepActions}><TimingDisclosure hideWhenUnknown showDuration label={`Timing for step ${index + 1}`} value={stage.timing} /></div>
         </div>
         {stage.description && <WorkflowRichText label={`Step ${index + 1} description`} value={stage.description} />}
         <div className={styles.blocks}>
