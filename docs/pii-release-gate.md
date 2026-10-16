@@ -3,7 +3,7 @@
 Draft implementation, not a complete product privacy guarantee.
 
 <!-- doc-covers: crates/screenpipe-db/src/db/privacy_release.rs, crates/screenpipe-db/src/db/privacy_exports.rs, crates/screenpipe-redact/src/worker/release.rs, crates/screenpipe-redact/src/image/worker.rs, crates/screenpipe-engine/src/routes/privacy_release.rs, apps/screenpipe-app-tauri/src-tauri/src/enterprise/sync.rs -->
-<!-- doc-verified: 497df0c721c4953564d41328cb182a99f7643d2a -->
+<!-- doc-verified: b40eda11d44c13791de28dcd9b05926bec8db07d -->
 
 Capture persists through the existing writer. Background detectors process a source revision under a desired policy, then publish the sanitized replacement and its receipt in one transaction. A read adapter exposes only current receipts. Text and image completion are independent. Optional regex filtering and legacy timestamps cannot certify required model processing.
 
@@ -64,6 +64,8 @@ Database source changes enqueue identifiers and revoke derived copies in the sam
 The app's activity store is separate from SQLite. Upload admission compares saved activity fingerprints with the prepared copies while holding the history-save lock, alongside the existing database admission lease. Edits and deletions therefore cannot pass transport admission with an older copy. Subsequent preparation replaces changed copies without reprocessing unchanged activities.
 
 Each enabled stream retains its enrollment cutoff before preparation starts and uploads in completion order. Pending detector work does not block ready streams. An unsuccessful transport acknowledgment retains the delivery checkpoint; restart retries it. After that checkpoint is durable, acknowledged upload copies are removed and only their source-version markers remain. Interrupted cleanup retries on the next tick. These adapters restore enterprise uploads, not the otherwise unsupported local API surfaces or administrative replay.
+
+[Follow-up validation and paired trigger measurements](benchmarks/pii-release-gate/DERIVED-UPLOADS.md) record the 175 passing targeted tests, raw timing samples, scope limits and the unrelated native tooltip assertion failure.
 
 ## Validation
 
