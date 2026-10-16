@@ -28,6 +28,7 @@ impl Redactor for CompleteRedactor<'_> {
 
 impl Worker {
     pub fn with_frame_storage(mut self, db: Arc<screenpipe_db::DatabaseManager>) -> Self {
+        self.release_db = Some(Arc::clone(&db));
         if db.storage_mode() == StorageMode::HybridParquetV1 {
             self.frame_storage = Some(db);
         }

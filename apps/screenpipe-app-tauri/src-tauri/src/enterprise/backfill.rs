@@ -23,11 +23,11 @@ pub(super) enum BackfillStream {
 
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct BackfillRequest {
-    id: String,
+    pub(super) id: String,
     license_id: String,
     device_id: String,
-    start_at: chrono::DateTime<chrono::Utc>,
-    end_at: chrono::DateTime<chrono::Utc>,
+    pub(super) start_at: chrono::DateTime<chrono::Utc>,
+    pub(super) end_at: chrono::DateTime<chrono::Utc>,
     streams: Vec<BackfillStream>,
     #[serde(default)]
     pub(super) images_only: bool,
@@ -177,6 +177,7 @@ impl BackfillRequest {
     fn initial_cursor(&self) -> Cursor {
         let start = Some(self.start_at.to_rfc3339());
         Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: start.clone(),
             last_audio_ts: start.clone(),
@@ -235,7 +236,11 @@ pub(super) async fn run_replay_page(
     request: &BackfillRequest,
 ) -> Result<SyncTickReport, EnterpriseSyncError> {
     if request.images_only {
-        return run_one_sync_inner(cfg, cursor, local, http, false, Some(request)).await;
+        let page = run_one_sync_inner(cfg, cursor, local, http, false, Some(request)).await?;
+        if !page.may_have_more() {
+            local.finish_release_replay(&request.id).await?;
+        }
+        return Ok(page);
     }
     let mut page = SyncTickReport::default();
     if !cursor.boundary.backfill_telemetry_complete {
@@ -276,6 +281,9 @@ pub(super) async fn run_replay_page(
             .backfill_image_replay
             .as_ref()
             .is_some_and(|r| !r.complete);
+    if !page.may_have_more() {
+        local.finish_release_replay(&request.id).await?;
+    }
     Ok(page)
 }
 
@@ -543,7 +551,16 @@ mod tests {
     async fn backfill_resumes_timestamp_ties_after_lost_ack_without_touching_live_cursor() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let _restore = super::super::tests::RestoreDefaultSyncStreams;
-        crate::enterprise_policy::set_sync_streams(true, true, true, true, true, true, "off".into(), "off".into());
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "off".into(),
+            "off".into(),
+        );
         let server = MockServer::start().await;
         let dir = tempfile::TempDir::new().unwrap();
         let cfg = cfg(&dir, &server);
@@ -660,7 +677,16 @@ mod tests {
     async fn backfill_direct_retries_keep_batch_identity_without_advancing_cursor() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
         let _restore = super::super::tests::RestoreDefaultSyncStreams;
-        crate::enterprise_policy::set_sync_streams(true, true, true, true, true, true, "off".into(), "off".into());
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "off".into(),
+            "off".into(),
+        );
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/ticket"))
@@ -1182,7 +1208,6 @@ mod tests {
             .map(|r| serde_json::from_slice(&r.body).unwrap())
             .collect();
         assert_eq!(completions[0], completions[1]);
-
     }
 
     #[tokio::test]
@@ -1295,7 +1320,6 @@ mod tests {
             .unwrap()
             .iter()
             .all(|r| r.url.path() != "/api/enterprise/frame-requests"));
-
     }
 
     #[tokio::test]
@@ -1452,7 +1476,6 @@ mod tests {
         .to_string()
         .contains("screenshot_storage_mode_blocked"));
         assert_eq!(local.reads.load(Ordering::SeqCst), reads);
-
     }
 
     #[tokio::test]

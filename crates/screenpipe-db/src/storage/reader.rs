@@ -27,6 +27,7 @@ impl Projection {
 pub struct StorageReadToken {
     pub revision: i64,
     revocation: Option<i64>,
+    privacy_revision: Option<i64>,
     storage: Option<Arc<HybridStorage>>,
     _lease: Option<Arc<OwnedRwLockReadGuard<()>>>,
 }
@@ -40,11 +41,29 @@ impl std::fmt::Debug for StorageReadToken {
 }
 
 impl StorageReadToken {
+    /// Check privacy independently: refreshing storage rows cannot authorize a
+    /// payload selected under a superseded privacy policy.
+    pub async fn validate_privacy(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
+        if let Some(expected) = self.privacy_revision {
+            let current: i64 =
+                sqlx::query_scalar("SELECT revocation FROM _privacy_policy WHERE id=1")
+                    .fetch_one(pool)
+                    .await?;
+            if current != expected {
+                return Err(storage_error(
+                    "privacy revision changed; retry the complete query",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Keep this guard until the prepared response is handed to its transport.
     pub async fn admit(
         &self,
         pool: &SqlitePool,
     ) -> Result<Option<OwnedMutexGuard<()>>, sqlx::Error> {
+        self.validate_privacy(pool).await?;
         let Some(storage) = &self.storage else {
             return Ok(None);
         };
@@ -110,6 +129,7 @@ impl DatabaseManager {
         StorageReadToken {
             revision,
             revocation: None,
+            privacy_revision: None,
             storage: self.storage.clone(),
             _lease: None,
         }
@@ -127,7 +147,9 @@ impl DatabaseManager {
             return Err(sqlx::Error::PoolClosed);
         }
         let Some(storage) = &self.storage else {
-            return self.storage_read_token().await;
+            let mut token = self.storage_read_token().await?;
+            token.privacy_revision = self.release_revocation().await?;
+            return Ok(token);
         };
         if storage.closing.is_cancelled() {
             return Err(sqlx::Error::PoolClosed);
@@ -140,6 +162,7 @@ impl DatabaseManager {
         Ok(StorageReadToken {
             revision,
             revocation: Some(revocation),
+            privacy_revision: self.release_revocation().await?,
             storage: Some(Arc::clone(storage)),
             _lease: None,
         })
@@ -158,6 +181,7 @@ impl DatabaseManager {
             return Ok(StorageReadToken {
                 revision: 0,
                 revocation: None,
+                privacy_revision: None,
                 storage: None,
                 _lease: None,
             });
@@ -335,6 +359,7 @@ impl HybridStorage {
         Ok(StorageReadToken {
             revision,
             revocation,
+            privacy_revision: None,
             storage: Some(Arc::clone(self)),
             _lease: Some(lease),
         })

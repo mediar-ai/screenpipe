@@ -610,6 +610,11 @@ impl SCServer {
     }
 
     async fn create_router_inner(&self) -> Router {
+        let protected_db = self
+            .db
+            .protected_reads()
+            .await
+            .expect("privacy read adapter must initialize before API admission");
         let api_request_count = Arc::new(AtomicUsize::new(0));
         let analytics_enabled = analytics::is_enabled();
         let mut telemetry_tasks = crate::telemetry_tasks::TelemetryTasks::default();
@@ -764,11 +769,14 @@ impl SCServer {
         // within seconds. This avoids blocking server start for 40+ seconds on large DBs.
         // WS clients that connect before warm completes will see frames without audio
         // initially, then audio appears as the cache populates.
-        let hot_frame_cache = self
-            .hot_frame_cache
-            .clone()
-            .unwrap_or_else(|| Arc::new(HotFrameCache::new()));
-        if self.timeline_disabled {
+        let hot_frame_cache = if protected_db.protected_reads_enabled() {
+            None
+        } else {
+            self.hot_frame_cache.clone()
+        }
+        /* protected history never consumes the raw capture cache */
+        .unwrap_or_else(|| Arc::new(HotFrameCache::new()));
+        if self.timeline_disabled || protected_db.protected_reads_enabled() {
             // Skip the potentially expensive warm-up but mark it resolved so
             // requests for saved history immediately use database backfill.
             hot_frame_cache.skip_warmup();
@@ -782,7 +790,7 @@ impl SCServer {
         }
 
         let app_state = Arc::new(AppState {
-            db: self.db.clone(),
+            db: protected_db.clone(),
             history_access: self.history_access.clone(),
             audio_manager: self.audio_manager.clone(),
             app_start_time: Utc::now(),
@@ -791,7 +799,7 @@ impl SCServer {
             audio_disabled: self.audio_disabled,
             frame_cache: match FrameCache::new(
                 self.screenpipe_dir.clone().join("data"),
-                self.db.clone(),
+                protected_db.clone(),
             )
             .await
             {
@@ -1105,6 +1113,14 @@ impl SCServer {
 
         // Build the main router with all routes
         let router = Router::new()
+            .route(
+                "/privacy/status",
+                get(crate::routes::privacy_release::status),
+            )
+            .route(
+                "/privacy/ready/:kind",
+                get(crate::routes::privacy_release::ready_page),
+            )
             .merge(server.into_router())
             // Agent self-improvement lives behind one validated local API so
             // native Pi and ACP share profile safety, prompt rendering, skill
@@ -1546,6 +1562,7 @@ impl SCServer {
             .layer(Extension(Arc::new(telemetry_tasks)))
             .with_state(app_state.clone())
             .layer(axum::middleware::from_fn(crate::search_only::history_only))
+            .layer(axum::middleware::from_fn_with_state(app_state.clone(),crate::routes::privacy_release::release_middleware))
             .layer(axum::middleware::from_fn_with_state(
                 app_state.clone(),
                 crate::routes::search::storage_snapshot_middleware,

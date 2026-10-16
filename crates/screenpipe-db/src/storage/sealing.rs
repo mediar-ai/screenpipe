@@ -121,10 +121,39 @@ impl DatabaseManager {
         window_name: Option<&str>,
         browser_url: Option<&str>,
     ) -> Result<bool, sqlx::Error> {
+        self.replace_frame_payload_with_release(
+            payload,
+            policy,
+            completed_surfaces,
+            window_name,
+            browser_url,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn replace_frame_payload_with_release(
+        &self,
+        payload: &FramePayload,
+        policy: &str,
+        completed_surfaces: u8,
+        window_name: Option<&str>,
+        browser_url: Option<&str>,
+        release: Option<(
+            &crate::privacy_release::ReleaseJob,
+            &std::collections::BTreeMap<String, Option<String>>,
+        )>,
+    ) -> Result<bool, sqlx::Error> {
         let Some(storage) = &self.storage else {
             return Err(storage_error("replacement requires hybrid storage"));
         };
         let mut tx = self.begin_immediate_with_retry().await?;
+        if let Some((job, _)) = release {
+            let current:(String,i64,bool)=sqlx::query_as("SELECT identity,COALESCE((SELECT revision FROM _privacy_release WHERE kind=? AND id=? AND policy IS NULL),-1),text_required FROM _privacy_policy WHERE id=1").bind(&job.kind).bind(&job.id).fetch_one(&mut **tx.conn()).await?;
+            if current != (job.policy.clone(), job.revision, true) {
+                return Ok(false);
+            }
+        }
         let row = sqlx::query("SELECT p.generation,p.state,p.file_id,p.bytes,m.policy,m.staging_bytes FROM frame_payloads p CROSS JOIN storage_metadata m WHERE p.frame_id=?")
             .bind(payload.id).fetch_optional(&mut **tx.conn()).await?;
         let Some(row) = row else {
@@ -162,6 +191,14 @@ impl DatabaseManager {
             .bind(window_name).bind(browser_url).bind(&payload.full_text).bind(&payload.accessibility_text)
             .bind(&payload.full_text).bind(&payload.accessibility_text).bind(&payload.accessibility_tree_json).bind(&payload.text_json).bind(payload.id)
             .execute(&mut **tx.conn()).await?;
+        if let Some((_, values)) = release {
+            sqlx::query("UPDATE frames SET app_name=?,document_path=? WHERE id=?")
+                .bind(&values["app_name"])
+                .bind(&values["document_path"])
+                .bind(payload.id)
+                .execute(&mut **tx.conn())
+                .await?;
+        }
         sqlx::query("UPDATE frame_payloads SET generation=generation+1,state='staged',file_id=NULL,bytes=?,policy=?,completed_surfaces=?,attempts=0,retry_at=NULL,last_error=NULL WHERE frame_id=?")
             .bind(payload.bytes() as i64).bind(policy).bind(completed_surfaces as i64).bind(payload.id).execute(&mut **tx.conn()).await?;
         sqlx::query("UPDATE frames SET full_text_redacted_at=CASE WHEN (?1&1)!=0 THEN strftime('%s','now') END,accessibility_redacted_at=CASE WHEN (?1&2)!=0 THEN strftime('%s','now') END,accessibility_tree_redacted_at=CASE WHEN (?1&4)!=0 THEN strftime('%s','now') END,text_json_redacted_at=CASE WHEN (?1&8)!=0 THEN strftime('%s','now') END,window_name_redacted_at=CASE WHEN (?1&16)!=0 THEN strftime('%s','now') END,browser_url_redacted_at=CASE WHEN (?1&32)!=0 THEN strftime('%s','now') END WHERE id=?2")
@@ -179,6 +216,9 @@ impl DatabaseManager {
         sqlx::query("UPDATE storage_metadata SET maintenance=0")
             .execute(&mut **tx.conn())
             .await?;
+        if let Some((job, _)) = release {
+            crate::privacy_release::certify(&mut **tx.conn(), job).await?;
+        }
         tx.commit().await?;
         Ok(true)
     }

@@ -1097,6 +1097,19 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     };
+    db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+        identity: format!(
+            "pii-release-v1:{}:{}:{:?}:{:?}:{}",
+            screenpipe_redact::release_model_identity(),
+            config.pii_backend,
+            config.pii_redaction_labels,
+            config.pii_redaction_columns,
+            config.pii_redaction_pseudonyms
+        ),
+        text: config.async_pii_redaction,
+        images: config.async_image_pii_redaction,
+    })
+    .await?;
     let database_failure = Arc::new(tokio::sync::Notify::new());
     let notify_failure = database_failure.clone();
     db.set_persistent_failure_hook(Arc::new(move || notify_failure.notify_one()));
@@ -2421,6 +2434,7 @@ async fn main() -> anyhow::Result<()> {
                 detector,
                 cfg,
             )
+            .with_release_storage(Arc::clone(&db))
             .with_database_error_hook(redact_database_error_hook.clone())
             .spawn();
         }

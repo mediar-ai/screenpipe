@@ -61,7 +61,22 @@ async fn run_guarded_routine_wal_checkpoint(
 impl DatabaseManager {
     /// Execute trusted, row-returning dynamic SQL on the query pool.
     pub async fn query_raw_sql(&self, query: &str) -> Result<serde_json::Value, sqlx::Error> {
-        if self.storage.is_some() {
+        if self.release_owner.is_some() {
+            return Err(sqlx::Error::Protocol(
+                "privacy-required: use typed search; unrestricted SQL is unavailable".into(),
+            ));
+        }
+        self.query_activity_summary_sql(query).await
+    }
+
+    /// Internal activity-summary queries use only audited fields and resolve
+    /// through the protected TEMP views. Never pass caller-supplied SQL here.
+    /// The external raw-SQL API remains disabled for protected readers.
+    pub async fn query_activity_summary_sql(
+        &self,
+        query: &str,
+    ) -> Result<serde_json::Value, sqlx::Error> {
+        if self.storage.is_some() && self.release_owner.is_none() {
             crate::storage::sql::validate_resident_query(&self.pool, query).await?;
         }
         self.consistent_read(|| async {
@@ -104,7 +119,7 @@ impl DatabaseManager {
         Ok(Self::raw_sql_rows(&rows))
     }
 
-    fn raw_sql_rows(rows: &[sqlx::sqlite::SqliteRow]) -> serde_json::Value {
+    pub(super) fn raw_sql_rows(rows: &[sqlx::sqlite::SqliteRow]) -> serde_json::Value {
         let result: Vec<serde_json::Map<String, serde_json::Value>> = rows
             .iter()
             .map(|row| {

@@ -245,6 +245,8 @@ pub struct ActivityGuidance {
 #[derive(Serialize, OaSchema)]
 pub struct ActivitySummaryResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy: Option<super::search::SearchPrivacy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) starred_sessions: Option<Vec<super::starred::StarredSession>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) starred_sessions_has_more: Option<bool>,
@@ -435,8 +437,16 @@ pub(crate) async fn get_activity_summary(
 
     let snippets_for_status = snippets_opt.as_deref().unwrap_or(&[]);
     let memories_for_status = memories_opt.as_deref().unwrap_or(&[]);
-    let data_status =
-        compute_data_status(&summary_core, recording_opt.as_ref(), snippets_for_status);
+    let sources_ready = state.db.activity_sources_ready(query.start_time, query.end_time).await
+        .map_err(|error| {
+            error!(%error, "activity summary privacy readiness failed");
+            (StatusCode::SERVICE_UNAVAILABLE, JsonResponse(json!({"error":"Privacy processing is pending", "code":"privacy_pending", "retryable":true})))
+        })?;
+    let data_status = if sources_ready {
+        compute_data_status(&summary_core, recording_opt.as_ref(), snippets_for_status)
+    } else {
+        "privacy_processing".into()
+    };
     let query_status = compute_query_status(memory_query, memories_for_status, snippets_for_status);
 
     if api_client.is_direct_api() && data_status == "ok" {
@@ -461,6 +471,7 @@ pub(crate) async fn get_activity_summary(
     };
 
     Ok(JsonResponse(ActivitySummaryResponse {
+        privacy: super::search::search_privacy(state.db.protected_reads_enabled()),
         starred_sessions,
         starred_sessions_has_more,
         apps: query.include_apps.then_some(summary_core.apps),
@@ -506,6 +517,7 @@ fn empty_activity_summary_response(query: &ActivitySummaryQuery) -> ActivitySumm
         "not_requested"
     };
     ActivitySummaryResponse {
+        privacy: None,
         starred_sessions: None,
         starred_sessions_has_more: None,
         apps: query.include_apps.then(Vec::new),
@@ -849,7 +861,7 @@ async fn collect_summary_core(
     let should_query_texts = query.include_key_texts || query.include_snippets;
     let texts_future = async {
         if should_query_texts {
-            db.query_raw_sql(&texts_query).await
+            db.query_activity_summary_sql(&texts_query).await
         } else {
             Ok(Value::Array(Vec::new()))
         }
@@ -862,11 +874,11 @@ async fn collect_summary_core(
         audio_transcripts_result,
         edited_files_result,
     ) = tokio::join!(
-        db.query_raw_sql(&frame_summary_query),
+        db.query_activity_summary_sql(&frame_summary_query),
         texts_future,
-        db.query_raw_sql(&audio_speakers_query),
-        db.query_raw_sql(&audio_transcripts_query),
-        db.query_raw_sql(&edited_files_query),
+        db.query_activity_summary_sql(&audio_speakers_query),
+        db.query_activity_summary_sql(&audio_transcripts_query),
+        db.query_activity_summary_sql(&edited_files_query),
     );
 
     let mut apps = Vec::new();
@@ -1065,7 +1077,10 @@ async fn load_recording_status(
          (SELECT ROUND((JULIANDAY('{now}') - JULIANDAY(MAX(timestamp))) * 86400) FROM audio_transcriptions) AS seconds_since_last_audio"
     );
 
-    let rows = db.query_raw_sql(&query).await.map_err(|e| e.to_string())?;
+    let rows = db
+        .query_activity_summary_sql(&query)
+        .await
+        .map_err(|e| e.to_string())?;
     let row = rows
         .as_array()
         .and_then(|a| a.first())
@@ -1227,7 +1242,7 @@ async fn load_snippets(
     }
 
     let audio_rows = db
-        .query_raw_sql(&audio_query)
+        .query_activity_summary_sql(&audio_query)
         .await
         .map_err(|e| e.to_string())?;
     if let Some(rows) = audio_rows.as_array() {
@@ -2041,7 +2056,7 @@ mod db_tests {
 
     async fn last_frame_id(db: &DatabaseManager) -> i64 {
         let rows = db
-            .query_raw_sql("SELECT MAX(id) AS id FROM frames")
+            .query_activity_summary_sql("SELECT MAX(id) AS id FROM frames")
             .await
             .expect("select latest frame id");
         rows.as_array()
@@ -2951,7 +2966,7 @@ mod db_tests {
         let (db, _d) = fresh_db().await;
         // Mirrors the WHERE clause shared by the apps / windows / active-ts queries.
         let plan = db
-            .query_raw_sql(
+            .query_activity_summary_sql(
                 "EXPLAIN QUERY PLAN SELECT timestamp FROM frames \
                  WHERE timestamp BETWEEN '2026-05-15T00:00:00Z' AND '2026-05-15T01:00:00Z' \
                  AND app_name IS NOT NULL AND app_name != ''",
@@ -3049,6 +3064,7 @@ mod include_flag_tests {
             timestamp: "2026-06-02T10:00:30Z".to_string(),
         }];
         ActivitySummaryResponse {
+            privacy: None,
             starred_sessions: None,
             starred_sessions_has_more: None,
             apps: include_apps.then_some(apps),

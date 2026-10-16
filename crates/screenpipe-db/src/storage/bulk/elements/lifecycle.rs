@@ -351,6 +351,10 @@ async fn rewrite(
         format!("_archive_deleted=1 OR ({})", TABLE.sealable())
     };
     let freed:i64=sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COALESCE(SUM({}),0) FROM _bulk_element_rows WHERE id BETWEEN ? AND ? AND ({selection})",TABLE.all_bytes("")))).bind(first).bind(last).fetch_one(&mut *tx).await?;
+    // Moving the same logical rows into Parquet does not edit their content.
+    sqlx::query("UPDATE storage_metadata SET maintenance=1 WHERE singleton=1")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "DELETE FROM _bulk_element_rows WHERE id BETWEEN ? AND ? AND ({selection})"
     )))
@@ -358,6 +362,9 @@ async fn rewrite(
     .bind(last)
     .execute(&mut *tx)
     .await?;
+    sqlx::query("UPDATE storage_metadata SET maintenance=0 WHERE singleton=1")
+        .execute(&mut *tx)
+        .await?;
     if let Some((_, _, old)) = range {
         sqlx::query("DELETE FROM _bulk_element_ranges WHERE file_id=?")
             .bind(old)

@@ -1,4 +1,5 @@
 "use client";
+import { PrivacyProcessingStatus } from "./privacy-processing-status";
 import { WorkflowSharingControls } from "@/components/workflows/workflow-sharing-controls";
 
 // screenpipe — AI that knows everything you've seen, said, or heard
@@ -1393,6 +1394,7 @@ export function PrivacySection() {
                 }
               />
             </div>
+            {piiMode === "smart" && <PrivacyProcessingStatus />}
             {piiMode !== "off" && (
               <div className="mt-3 ml-6 space-y-3 border-l-2 border-border pl-3">
                 <div className="space-y-2">

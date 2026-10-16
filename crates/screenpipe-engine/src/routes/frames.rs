@@ -74,6 +74,35 @@ async fn require_frame_history_access(
     Ok(())
 }
 
+async fn require_image_release(
+    state: &Arc<AppState>,
+    frame_id: i64,
+) -> Result<(), (StatusCode, JsonResponse<Value>)> {
+    if state.db.protected_reads_enabled() {
+        let policy = state.db.release_policy().await.map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(json!({"code":"privacy_pending"})),
+            )
+        })?;
+        if policy.images
+            && !state
+                .db
+                .release_ready("image", &frame_id.to_string())
+                .await
+                .unwrap_or(false)
+        {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(
+                    json!({"error":"Image privacy processing is pending","code":"privacy_pending","retryable":true}),
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 const DEFAULT_THUMBNAIL_WIDTH: u32 = 384;
 const DEFAULT_THUMBNAIL_QUALITY: u8 = 75;
 const MIN_THUMBNAIL_WIDTH: u32 = 64;
@@ -588,6 +617,7 @@ pub async fn get_frame_thumbnail(
     Query(query): Query<FrameThumbnailQuery>,
 ) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
     require_frame_history_access(&state, frame_id).await?;
+    require_image_release(&state, frame_id).await?;
     if !(MIN_THUMBNAIL_WIDTH..=MAX_THUMBNAIL_WIDTH).contains(&query.width) {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -728,6 +758,9 @@ async fn thumbnail_for_candidate(
     width: u32,
     quality: u8,
 ) -> anyhow::Result<ThumbnailResult> {
+    require_image_release(state, candidate.frame_id)
+        .await
+        .map_err(|_| anyhow::anyhow!("image privacy processing pending"))?;
     let metadata = tokio::fs::metadata(&candidate.file_path).await?;
     if !metadata.is_file() {
         anyhow::bail!("thumbnail source is not a regular file");
@@ -893,6 +926,7 @@ pub async fn get_frame_data(
     Query(query): Query<FrameDataQuery>,
 ) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
     require_frame_history_access(&state, frame_id).await?;
+    require_image_release(&state, frame_id).await?;
     let start_time = Instant::now();
 
     match timeout(Duration::from_secs(5), async {
@@ -903,7 +937,7 @@ pub async fn get_frame_data(
         // was removed: it only worked on OCR-fallback frames and was a second
         // unreliable path. Screenshot redaction relies on the image model.)
         // Try to get frame from cache if enabled.
-        if let Some(cache) = &state.frame_image_cache {
+        if let Some(cache) = state.frame_image_cache.as_ref().filter(|_| !state.db.protected_reads_enabled()) {
             let cache_result = cache.try_lock();
             match cache_result {
                 Ok(mut cache) => {
@@ -1180,6 +1214,9 @@ async fn try_nearest_frame(state: &Arc<AppState>, frame_id: i64) -> Option<Respo
         };
 
         for (candidate_id, file_path, offset_index, _timestamp, is_snapshot) in candidates {
+            if require_image_release(state, candidate_id).await.is_err() {
+                continue;
+            }
             if is_snapshot {
                 // Snapshot frame — only serve regular files.
                 if matches!(tokio::fs::metadata(&file_path).await, Ok(metadata) if metadata.is_file())
@@ -1763,6 +1800,7 @@ pub async fn run_frame_ocr(
     Query(params): Query<FrameOcrQuery>,
 ) -> Result<JsonResponse<FrameTextResponse>, (StatusCode, JsonResponse<Value>)> {
     require_frame_history_access(&state, frame_id).await?;
+    require_image_release(&state, frame_id).await?;
     // Check if OCR data already exists — avoid redundant work
     match state.db.get_frame_text_positions(frame_id).await {
         Ok(existing) if !existing.is_empty() => {

@@ -27,7 +27,6 @@ mod imp {
         ActivityRow, AudioRow, EnterpriseSyncConfig, EnterpriseSyncError, FeedbackRow, FrameRow,
         LocalApiClient, MemoryRow, ParsedRow, SnapshotRow, StarredRow, UiEventRow,
     };
-    use screenpipe_telemetry_wire::ActivityEvidenceRow;
     use serde::Deserialize;
     use sha2::{Digest, Sha256};
     use std::collections::HashMap;
@@ -213,10 +212,35 @@ mod imp {
     struct StorageExport {
         db: Arc<screenpipe_db::DatabaseManager>,
         token: screenpipe_db::storage::StorageReadToken,
+        activities: Option<(tauri::AppHandle, std::collections::BTreeMap<String, String>)>,
     }
 
     impl StorageExport {
         async fn begin(
+            db: Arc<screenpipe_db::DatabaseManager>,
+            app: tauri::AppHandle,
+        ) -> Result<Self, EnterpriseSyncError> {
+            let mut export = Self::begin_storage(db.clone()).await?;
+            let activities = if crate::enterprise_policy::current_sync_streams().activities
+                && db
+                    .release_policy()
+                    .await
+                    .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+                    .text
+            {
+                db.activity_export_versions()
+                    .await
+                    .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
+            } else {
+                Default::default()
+            };
+            if !activities.is_empty() {
+                export.activities = Some((app, activities));
+            }
+            Ok(export)
+        }
+
+        async fn begin_storage(
             db: Arc<screenpipe_db::DatabaseManager>,
         ) -> Result<Self, EnterpriseSyncError> {
             let token =
@@ -226,17 +250,63 @@ mod imp {
                         operation: "prepare export",
                         cause: error.to_string(),
                     })?;
-            Ok(Self { db, token })
+            Ok(Self {
+                db,
+                token,
+                activities: None,
+            })
         }
     }
 
     #[async_trait::async_trait]
     impl crate::enterprise::sync::ExportFilter for StorageExport {
+        async fn admit(&self) -> Result<Option<Box<dyn Send>>, EnterpriseSyncError> {
+            let history = if let Some((app, activities)) = &self.activities {
+                let guard = app
+                    .state::<crate::activity_history::ActivityHistoryState>()
+                    .export_lock
+                    .clone()
+                    .lock_owned()
+                    .await;
+                let rows = crate::activity_history::export_rows(app)
+                    .map_err(EnterpriseSyncError::LocalApi)?;
+                let rows = rows
+                    .into_iter()
+                    .map(serde_json::to_value)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                screenpipe_db::privacy_exports::validate_activity_exports(activities, &rows)
+                    .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))?;
+                Some(guard)
+            } else {
+                None
+            };
+            let storage = self.token.admit(&self.db.pool).await.map_err(|error| {
+                EnterpriseSyncError::Storage {
+                    operation: "admit export",
+                    cause: error.to_string(),
+                }
+            })?;
+            Ok(Some(Box::new((storage, history))))
+        }
+
         async fn filter(
             &self,
             rows: &mut ee_sync::ExportRows<'_>,
             local: &dyn LocalApiClient,
         ) -> Result<ee_sync::ExportFilterReport, EnterpriseSyncError> {
+            if local.privacy_release_required().await? {
+                drop(self.admit().await?);
+                return Ok(Default::default());
+            }
+            // A token also detects enabling privacy after raw selection.
+            self.token
+                .validate_privacy(&self.db.pool)
+                .await
+                .map_err(|error| EnterpriseSyncError::Storage {
+                    operation: "validate privacy export",
+                    cause: error.to_string(),
+                })?;
             // SQLite has no hybrid revocation counter. Validate its selected
             // rows directly instead of treating a no-op token as freshness.
             if self.db.storage_mode() == screenpipe_db::storage::StorageMode::Sqlite {
@@ -263,6 +333,196 @@ mod imp {
 
     #[async_trait::async_trait]
     impl LocalApiClient for ScreenpipeLocalClient {
+        async fn release_replay_pending(
+            &self,
+            request_id: &str,
+            streams: &[String],
+            start: &str,
+            end: &str,
+            after: &std::collections::BTreeMap<String, i64>,
+        ) -> Result<bool, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.release_replay_pending(request_id, streams, start, end, Some(after))
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "check protected historical replay",
+                    cause: e.to_string(),
+                })
+        }
+        async fn prepare_release_replay(
+            &self,
+            request_id: &str,
+            streams: &[String],
+            start: &str,
+            end: &str,
+            limit: u32,
+        ) -> Result<bool, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.prepare_release_replay(request_id, streams, start, end, limit)
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "prepare protected historical replay",
+                    cause: e.to_string(),
+                })
+        }
+
+        async fn finish_release_replay(&self, request_id: &str) -> Result<(), EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.finish_release_replay(request_id)
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "finish protected historical replay",
+                    cause: e.to_string(),
+                })
+        }
+
+        async fn prepare_release_exports(
+            &self,
+            cutoffs: &std::collections::BTreeMap<String, String>,
+            limit: u32,
+        ) -> Result<bool, EnterpriseSyncError> {
+            if cutoffs.is_empty() {
+                return Ok(false);
+            }
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            let mut more = false;
+            for (kind, cutoff) in cutoffs {
+                if kind == "activities" {
+                    let state = self
+                        .app
+                        .state::<crate::activity_history::ActivityHistoryState>();
+                    let _history = state.export_lock.lock().await;
+                    let rows = crate::activity_history::export_rows(&self.app)
+                        .map_err(EnterpriseSyncError::LocalApi)?;
+                    let rows = rows
+                        .into_iter()
+                        .map(serde_json::to_value)
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                    db.stage_activity_exports(&rows, cutoff)
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                } else {
+                    more |= db
+                        .prepare_derived_exports(kind, cutoff, limit)
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                }
+            }
+            Ok(more)
+        }
+        async fn acknowledge_release_exports(
+            &self,
+            cursors: &std::collections::BTreeMap<String, ee_sync::PrivacyCursor>,
+        ) -> Result<(), EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            for (kind, cursor) in cursors {
+                db.acknowledge_derived_exports(kind, cursor.sequence)
+                    .await
+                    .map_err(|e| EnterpriseSyncError::Storage {
+                        operation: "retire acknowledged privacy export",
+                        cause: e.to_string(),
+                    })?;
+            }
+            Ok(())
+        }
+        async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+            let state = self.app.state::<crate::recording::RecordingState>();
+            let db = state
+                .server
+                .lock()
+                .await
+                .as_ref()
+                .map(|s| Arc::clone(&s.db))
+                .ok_or_else(|| {
+                    EnterpriseSyncError::Configuration("recording database is not ready".into())
+                })?;
+            db.release_policy()
+                .await
+                .map(|p| p.text)
+                .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))
+        }
+        async fn fetch_release_page(
+            &self,
+            kind: &str,
+            after: i64,
+            cutoff: &str,
+            end: Option<&str>,
+            limit: u32,
+        ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError> {
+            let mut query = vec![
+                ("after", after.to_string()),
+                ("cutoff", cutoff.to_string()),
+                ("limit", limit.to_string()),
+            ];
+            if let Some(end) = end {
+                query.push(("end", end.to_string()));
+            }
+            let response = self
+                .auth(
+                    self.http
+                        .get(format!("{}/privacy/ready/{kind}", self.api_url_base)),
+                )
+                .query(&query)
+                .send()
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+            if !response.status().is_success() {
+                return Err(EnterpriseSyncError::LocalApi(
+                    "privacy release page unavailable; retry pending".into(),
+                ));
+            }
+            response
+                .json()
+                .await
+                .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+        }
+
         async fn begin_export(
             &self,
         ) -> Result<Option<Box<dyn crate::enterprise::sync::ExportFilter>>, EnterpriseSyncError>
@@ -277,7 +537,9 @@ mod imp {
                 .ok_or_else(|| {
                     EnterpriseSyncError::Configuration("recording database is not ready".into())
                 })?;
-            Ok(Some(Box::new(StorageExport::begin(db).await?)))
+            Ok(Some(Box::new(
+                StorageExport::begin(db, self.app.clone()).await?,
+            )))
         }
 
         async fn initialized_upload_source_id(&self) -> Option<String> {
@@ -422,7 +684,9 @@ mod imp {
                 let settings = crate::store::SettingsStore::get(&self.app)
                     .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))?
                     .ok_or_else(|| {
-                        EnterpriseSyncError::Configuration("recording settings are not ready".into())
+                        EnterpriseSyncError::Configuration(
+                            "recording settings are not ready".into(),
+                        )
                     })?;
                 ee_sync::frame_context::hydrate_frame_trees(
                     &db,
@@ -586,28 +850,7 @@ mod imp {
                 .map_err(EnterpriseSyncError::LocalApi)?;
             Ok(entries
                 .into_iter()
-                .map(|entry| ActivityRow {
-                    activity_id: entry.id,
-                    activity_kind: entry.kind,
-                    meeting_id: entry.meeting_id,
-                    timestamp: entry.end_at.clone(),
-                    start_at: entry.start_at,
-                    end_at: entry.end_at,
-                    title: entry.title,
-                    summary: entry.summary,
-                    evidence: entry
-                        .evidence
-                        .into_iter()
-                        .map(|evidence| ActivityEvidenceRow {
-                            kind: evidence.kind,
-                            at: evidence.at,
-                            frame_id: evidence.frame_id,
-                            meeting_id: evidence.meeting_id,
-                            app_name: evidence.app_name,
-                            label: evidence.label,
-                        })
-                        .collect(),
-                })
+                .map(crate::activity_history::export_row)
                 .collect())
         }
 
@@ -969,8 +1212,7 @@ mod imp {
             .unwrap_or_else(default_heartbeat_url);
         (policy_url, heartbeat_url)
     }
-    const NATIVE_POLICY_POLL_INTERVAL: std::time::Duration =
-        std::time::Duration::from_secs(5 * 60);
+    const NATIVE_POLICY_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5 * 60);
     const NATIVE_POLICY_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
     const NATIVE_POLICY_STARTUP_DELAY: std::time::Duration = std::time::Duration::from_secs(15);
     const RECORDING_DISABLED_BY_ADMIN_CODE: &str = "recording_disabled_by_admin";
@@ -1660,7 +1902,8 @@ mod imp {
                         } else {
                             let apply_app = app.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = crate::enterprise::managed_settings::apply(&apply_app).await;
+                                let _ =
+                                    crate::enterprise::managed_settings::apply(&apply_app).await;
                             });
                         }
                         crate::enterprise_policy::set_enterprise_policy(
@@ -1670,13 +1913,15 @@ mod imp {
                         Ok(())
                     }
                     Err(NativePolicyFetchError::RecordingDisabled) => {
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(app)
-                            .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(app)
+                                .await;
                         Err(RECORDING_DISABLED_BY_ADMIN_CODE.to_string())
                     }
                     Err(NativePolicyFetchError::CredentialRejected(_)) => {
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(app)
-                            .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(app)
+                                .await;
                         Err("enterprise enrollment was rejected".to_string())
                     }
                     Err(NativePolicyFetchError::Unavailable(error)) => {
@@ -1833,14 +2078,14 @@ mod imp {
                         // Hidden installs may never create the migration UI.
                         // This returns after scheduling native maintenance so
                         // policy revocation continues to be polled while it runs.
-                        crate::storage_migration::maybe_start_hidden_ui_migration(app.clone()).await;
+                        crate::storage_migration::maybe_start_hidden_ui_migration(app.clone())
+                            .await;
                     }
                     NativeAuthorizationResult::RecordingDisabled => {
                         info!("enterprise: recording paused for this device by workspace admin");
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
-                            &app,
-                        )
-                        .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(&app)
+                                .await;
                     }
                     NativeAuthorizationResult::RequiresAccount => {
                         warn!(
@@ -1853,10 +2098,9 @@ mod imp {
                             crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
-                            &app,
-                        )
-                        .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(&app)
+                                .await;
                         show_enterprise_auth_recovery(&app);
                     }
                     NativeAuthorizationResult::Rejected
@@ -1865,10 +2109,9 @@ mod imp {
                             crate::enterprise_policy::set_enterprise_policy(Vec::new(), false);
                             let _ = crate::commands::apply_enterprise_ui_visibility(app.clone());
                         }
-                        let _ = crate::enterprise_recording_access::revoke_enterprise_recording(
-                            &app,
-                        )
-                        .await;
+                        let _ =
+                            crate::enterprise_recording_access::revoke_enterprise_recording(&app)
+                                .await;
                         show_enterprise_auth_recovery(&app);
                     }
                     NativeAuthorizationResult::Unavailable(error) => {
@@ -2416,6 +2659,101 @@ mod imp {
         }
 
         #[tokio::test]
+        async fn protected_export_filter_never_refreshes_from_raw_sources() {
+            use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
+            use crate::enterprise::sync::{ExportFilter, ExportRows};
+            use std::sync::Arc;
+            struct Protected;
+            #[async_trait::async_trait]
+            impl LocalApiClient for Protected {
+                async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                    Ok(true)
+                }
+                async fn fetch_frames_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    panic!("a processed export must never refresh from raw capture APIs")
+                }
+                async fn fetch_audio_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                    Ok(vec![])
+                }
+            }
+            for hybrid in [false, true] {
+                let root = tempfile::tempdir().unwrap();
+                let db = Arc::new(if hybrid {
+                    let mut options = screenpipe_db::storage::MigrationOptions::default();
+                    options.budget.disk_reserve_bytes = 0;
+                    screenpipe_db::DatabaseManager::new_hybrid(
+                        root.path(),
+                        Default::default(),
+                        options,
+                    )
+                    .await
+                    .unwrap()
+                } else {
+                    screenpipe_db::DatabaseManager::new(
+                        root.path().join("db.sqlite").to_str().unwrap(),
+                        Default::default(),
+                    )
+                    .await
+                    .unwrap()
+                });
+                db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                    identity: "v1".into(),
+                    text: true,
+                    images: false,
+                })
+                .await
+                .unwrap();
+                db.execute_raw_sql_write(
+                    "INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','safe')",
+                )
+                .await
+                .unwrap();
+                let job = db.release_pending("frames", 1).await.unwrap().remove(0);
+                assert!(db.publish_release(&job, &job.values).await.unwrap());
+                let export = StorageExport::begin_storage(db.clone()).await.unwrap();
+                let mut frames = vec![FrameRow {
+                    frame_id: 1,
+                    timestamp: "2026-10-16".into(),
+                    text: Some("safe".into()),
+                    app_name: None,
+                    window_name: None,
+                    browser_url: None,
+                    accessibility_tree: None,
+                }];
+                let mut rows = ExportRows {
+                    frames: &mut frames,
+                    audio: &mut vec![],
+                    ui: &mut vec![],
+                    snapshots: &mut vec![],
+                    memories: &mut vec![],
+                    parsed: &mut vec![],
+                    activities: &mut vec![],
+                    starred: &mut vec![],
+                    feedback: &mut vec![],
+                };
+                export.filter(&mut rows, &Protected).await.unwrap();
+                assert_eq!(rows.frames[0].text.as_deref(), Some("safe"));
+                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-16','new capture')").await.unwrap();
+                export.filter(&mut rows, &Protected).await.unwrap();
+                db.execute_raw_sql_write("UPDATE frames SET full_text='PRIVATE edit' WHERE id=1")
+                    .await
+                    .unwrap();
+                assert!(export.filter(&mut rows, &Protected).await.is_err());
+                db.close().await;
+            }
+        }
+
+        #[tokio::test]
         async fn export_upload_filters_deleted_rows_and_refreshes_redactions() {
             use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
             use crate::enterprise::sync::{self, ExportFilter};
@@ -2430,7 +2768,9 @@ mod imp {
                 async fn begin_export(
                     &self,
                 ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
-                    Ok(Some(Box::new(StorageExport::begin(self.db.clone()).await?)))
+                    Ok(Some(Box::new(
+                        StorageExport::begin_storage(self.db.clone()).await?,
+                    )))
                 }
                 async fn fetch_frames_since(
                     &self,
@@ -2584,7 +2924,7 @@ mod imp {
                     "upload admission must preserve the new recording"
                 );
                 db.close().await;
-                let error = StorageExport::begin(db)
+                let error = StorageExport::begin_storage(db)
                     .await
                     .err()
                     .expect("closed storage refused");
@@ -2905,7 +3245,10 @@ mod imp {
             .await;
             server.abort();
             let _ = server.await;
-            assert!(headers_received.try_recv().is_ok(), "must exercise a stalled body after headers");
+            assert!(
+                headers_received.try_recv().is_ok(),
+                "must exercise a stalled body after headers"
+            );
             assert!(matches!(
                 result.unwrap(),
                 Err(NativePolicyFetchError::Unavailable(_))
@@ -2925,10 +3268,15 @@ mod imp {
                 let response: NativePolicyResponse = serde_json::from_value(serde_json::json!({
                     "hiddenSections": ["app_ui"],
                     "lockedSettings": {"autoConnectAiTools": value}
-                })).unwrap();
-                assert_eq!(response.into_native_policy().auto_connect_ai_tools, expected);
+                }))
+                .unwrap();
+                assert_eq!(
+                    response.into_native_policy().auto_connect_ai_tools,
+                    expected
+                );
             }
-            let response: NativePolicyResponse = serde_json::from_value(serde_json::json!({})).unwrap();
+            let response: NativePolicyResponse =
+                serde_json::from_value(serde_json::json!({})).unwrap();
             assert!(response.into_native_policy().auto_connect_ai_tools);
         }
 
