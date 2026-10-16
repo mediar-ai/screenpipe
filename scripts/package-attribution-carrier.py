@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # screenpipe — AI that knows everything you've seen, said, or heard
 # https://screenpipe.com
-"""Prepare a versioned macOS carrier from a signed app. Never uploads/publishes."""
+"""Prepare a versioned download carrier from a release artifact. Never uploads/publishes."""
 import argparse
 import hashlib
 import json
@@ -101,12 +101,54 @@ def package(app, output, platform, release):
     return archive, manifest
 
 
+def package_filename(artifact, output, platform, release):
+    """Copy an immutable executable; only its delivered filename is personalized."""
+    artifact, output = Path(artifact).resolve(), Path(output).resolve()
+    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', release):
+        raise ValueError('valid release required')
+    if not re.search(r'(?:^|[_-])' + re.escape(release) + r'(?:[_-]|\.)', artifact.name):
+        raise ValueError('release must match the versioned artifact filename')
+    if platform != 'linux':
+        raise ValueError('unsupported filename platform')
+    with artifact.open('rb') as source:
+        header = source.read(20)
+    if (artifact.suffix != '.AppImage' or header[:6] != b'\x7fELF\x02\x01' or
+            header[8:11] != b'AI\x02' or len(header) != 20 or struct.unpack_from('<H', header, 18)[0] != 62):
+        raise ValueError('Linux x86_64 type-2 AppImage required')
+    size = artifact.stat().st_size
+    if not 100 <= size <= 2147483647:
+        raise ValueError('carrier size outside streaming limit')
+    output.mkdir(parents=True, exist_ok=True)
+    target = output / ('screenpipe-attribution' + artifact.suffix)
+    manifest = output / 'screenpipe-attribution.json'
+    if target.exists() or manifest.exists():
+        raise ValueError('refusing to overwrite prepared artifacts')
+    digest = hashlib.sha256()
+    # Hash the exact bytes being copied, with exclusive creation.
+    with artifact.open('rb') as source, target.open('xb') as destination:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(block)
+            destination.write(block)
+    if target.stat().st_size != size:
+        target.unlink()
+        raise ValueError('artifact changed during copy')
+    target.chmod(artifact.stat().st_mode & 0o777)
+    with manifest.open('x') as destination:
+        json.dump(dict(schema=1, carrier='filename', platform=platform, release=release,
+                       size=size, sha256=digest.hexdigest()), destination, indent=2)
+        destination.write('\n')
+    return target, manifest
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--app', required=True)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument('--app')
+    inputs.add_argument('--artifact')
     parser.add_argument('--output', required=True)
-    parser.add_argument('--platform', choices=['macos-arm', 'macos-intel'], required=True)
+    parser.add_argument('--platform', choices=['macos-arm', 'macos-intel', 'linux'], required=True)
     parser.add_argument('--release', required=True)
     args = parser.parse_args()
-    for artifact in package(args.app, args.output, args.platform, args.release):
+    prepare = package if args.app else package_filename
+    for artifact in prepare(args.app or args.artifact, args.output, args.platform, args.release):
         print(artifact)

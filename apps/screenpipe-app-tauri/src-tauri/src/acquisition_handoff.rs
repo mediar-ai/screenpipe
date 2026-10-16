@@ -1,7 +1,7 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 
-//! macOS download possession -> authenticated account. Best effort, off the
+//! Download possession -> authenticated account. Best effort, off the
 //! recording/startup path. The server owns authorization and attribution rules.
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
@@ -90,34 +90,81 @@ fn tombstone() -> std::path::PathBuf {
     crate::config::app_data_dir().join(format!("acquisition-retired-{}", current_storage_account()))
 }
 
+fn decode_pending(bytes: &[u8]) -> Result<Pending, ()> {
+    let p: Pending = serde_json::from_slice(bytes).map_err(|_| ())?;
+    if !uuid4(&p.grant) || !uuid4(&p.request_id) || p.verifier.len() != 43 { return Err(()); }
+    Ok(p)
+}
+
 #[cfg(target_os = "macos")]
-fn load_saved() -> Result<Option<Pending>, ()> {
-    match security_framework::passwords::get_generic_password(SERVICE, &current_storage_account()) {
-        Ok(bytes) => {
-            let mut p: Pending = serde_json::from_slice(&bytes).map_err(|_| ())?;
-            if !uuid4(&p.grant) || !uuid4(&p.request_id) || p.verifier.len() != 43 { return Err(()); }
-            if tombstone().exists() { p.retired = true; }
-            Ok(Some(p))
+async fn load_saved() -> Result<Option<Pending>, ()> {
+    tauri::async_runtime::spawn_blocking(|| {
+        match security_framework::passwords::get_generic_password(SERVICE, &current_storage_account()) {
+            Ok(bytes) => decode_pending(&bytes).map(Some),
+            Err(e) if e.code() == -25300 => Ok(None),
+            Err(_) => Err(()), // A locked Keychain is not an empty one.
         }
-        Err(e) if e.code() == -25300 => Ok(None),
-        Err(_) => Err(()), // A locked Keychain is not an empty one.
-    }
+    }).await.map_err(|_| ())?
 }
 
 #[cfg(target_os = "macos")]
-fn save(pending: &Pending) -> Result<(), ()> {
+async fn save(pending: &Pending) -> Result<(), ()> {
     let bytes = serde_json::to_vec(pending).map_err(|_| ())?;
-    security_framework::passwords::set_generic_password(SERVICE, &current_storage_account(), &bytes).map_err(|_| ())
+    tauri::async_runtime::spawn_blocking(move || {
+        security_framework::passwords::set_generic_password(SERVICE, &current_storage_account(), &bytes).map_err(|_| ())
+    }).await.map_err(|_| ())?
 }
 
-#[cfg(target_os = "macos")]
+// Windows/Linux reuse the application's credential store and encryption policy.
+// This is a separate credential DB, never the recording database.
+async fn credential_store_at(profile: &std::path::Path, key: Option<[u8; 32]>) -> Result<screenpipe_secrets::SecretStore, ()> {
+    screenpipe_secrets::SecretStore::open_for_data_dir(profile, key).await.map_err(|_| ())
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn credential_store() -> Result<screenpipe_secrets::SecretStore, ()> {
+    let key = match crate::secrets::get_key_if_encryption_enabled() {
+        crate::secrets::KeyResult::Found(k) => Some(k),
+        crate::secrets::KeyResult::NotFound | crate::secrets::KeyResult::Unavailable => None,
+        crate::secrets::KeyResult::AccessDenied => return Err(()),
+    };
+    credential_store_at(crate::config::app_data_dir(), key).await
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn load_saved() -> Result<Option<Pending>, ()> {
+    let store = credential_store().await?;
+    store.get(&format!("{SERVICE}.{}", current_storage_account())).await.map_err(|_| ())?
+        .map(|bytes| decode_pending(&bytes)).transpose()
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn save(pending: &Pending) -> Result<(), ()> {
+    let store = credential_store().await?;
+    store.set(&format!("{SERVICE}.{}", current_storage_account()), &serde_json::to_vec(pending).map_err(|_| ())?)
+        .await.map_err(|_| ())
+}
+
 async fn persist(pending: &Pending) -> Result<(), ()> {
     let _guard = STORAGE.lock().await;
-    let p = pending.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if (tombstone().exists() || load_saved()?.is_some_and(|old| old.retired || old.grant != p.grant)) && !p.retired { return Err(()); }
-        save(&p)
-    }).await.map_err(|_| ())?
+    if (tombstone().exists() || load_saved().await?.is_some_and(|old| old.retired || old.grant != pending.grant)) && !pending.retired { return Err(()); }
+    save(pending).await
+}
+
+/// Download filenames carry only a random capability, never a user/source ID.
+fn grant_from_filename(name: &str, extension: &str) -> Option<String> {
+    let grant = name.strip_prefix("screenpipe-")?.strip_suffix(extension)?;
+    uuid4(grant).then(|| grant.to_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn carrier() -> Option<String> { None } // Filled by the Windows installer adapter.
+
+#[cfg(target_os = "linux")]
+fn carrier() -> Option<String> {
+    // AppImages execute from a temporary mount; APPIMAGE is the original file.
+    let path = std::path::PathBuf::from(std::env::var_os("APPIMAGE")?);
+    grant_from_filename(path.file_name()?.to_str()?, ".AppImage")
 }
 
 // Logout invalidates in-flight work immediately. The worker persists a tombstone
@@ -127,23 +174,17 @@ pub fn wake() { WAKE.notify_one(); }
 pub async fn retire() {
     AUTH_EPOCH.fetch_add(1, Ordering::SeqCst);
     CANCEL.notify_waiters();
-    #[cfg(target_os = "macos")]
-    {
-        let _guard = STORAGE.lock().await;
-        let _ = tauri::async_runtime::spawn_blocking(|| {
-            // Retire this installation even when Keychain is locked and an
-            // update removed the original carrier. No secret is needed here.
-            std::fs::write(tombstone(), b"retired").map_err(|_| ())?;
-            let saved = load_saved().ok().flatten();
-            let grant = saved.as_ref().map(|p| p.grant.clone()).or_else(carrier).ok_or(())?;
-            let mut pending = saved.unwrap_or_else(|| Pending::new(grant));
-            pending.retired = true;
-            save(&pending)
-        }).await;
-    }
+    let _guard = STORAGE.lock().await;
+    // Durable retirement does not depend on an unlocked credential store or
+    // the original download still being present after an updater replaces it.
+    if std::fs::write(tombstone(), b"retired").is_err() { return; }
+    let saved = load_saved().await.ok().flatten();
+    let Some(grant) = saved.as_ref().map(|p| p.grant.clone()).or_else(carrier) else { return; };
+    let mut pending = saved.unwrap_or_else(|| Pending::new(grant));
+    pending.retired = true;
+    let _ = save(&pending).await;
 }
 
-#[cfg(target_os = "macos")]
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         // Keychain/settings can be temporarily unavailable during startup.
@@ -156,20 +197,13 @@ pub fn spawn(app: AppHandle) {
         }
     });
 }
-#[cfg(not(target_os = "macos"))]
-pub fn spawn(_app: AppHandle) {}
 
-#[cfg(target_os = "macos")]
 async fn run(app: AppHandle) -> Result<(), ()> {
     if tombstone().exists() { return Ok(()); }
-    let pending = tauri::async_runtime::spawn_blocking(|| {
-        if let Some(p) = load_saved()? { return Ok(Some(p)); }
-        let Some(grant) = carrier() else { return Ok(None); };
-        let mut p = Pending::new(grant);
-        p.retired = tombstone().exists();
-        Ok::<_, ()>(Some(p))
-    }).await.map_err(|_| ())??;
-    let Some(mut p) = pending else { return Ok(()); };
+    let mut p = match load_saved().await? {
+        Some(p) => p,
+        None => match carrier() { Some(grant) => Pending::new(grant), None => return Ok(()) },
+    };
     if p.retired { return Ok(()); }
     // Persist proof BEFORE first claim, including when its HTTP response is lost.
     persist(&p).await?;
@@ -236,7 +270,6 @@ async fn run(app: AppHandle) -> Result<(), ()> {
     }
 }
 
-#[cfg(target_os = "macos")]
 async fn send(client: &reqwest::Client, origin: &reqwest::Url, action: &str, p: &Pending, token: Option<&str>) -> Option<String> {
     let url = origin.join(&format!("/api/attribution/download-handoff/{action}")).ok()?;
     let mut body = serde_json::json!({"request_id":p.request_id,"verifier":p.verifier});
@@ -263,6 +296,36 @@ async fn send(client: &reqwest::Client, origin: &reqwest::Url, action: &str, p: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn portable_filenames_reject_placeholders_and_ambiguous_names() {
+        let grant = "12345678-1234-4234-8234-123456789012";
+        for extension in [".exe", ".AppImage"] {
+            assert_eq!(grant_from_filename(&format!("screenpipe-{grant}{extension}"), extension), Some(grant.into()));
+            for name in [format!("screenpipe-{PLACEHOLDER}{extension}"), format!("screenpipe-{grant}.txt{extension}"), format!("../screenpipe-{grant}{extension}"), format!("screenpipe-{grant}{extension}.exe")] {
+                assert!(grant_from_filename(&name, extension).is_none());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn credential_store_preserves_proof_and_retirement_across_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let account = storage_account(dir.path(), "https://screenpipe.com");
+        let p = Pending::new(uuid::Uuid::new_v4().to_string());
+        {
+            let store = credential_store_at(dir.path(), Some([7; 32])).await.unwrap();
+            store.set(&account, &serde_json::to_vec(&p).unwrap()).await.unwrap();
+        }
+        let store = credential_store_at(dir.path(), Some([7; 32])).await.unwrap();
+        let mut saved = decode_pending(&store.get(&account).await.unwrap().unwrap()).unwrap();
+        assert_eq!(saved.verifier, p.verifier);
+        assert_eq!(saved.request_id, p.request_id);
+        assert!(store.get(&storage_account(dir.path(), "https://preview.example")).await.unwrap().is_none());
+        saved.retired = true;
+        store.set(&account, &serde_json::to_vec(&saved).unwrap()).await.unwrap();
+        assert!(decode_pending(&store.get(&account).await.unwrap().unwrap()).unwrap().retired);
+    }
+
     #[test]
     fn dev_e2e_and_preview_profiles_cannot_share_production_proof() {
         let prod = storage_account(std::path::Path::new("/profile/prod"), "https://screenpipe.com");
@@ -295,7 +358,6 @@ mod tests {
         assert!(!uuid4("not-a-grant"));
         assert!(subject("not-a-token").is_none());
     }
-    #[cfg(target_os = "macos")]
     async fn response_server(response: String) -> (reqwest::Client, reqwest::Url) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -308,7 +370,6 @@ mod tests {
         });
         (reqwest::Client::new(), reqwest::Url::parse(&format!("http://{address}/")).unwrap())
     }
-    #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn retry_provisioning_and_reject_wrong_response_identity() {
         let p = Pending::new(uuid::Uuid::new_v4().to_string());
@@ -318,7 +379,6 @@ mod tests {
         let (client, origin) = response_server(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}", body.len(), body)).await;
         assert!(send(&client, &origin, "bind", &p, Some("synthetic")).await.is_none());
     }
-    #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn rejects_oversized_chunked_response() {
         let p = Pending::new(uuid::Uuid::new_v4().to_string());
