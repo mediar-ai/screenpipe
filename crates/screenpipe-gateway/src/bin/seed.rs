@@ -209,6 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             frames: 2 + usize::from(device.stale_sentinel),
             parsed: 1,
             activities: 0,
+            starred: 0,
             audio: 1,
             ui: 1,
             snapshots: 0,

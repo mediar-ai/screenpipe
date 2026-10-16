@@ -251,6 +251,10 @@ pub struct Cursor {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CursorBoundary {
+    #[serde(default)]
+    starred_sequence: i64,
+    #[serde(default)]
+    starred_since: Option<String>,
     /// Recovery-only counter, checkpointed atomically with the acknowledged cursor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     backfill_records: Option<u64>,
@@ -439,6 +443,15 @@ pub trait LocalApiClient: Send + Sync {
         Ok(Vec::new())
     }
 
+    async fn fetch_starred_since(
+        &self,
+        _after: i64,
+        _since: &str,
+        _limit: u32,
+    ) -> Result<Vec<StarredRow>, EnterpriseSyncError> {
+        Ok(Vec::new())
+    }
+
     /// Fetch AI-interpreted Activities ending after `since_ts`.
     async fn fetch_activities_since(
         &self,
@@ -551,7 +564,7 @@ pub async fn fetch_exact_frame_jpeg(
 // same types — so it lives in `screenpipe-telemetry-wire`. Re-exported here
 // so the desktop shim keeps importing everything from `ee_sync::`.
 pub use screenpipe_telemetry_wire::{
-    ActivityRow, AudioRow, FeedbackRow, FrameRow, MemoryRow, ParsedRow, SnapshotRow,
+    ActivityRow, AudioRow, FeedbackRow, FrameRow, MemoryRow, ParsedRow, SnapshotRow, StarredRow,
     TelemetryRecord, UiEventRow,
 };
 
@@ -1083,6 +1096,33 @@ async fn run_one_sync_page(
     }
 
     let mut pending_read = false;
+    let starred_since = cursor.boundary.starred_since.clone().unwrap_or_else(|| {
+        (chrono::Utc::now() - chrono::Duration::from_std(SAFE_BACKFILL).unwrap())
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    });
+    let mut starred = if streams.starred {
+        match local
+            .fetch_starred_since(cursor.boundary.starred_sequence, &starred_since, PAGE_LIMIT)
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                if cursor.boundary.starred_since.is_none() {
+                    cursor.boundary.starred_since = Some(starred_since.clone());
+                    cursor.save(&cfg.cursor_path)?;
+                }
+                return Err(error);
+            }
+        }
+    } else {
+        Vec::new()
+    };
+    if !starred.is_empty() && cursor.boundary.starred_since.is_none() {
+        // Preserve enrollment's privacy boundary before the first upload attempt.
+        cursor.boundary.starred_since = Some(starred_since);
+        cursor.save(&cfg.cursor_path)?;
+    }
+
     let mut frames = if streams.frames {
         match local
             .fetch_frames_since(
@@ -1291,6 +1331,7 @@ async fn run_one_sync_page(
         && memories.is_empty()
         && parsed.is_empty()
         && activities.is_empty()
+        && starred.is_empty()
         && feedback.is_empty()
     {
         debug!("enterprise sync: nothing new since last tick");
@@ -1338,6 +1379,9 @@ async fn run_one_sync_page(
         None
     };
     let mut next_cursor = cursor.clone();
+    if let Some(last) = starred.last() {
+        next_cursor.boundary.starred_sequence = last.sequence;
+    }
     advance_timestamp_boundary(
         &mut next_cursor.last_frame_ts,
         &mut next_cursor.boundary.frames,
@@ -1377,6 +1421,7 @@ async fn run_one_sync_page(
     );
 
     let selected = SyncTickReport {
+        starred: starred.len(),
         frames: frames.len(),
         audio: audio.len(),
         ui: ui.len(),
@@ -1401,6 +1446,7 @@ async fn run_one_sync_page(
                     memories: &mut memories,
                     parsed: &mut parsed,
                     activities: &mut activities,
+                    starred: &mut starred,
                     feedback: &mut feedback,
                 },
                 local,
@@ -1439,6 +1485,11 @@ async fn run_one_sync_page(
         &cfg.device_id,
         &cfg.device_label,
         &feedback,
+    ));
+    body.extend_from_slice(&screenpipe_telemetry_wire::build_starred_jsonl(
+        &cfg.device_id,
+        &cfg.device_label,
+        &starred,
     ));
     let bytes = body.len();
 
@@ -1501,6 +1552,7 @@ async fn run_one_sync_page(
                     frames: frames.len(),
                     parsed: parsed.len(),
                     activities: activities.len(),
+                    starred: starred.len(),
                     audio: audio.len(),
                     ui: ui.len(),
                     snapshots: snapshots.len(),
@@ -1522,6 +1574,7 @@ async fn run_one_sync_page(
                     frames: frames.len(),
                     parsed: parsed.len(),
                     activities: activities.len(),
+                    starred: starred.len(),
                     audio: audio.len(),
                     ui: ui.len(),
                     snapshots: snapshots.len(),
@@ -1549,6 +1602,7 @@ async fn run_one_sync_page(
         frames: frames.len(),
         parsed: parsed.len(),
         activities: activities.len(),
+        starred: starred.len(),
         audio: audio.len(),
         ui: ui.len(),
         snapshots: snapshots.len(),
@@ -1615,6 +1669,7 @@ pub struct SyncTickReport {
     pub frames: usize,
     pub parsed: usize,
     pub activities: usize,
+    pub starred: usize,
     pub audio: usize,
     pub ui: usize,
     pub snapshots: usize,
@@ -1635,6 +1690,7 @@ impl SyncTickReport {
         self.pending_read
             || self.scanned_full_page
             || self.frames >= FRAME_PAGE_LIMIT as usize
+            || self.starred >= limit
             || self.parsed >= limit
             || self.audio >= limit
             || self.ui >= limit
@@ -1646,6 +1702,7 @@ impl SyncTickReport {
         self.frames += other.frames;
         self.parsed += other.parsed;
         self.activities += other.activities;
+        self.starred += other.starred;
         self.audio += other.audio;
         self.ui += other.ui;
         self.snapshots += other.snapshots;
@@ -2638,9 +2695,10 @@ pub async fn run(
                     || total.snapshots > 0
                     || total.memories > 0
                     || total.feedback > 0
+                    || total.starred > 0
                 {
                     info!(
-                        "enterprise sync: pushed {} frames, {} parsed, {} audio, {} ui, {} snapshots, {} memories, {} feedback across {} page(s) ({} bytes)",
+                        "enterprise sync: pushed {} frames, {} parsed, {} audio, {} ui, {} snapshots, {} memories, {} feedback, {} starred intervals across {} page(s) ({} bytes)",
                         total.frames,
                         total.parsed,
                         total.audio,
@@ -2648,6 +2706,7 @@ pub async fn run(
                         total.snapshots,
                         total.memories,
                         total.feedback,
+                        total.starred,
                         report.pages,
                         total.bytes
                     );
@@ -3828,6 +3887,7 @@ pub(crate) mod tests {
                 "off".to_string(),
             );
             crate::enterprise_policy::set_activity_sync_enabled(false);
+            crate::enterprise_policy::set_starred_sync_enabled(true);
         }
     }
 
@@ -4937,6 +4997,187 @@ pub(crate) mod tests {
         assert_eq!(
             cursor.last_frame_ts.as_deref(),
             Some("2026-05-07T10:00:00Z")
+        );
+    }
+
+    #[tokio::test]
+    async fn starred_upload_retries_edits_and_resumes_after_restart() {
+        use std::sync::atomic::AtomicBool;
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        struct Stars(Mutex<Vec<StarredRow>>, AtomicBool);
+        #[async_trait::async_trait]
+        impl LocalApiClient for Stars {
+            async fn fetch_frames_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                Ok(vec![])
+            }
+            async fn fetch_audio_since(
+                &self,
+                _: Option<&str>,
+                _: u32,
+                _: u32,
+            ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                Ok(vec![])
+            }
+            async fn fetch_starred_since(
+                &self,
+                after: i64,
+                _: &str,
+                limit: u32,
+            ) -> Result<Vec<StarredRow>, EnterpriseSyncError> {
+                if self.1.load(Ordering::SeqCst) {
+                    return Err(EnterpriseSyncError::Storage {
+                        operation: "read starred intervals",
+                        cause: "SQLite 522: disk I/O error".into(),
+                    });
+                }
+                Ok(self
+                    .0
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|r| r.sequence > after)
+                    .take(limit as usize)
+                    .cloned()
+                    .collect())
+            }
+        }
+        let start = chrono::Utc::now().to_rfc3339();
+        let local = Stars(
+            Mutex::new(vec![StarredRow {
+                sequence: 1,
+                starred_id: "s".into(),
+                timestamp: start.clone(),
+                start_at: start.clone(),
+                end_at: (chrono::Utc::now() + chrono::Duration::minutes(15)).to_rfc3339(),
+                hd_requested: false,
+                revision: 1,
+            }]),
+            AtomicBool::new(false),
+        );
+        let server = wiremock::MockServer::start().await;
+        let dir = TempDir::new().unwrap();
+        let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", server.uri()));
+        let http = reqwest::Client::new();
+        let mut cursor = Cursor::default();
+        crate::enterprise_policy::set_starred_sync_enabled(false);
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .starred,
+            0
+        );
+        crate::enterprise_policy::set_starred_sync_enabled(true);
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(503))
+            .mount(&server)
+            .await;
+        assert!(run_one_sync(&cfg, &mut cursor, &local, &http)
+            .await
+            .is_err());
+        assert_eq!(Cursor::load(&cfg.cursor_path).boundary.starred_sequence, 0);
+        server.reset().await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .starred,
+            1
+        );
+        let mut cursor = Cursor::load(&cfg.cursor_path);
+        assert_eq!(cursor.boundary.starred_sequence, 1);
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .starred,
+            0
+        );
+        {
+            let mut rows = local.0.lock().unwrap();
+            rows[0].sequence = 2;
+            rows[0].revision = 2;
+            rows[0].end_at = "2026-10-16T23:00:00Z".into();
+        }
+        assert_eq!(
+            run_one_sync(&cfg, &mut cursor, &local, &http)
+                .await
+                .unwrap()
+                .starred,
+            1
+        );
+        let requests = server.received_requests().await.unwrap();
+        let parsed = screenpipe_telemetry_wire::parse_jsonl(&requests.last().unwrap().body);
+        assert!(
+            matches!(&parsed.records[0], TelemetryRecord::Starred { starred, .. } if starred.revision == 2)
+        );
+        let template = local.0.lock().unwrap()[0].clone();
+        *local.0.lock().unwrap() = (3..3 + PAGE_LIMIT as i64 + 1)
+            .map(|sequence| StarredRow {
+                sequence,
+                starred_id: format!("star-{sequence}"),
+                ..template.clone()
+            })
+            .collect();
+        let burst = run_sync_burst(&cfg, &mut cursor, &local, &http)
+            .await
+            .unwrap();
+        assert_eq!(burst.total.starred, PAGE_LIMIT as usize + 1);
+        assert_eq!(burst.pages, 2);
+        assert_eq!(
+            Cursor::load(&cfg.cursor_path).boundary.starred_sequence,
+            PAGE_LIMIT as i64 + 3
+        );
+        local.1.store(true, Ordering::SeqCst);
+        let recovery = TestLicenseKeyRecovery::unavailable(Arc::new(AtomicUsize::new(0)));
+        assert!(
+            run_reported_sync_burst(&mut cfg, &mut cursor, &local, &http, &recovery)
+                .await
+                .is_err()
+        );
+        let checkpoint = Cursor::load(&cfg.cursor_path).boundary.starred_sequence;
+        server.reset().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"desired_mode":"hosted_ingest"})),
+            )
+            .mount(&server)
+            .await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/enterprise/upload-status"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok":true})),
+            )
+            .mount(&server)
+            .await;
+        assert!(diagnostics::report(&cfg.clone(), &http, None)
+            .await
+            .unwrap()
+            .is_some());
+        let requests = server.received_requests().await.unwrap();
+        let report: serde_json::Value =
+            serde_json::from_slice(&requests.last().unwrap().body).unwrap();
+        let error = report["error"].as_str().unwrap();
+        assert!(
+            error.contains("starred intervals")
+                && error.contains("SQLite 522")
+                && error.contains("pending data retained")
+        );
+        assert!(!error.contains("sek_test"));
+        assert_eq!(
+            Cursor::load(&cfg.cursor_path).boundary.starred_sequence,
+            checkpoint
         );
     }
 

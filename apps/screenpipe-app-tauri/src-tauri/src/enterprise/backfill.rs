@@ -75,6 +75,7 @@ impl BackfillRequest {
             parsed: false,
             memories: false,
             activities: false,
+            starred: false,
             snapshots: false,
             feedback: FeedbackSyncMode::Off,
             ..policy

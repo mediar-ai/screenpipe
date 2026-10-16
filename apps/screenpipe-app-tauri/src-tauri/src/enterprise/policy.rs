@@ -199,6 +199,7 @@ pub struct SyncStreams {
     pub frames: bool,
     pub parsed: bool,
     pub activities: bool,
+    pub starred: bool,
     pub audio: bool,
     pub ui_events: bool,
     pub memories: bool,
@@ -213,6 +214,7 @@ impl Default for SyncStreams {
             frames: true,
             parsed: true,
             activities: false,
+            starred: true,
             audio: true,
             ui_events: true,
             memories: true,
@@ -652,10 +654,11 @@ pub fn set_sync_streams(
         .read()
         .map(|guard| guard.activities)
         .unwrap_or(false);
-    let next = SyncStreams {
+    let mut next = SyncStreams {
         frames,
         parsed,
         activities,
+        starred: SyncStreams::default().starred,
         audio,
         ui_events,
         memories,
@@ -664,6 +667,7 @@ pub fn set_sync_streams(
         frame_images,
     };
     if let Ok(mut guard) = SYNC_STREAMS.write() {
+        next.starred = guard.starred;
         if *guard != next {
             tracing::info!(
                 "enterprise: sync streams updated frames={} parsed={} activities={} audio={} ui={} memories={} snapshots={} feedback={} frame_images={}",
@@ -690,6 +694,13 @@ pub fn set_activity_sync_enabled(activities: bool) {
             tracing::info!("enterprise: activity sync stream updated activities={activities}");
             guard.activities = activities;
         }
+    }
+}
+
+#[cfg(any(test, feature = "enterprise-build"))]
+pub fn set_starred_sync_enabled(starred: bool) {
+    if let Ok(mut guard) = SYNC_STREAMS.write() {
+        guard.starred = starred;
     }
 }
 
