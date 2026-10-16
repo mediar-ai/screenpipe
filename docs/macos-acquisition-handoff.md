@@ -21,7 +21,12 @@ signed screenpipe-<UUID>.AppImage -> APPIMAGE filename -> credential-store proof
 
 Retries reuse the same request and verifier. Saved proof survives app updates
 that remove the xattr. Account switch/logout invalidates in-flight work and saves
-a retirement marker before changing accounts. Same-account JWT refresh wakes the
+a retirement marker before changing accounts, without waiting for credential
+storage. The native settings-store listener also retires immediately on analytics
+opt-out, including rapid off/on toggles and requests already in flight. A late
+credential write cannot erase a persisted marker, so restart remains retired.
+If the filesystem rejects the marker write, retirement is guaranteed only for
+the current process. Same-account JWT refresh wakes the
 worker without retiring the acquisition. Missing account provisioning is retried.
 No token, source data or HTTP error body is logged.
 

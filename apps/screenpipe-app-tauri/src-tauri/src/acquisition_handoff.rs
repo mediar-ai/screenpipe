@@ -5,14 +5,14 @@
 //! recording/startup path. The server owns authorization and attribution rules.
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Listener};
 
 static WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
-static CANCEL: tokio::sync::Notify = tokio::sync::Notify::const_new();
+static RETIREMENT: Retirement = Retirement::new();
 static STORAGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-static AUTH_EPOCH: AtomicU64 = AtomicU64::new(0);
+
 const SERVICE: &str = if cfg!(feature = "enterprise-build") {
     "com.screenpipe.enterprise.acquisition.v1"
 } else { "com.screenpipe.acquisition.v1" };
@@ -147,7 +147,7 @@ async fn save(pending: &Pending) -> Result<(), ()> {
 
 async fn persist(pending: &Pending) -> Result<(), ()> {
     let _guard = STORAGE.lock().await;
-    if (tombstone().exists() || load_saved().await?.is_some_and(|old| old.retired || old.grant != pending.grant)) && !pending.retired { return Err(()); }
+    if (RETIREMENT.disabled(&tombstone()) || load_saved().await?.is_some_and(|old| old.retired || old.grant != pending.grant)) && !pending.retired { return Err(()); }
     save(pending).await
 }
 
@@ -184,25 +184,74 @@ fn carrier() -> Option<String> {
     grant_from_filename(path.file_name()?.to_str()?, ".AppImage")
 }
 
-// Logout invalidates in-flight work immediately. The worker persists a tombstone
-// before any future bind. A pinned account is also checked after process restart.
+// Retirement never waits for the optional credential store. A late credential
+// write cannot remove this separate marker or revive the process-local latch.
+struct Retirement {
+    retired: AtomicBool,
+    cancel: tokio::sync::Notify,
+}
+
+impl Retirement {
+    const fn new() -> Self {
+        Self { retired: AtomicBool::new(false), cancel: tokio::sync::Notify::const_new() }
+    }
+
+    fn is_retired(&self) -> bool { self.retired.load(Ordering::SeqCst) }
+
+    fn disabled(&self, marker: &std::path::Path) -> bool {
+        self.is_retired() || marker.exists()
+    }
+
+    fn retire(&self, marker: &std::path::Path) -> std::io::Result<()> {
+        self.retired.store(true, Ordering::SeqCst);
+        self.cancel.notify_waiters();
+        // Independent of STORAGE and Keychain, including when either is stalled.
+        // A failed marker write still fails closed for this process.
+        let file = std::fs::File::create(marker)?;
+        file.sync_all()
+    }
+
+    async fn until_retired<T>(&self, work: impl std::future::Future<Output = T>) -> Option<T> {
+        let cancellation = self.cancel.notified();
+        tokio::pin!(cancellation);
+        cancellation.as_mut().enable();
+        if self.is_retired() { return None; }
+        tokio::select! {
+            biased;
+            _ = &mut cancellation => None,
+            value = work => if self.is_retired() { None } else { Some(value) },
+        }
+    }
+}
+
 pub fn wake() { WAKE.notify_one(); }
 
-pub async fn retire() {
-    AUTH_EPOCH.fetch_add(1, Ordering::SeqCst);
-    CANCEL.notify_waiters();
-    let _guard = STORAGE.lock().await;
-    // Durable retirement does not depend on an unlocked credential store or
-    // the original download still being present after an updater replaces it.
-    if std::fs::write(tombstone(), b"retired").is_err() { return; }
-    let saved = load_saved().await.ok().flatten();
-    let Some(grant) = saved.as_ref().map(|p| p.grant.clone()).or_else(carrier) else { return; };
-    let mut pending = saved.unwrap_or_else(|| Pending::new(grant));
-    pending.retired = true;
-    let _ = save(&pending).await;
+pub fn retire() {
+    if RETIREMENT.retire(&tombstone()).is_err() {
+        tracing::warn!("acquisition retirement marker unavailable; disabled for this process");
+    }
+}
+
+fn watch_settings<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    store_path: std::path::PathBuf,
+    retire: impl Fn() + Send + Sync + 'static,
+) {
+    // Store.set emits synchronously for both frontend and managed-policy writes.
+    // Inspect the event itself: rereading the store here would deadlock its lock,
+    // and a deferred read could miss a fast false -> true transition.
+    app.listen("store://change", move |event| {
+        let Ok(change) = serde_json::from_str::<serde_json::Value>(event.payload()) else { return; };
+        if change["key"] == "settings"
+            && change["path"].as_str().is_some_and(|path| std::path::Path::new(path) == store_path)
+            && change["value"]["analyticsEnabled"] == false {
+            retire();
+        }
+    });
 }
 
 pub fn spawn(app: AppHandle) {
+    watch_settings(&app, crate::config::app_data_dir().join("store.bin"), retire);
     tauri::async_runtime::spawn(async move {
         // Keychain/settings can be temporarily unavailable during startup.
         for _ in 0..240 {
@@ -216,7 +265,7 @@ pub fn spawn(app: AppHandle) {
 }
 
 async fn run(app: AppHandle) -> Result<(), ()> {
-    if tombstone().exists() { return Ok(()); }
+    if RETIREMENT.disabled(&tombstone()) { return Ok(()); }
     let mut p = match load_saved().await? {
         Some(p) => p,
         None => match carrier() { Some(grant) => Pending::new(grant), None => return Ok(()) },
@@ -229,7 +278,6 @@ async fn run(app: AppHandle) -> Result<(), ()> {
         || origin.query().is_some() || origin.fragment().is_some() || origin.path() != "/" { return Err(()); }
     let client = reqwest::Client::builder().timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none()).build().map_err(|_| ())?;
-    let epoch = AUTH_EPOCH.load(Ordering::SeqCst);
     let mut retry_seconds = 30;
     loop {
         let settings = crate::store::SettingsStore::get(&app).map_err(|_| ())?.ok_or(())?;
@@ -237,7 +285,8 @@ async fn run(app: AppHandle) -> Result<(), ()> {
         let account = token.as_deref().and_then(subject);
         let enabled = settings.recording.analytics_enabled && !screenpipe_engine::analytics::telemetry_disabled_by_env();
         if !enabled || p.expired(chrono::Utc::now().timestamp()) || p.crossed_account(account.as_deref())
-            || AUTH_EPOCH.load(Ordering::SeqCst) != epoch {
+            || RETIREMENT.is_retired() {
+            retire();
             p.retired = true;
             persist(&p).await?;
             // Retire locally first. Failed cancellation never authorizes reuse.
@@ -251,37 +300,32 @@ async fn run(app: AppHandle) -> Result<(), ()> {
         let action = if !p.claimed { Some("claim") } else if token.is_some() && p.account.is_some() { Some("bind") } else { None };
         if let Some(action) = action {
             // Pin and permission reads precede EVERY request; no logged proof/JWT.
-            if AUTH_EPOCH.load(Ordering::SeqCst) != epoch { continue; }
+            if RETIREMENT.is_retired() { continue; }
             let latest = crate::store::SettingsStore::get(&app).map_err(|_| ())?.ok_or(())?;
             let latest_token = crate::auth_token::cached_cloud_token();
             if !latest.recording.analytics_enabled {
-                p.retired = true; persist(&p).await?; return Ok(());
+                retire(); p.retired = true; persist(&p).await?; return Ok(());
             }
             if latest_token.as_deref().and_then(subject) != p.account {
                 // First login during persistence is progress, not an account
                 // switch. Loop to durably pin it before sending anything.
                 if p.account.is_none() { continue; }
-                p.retired = true; persist(&p).await?; return Ok(());
+                retire(); p.retired = true; persist(&p).await?; return Ok(());
             }
-            let cancellation = CANCEL.notified();
-            tokio::pin!(cancellation);
-            cancellation.as_mut().enable();
-            if AUTH_EPOCH.load(Ordering::SeqCst) != epoch { continue; }
-            let outcome = tokio::select! {
-                outcome = send(&client, &origin, action, &p, latest_token.as_deref()) => outcome,
-                _ = &mut cancellation => { continue; }
-            };
+            let Some(outcome) = RETIREMENT.until_retired(
+                send(&client, &origin, action, &p, latest_token.as_deref())
+            ).await else { return Ok(()); };
             match outcome.as_deref() {
                 Some("redeemed") => { p.claimed = true; persist(&p).await?; retry_seconds = 30; continue; }
                 Some("bound" | "denied" | "expired" | "invalid_request") => {
-                    p.retired = true; persist(&p).await?; return Ok(());
+                    retire(); p.retired = true; persist(&p).await?; return Ok(());
                 }
                 _ => { retry_seconds = (retry_seconds * 2).min(900); } // Same proof, bounded backoff.
             }
         }
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(retry_seconds)) => {},
-            _ = CANCEL.notified() => {},
+            _ = RETIREMENT.cancel.notified() => {},
             _ = WAKE.notified() => {},
         }
     }
@@ -423,6 +467,86 @@ mod tests {
         let response = format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1000\r\n{}\r\n0\r\n\r\n", "x".repeat(4096));
         let (client, origin) = response_server(response).await;
         assert!(send(&client, &origin, "claim", &p, None).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn retirement_does_not_wait_for_stalled_credential_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("retired");
+        let retirement = Retirement::new();
+        let _stalled_credentials = STORAGE.lock().await;
+        tokio::time::timeout(Duration::from_millis(200), async {
+            retirement.retire(&marker).unwrap();
+        }).await.expect("retirement must not block authentication on credentials");
+        assert!(retirement.disabled(&marker));
+        let store = credential_store_at(dir.path(), None).await.unwrap();
+        let pending = Pending::new(uuid::Uuid::new_v4().to_string());
+        store.set("late-proof", &serde_json::to_vec(&pending).unwrap()).await.unwrap();
+        assert!(Retirement::new().disabled(&marker), "restart must remain retired after late persistence");
+    }
+
+    #[test]
+    fn settings_event_retires_even_when_reenabled_before_worker_wakes() {
+        let dir = tempfile::tempdir().unwrap();
+        let store_path = dir.path().join("store.bin");
+        let marker = dir.path().join("retired");
+        let retirement = std::sync::Arc::new(Retirement::new());
+        let app = tauri::test::mock_builder()
+            .plugin(tauri_plugin_store::Builder::default().build())
+            .build(tauri::test::mock_context(tauri::test::noop_assets())).unwrap();
+        let state = retirement.clone();
+        let saved_marker = marker.clone();
+        watch_settings(app.handle(), store_path.clone(), move || {
+            state.retire(&saved_marker).unwrap();
+        });
+        let store = tauri_plugin_store::StoreBuilder::new(app.handle(), store_path)
+            .disable_auto_save().build().unwrap();
+        let other = tauri_plugin_store::StoreBuilder::new(app.handle(), dir.path().join("other.bin"))
+            .disable_auto_save().build().unwrap();
+        other.set("settings", serde_json::json!({"analyticsEnabled": false}));
+        store.set("unrelated", serde_json::json!({"analyticsEnabled": false}));
+        store.set("settings", serde_json::json!({"analyticsEnabled": true}));
+        assert!(!retirement.is_retired());
+        store.set("settings", serde_json::json!({"analyticsEnabled": false}));
+        store.set("settings", serde_json::json!({"analyticsEnabled": true}));
+        assert!(retirement.disabled(&marker));
+        assert!(Retirement::new().disabled(&marker));
+    }
+
+    #[tokio::test]
+    async fn retirement_cancels_stalled_http_and_prevents_another_request() {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = reqwest::Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let (received, request_received) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 4096];
+            socket.read(&mut request).await.unwrap();
+            received.send(()).unwrap();
+            std::future::pending::<()>().await;
+        });
+        let retirement = std::sync::Arc::new(Retirement::new());
+        let state = retirement.clone();
+        let worker = tokio::spawn(async move {
+            let p = Pending::new(uuid::Uuid::new_v4().to_string());
+            state.until_retired(send(&reqwest::Client::new(), &origin, "bind", &p, Some("synthetic"))).await
+        });
+        tokio::time::timeout(Duration::from_secs(2), request_received).await.unwrap().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        retirement.retire(&dir.path().join("retired")).unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(200), worker).await.unwrap().unwrap().is_none());
+        assert!(retirement.until_retired(async { panic!("retired proof must never start another request") }).await.is_none());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn failed_marker_write_still_cancels_for_this_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let retirement = Retirement::new();
+        assert!(retirement.retire(dir.path()).is_err());
+        assert!(retirement.is_retired());
+        assert!(retirement.until_retired(async { "must not run" }).await.is_none());
     }
 
 }

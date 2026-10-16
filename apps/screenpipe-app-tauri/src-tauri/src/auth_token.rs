@@ -126,8 +126,8 @@ pub async fn store_cloud_token(token: Option<&str>) -> anyhow::Result<()> {
     let next = token.and_then(crate::acquisition_handoff::subject);
     if token.is_none() || (previous.is_some() && previous != next) {
         // Retire attribution before changing accounts. The worker cannot overwrite
-        // the Keychain tombstone if an HTTP request is already in flight.
-        crate::acquisition_handoff::retire().await;
+        // the independent retirement marker if an HTTP request is already in flight.
+        crate::acquisition_handoff::retire();
     }
     seed_cloud_token(normalized.clone());
     crate::acquisition_handoff::wake();
