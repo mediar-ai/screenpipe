@@ -418,9 +418,11 @@ fn exercise_live_typing(exclude_terminal: bool) {
             // this test by attributing the earlier app's text to the later app.
             std::thread::sleep(Duration::from_millis(150));
             for down in [true, false] {
-                cg::Event::keyboard(None, key, down)
-                    .unwrap()
-                    .post(cg::EventTapLocation::Hid);
+                let mut event = cg::Event::keyboard(None, key, down).unwrap();
+                // CGEvent inherits session modifier state, including earlier
+                // synthetic shortcuts. This fixture types unmodified letters.
+                event.set_flags(cg::EventFlags(0));
+                event.post(cg::EventTapLocation::Hid);
             }
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -518,6 +520,11 @@ fn live_clipboard_shortcut_dedup_and_slow_consumer_recover() {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+    // A key-up carrying CMD still leaves the synthetic session modifier set.
+    // Release it before assertions so later acceptance tests remain isolated.
+    let mut release = cg::Event::keyboard(None, 55, false).unwrap();
+    release.set_flags(cg::EventFlags(0));
+    release.post(cg::EventTapLocation::Hid);
     let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
     assert!(
         matches!(first.data, EventData::Clipboard { content: Some(ref text), .. } if text == "clipboard-fixture-original"),
