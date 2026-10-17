@@ -1,5 +1,6 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
+import { uploadGuideImages } from "./guide-web-images";
 import { findWorkflowScreenshot } from "./source-screenshot";
 import { loadOriginalWorkflowScreenshot } from "./original-screenshot";
 import { trackWorkflowOutcome } from "./notification";
@@ -52,10 +53,11 @@ export const desktopGuides: NonNullable<WorkflowsPlatform["guides"]> = {
     return { ...frame, dataUrl: URL.createObjectURL(await loadOriginalWorkflowScreenshot(frame.frameId, signal)) };
   },
   loadScreenshot: async (frameId, signal) => URL.createObjectURL(await loadOriginalWorkflowScreenshot(frameId, signal)),
-  async openWeb(guide) {
+  async openWeb(guide, workflow) {
     const token = await commands.getCloudToken();
     if (!token)
       throw new Error("Sign in to Screenpipe to open your SOP on the web.");
+    const images = await uploadGuideImages(guide, workflow, token);
     const response = await fetch(screenpipeWebUrl("/api/sops", PROD_WEB_BASE), {
       method: "POST",
       signal: AbortSignal.timeout(30000),
@@ -66,7 +68,8 @@ export const desktopGuides: NonNullable<WorkflowsPlatform["guides"]> = {
       body: JSON.stringify({
         workflowKey: guide.workflowKey,
         title: guide.title,
-        content: guideMarkdown(guide),
+        content: guideMarkdown(guide, images),
+        previousContent: guideMarkdown(guide),
       }),
     });
     if (!response.ok)
