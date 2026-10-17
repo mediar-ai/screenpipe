@@ -31,7 +31,9 @@
 use crate::activity_feed::{ActivityFeed, ActivityKind};
 use crate::config::UiCaptureConfig;
 use crate::events::{EventData, Modifiers, UiEvent};
-use crate::platform::linux_focus::{self, FocusHistory, CLICK_SETTLE};
+use crate::platform::linux_focus::{
+    ClickTarget, FocusHistory, FocusTracker, CLICK_SETTLE, ENRICH_BUDGET,
+};
 use anyhow::Result;
 use chrono::Utc;
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -403,18 +405,22 @@ fn run_evdev_monitor(
 
     // Clicked-element enrichment: clicks go through a resolver thread that
     // waits for the focus change they cause, then attaches the element.
-    let (click_tx, resolver_thread) = if config.capture_clicks && config.capture_context {
-        let (click_tx, click_rx) = bounded::<(UiEvent, Instant)>(256);
-        let history = linux_focus::focus_history();
-        let tx_resolver = tx.clone();
-        let stop_resolver = stop.clone();
-        let handle = thread::spawn(move || {
-            run_click_resolver(click_rx, tx_resolver, stop_resolver, history);
-        });
-        (Some(click_tx), Some(handle))
-    } else {
-        (None, None)
-    };
+    // The focus tracker lives exactly as long as this session: it stops, and
+    // forgets every focus record, when the session stops.
+    let (click_tx, resolver_thread, focus_tracker) =
+        if config.capture_clicks && config.capture_context {
+            let (click_tx, click_rx) = bounded::<(UiEvent, Instant)>(256);
+            let tracker = FocusTracker::start(config.clone(), stop.clone());
+            let history = tracker.history();
+            let tx_resolver = tx.clone();
+            let stop_resolver = stop.clone();
+            let handle = thread::spawn(move || {
+                run_click_resolver(click_rx, tx_resolver, stop_resolver, history);
+            });
+            (Some(click_tx), Some(handle), Some(tracker))
+        } else {
+            (None, None, None)
+        };
 
     // Spawn a thread per device group for simplicity
     let stop_kb = stop.clone();
@@ -497,11 +503,17 @@ fn run_evdev_monitor(
     if let Some(handle) = resolver_thread {
         let _ = handle.join();
     }
+    if let Some(tracker) = focus_tracker {
+        tracker.shutdown();
+    }
     debug!("evdev monitor stopped");
 }
 
 /// Emit each click once `CLICK_SETTLE` has passed, with the element it landed
-/// on. Stops when the mouse thread drops its sender or `stop` is set.
+/// on. A focus change still being described is waited for until
+/// `click + CLICK_SETTLE + ENRICH_BUDGET`; past that the click goes out
+/// without an element. A click that landed in an excluded app or window is
+/// dropped. Stops when the mouse thread drops its sender or `stop` is set.
 fn run_click_resolver(
     clicks: Receiver<(UiEvent, Instant)>,
     tx: Sender<UiEvent>,
@@ -524,10 +536,32 @@ fn run_click_resolver(
         if ready_at > now {
             thread::sleep(ready_at - now);
         }
-        event.element = history
-            .lock()
-            .element_for_click(clicked_at, event.app_name.as_deref());
+        match resolve_click(&history, clicked_at, event.app_name.as_deref(), &stop) {
+            ClickTarget::Excluded => continue,
+            ClickTarget::Element(element) => event.element = Some(element),
+            ClickTarget::Nothing | ClickTarget::Wait => {}
+        }
         let _ = tx.try_send(event);
+    }
+}
+
+/// The click's target, waiting for a focus record still being described.
+fn resolve_click(
+    history: &Mutex<FocusHistory>,
+    clicked_at: Instant,
+    clicked_app: Option<&str>,
+    stop: &AtomicBool,
+) -> ClickTarget {
+    let deadline = clicked_at + CLICK_SETTLE + ENRICH_BUDGET;
+    loop {
+        let target = history.lock().element_for_click(clicked_at, clicked_app);
+        if !matches!(target, ClickTarget::Wait) {
+            return target;
+        }
+        if Instant::now() >= deadline || stop.load(Ordering::Relaxed) {
+            return ClickTarget::Nothing;
+        }
+        thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -1632,42 +1666,58 @@ fn truncate(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn click_resolver_attaches_the_element_focused_by_the_click() {
-        use crate::events::ElementContext;
-        use crate::platform::linux_focus::FocusRecord;
+    fn button(name: &str) -> crate::events::ElementContext {
+        crate::events::ElementContext {
+            role: "push button".to_string(),
+            name: Some(name.to_string()),
+            value: None,
+            description: None,
+            automation_id: None,
+            bounds: None,
+            ancestors: None,
+        }
+    }
 
-        let history = Arc::new(Mutex::new(FocusHistory::default()));
+    /// A resolver thread fed one click from `app`; returns what it emits.
+    fn resolve_one(
+        history: Arc<Mutex<FocusHistory>>,
+        app: &str,
+        clicked_at: Instant,
+        during: impl FnOnce(),
+    ) -> Option<UiEvent> {
         let (click_tx, click_rx) = bounded(4);
         let (tx, rx) = bounded(4);
         let stop = Arc::new(AtomicBool::new(false));
         let resolver = {
-            let history = history.clone();
             let stop = stop.clone();
             thread::spawn(move || run_click_resolver(click_rx, tx, stop, history))
         };
-
         let mut click = UiEvent::click(Utc::now(), 0, 10, 20, 0, 1, 0);
-        click.app_name = Some("gedit".to_string());
-        let clicked_at = Instant::now();
+        click.app_name = Some(app.to_string());
         click_tx.send((click, clicked_at)).unwrap();
-        // The focus change caused by the click arrives a little later.
-        history.lock().push(FocusRecord {
-            at: clicked_at + Duration::from_millis(20),
-            key: ":1.42/org/a11y/atspi/accessible/7".to_string(),
-            app: Some("gedit".to_string()),
-            element: Some(ElementContext {
-                role: "push button".to_string(),
-                name: Some("Save".to_string()),
-                value: None,
-                description: None,
-                automation_id: None,
-                bounds: None,
-                ancestors: None,
-            }),
-        });
+        during();
+        drop(click_tx);
+        let emitted = rx.recv_timeout(Duration::from_secs(2)).ok();
+        resolver.join().unwrap();
+        emitted
+    }
 
-        let emitted = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    #[test]
+    fn click_resolver_attaches_the_element_focused_by_the_click() {
+        use crate::platform::linux_focus::{Focus, FocusRecord};
+
+        let history = Arc::new(Mutex::new(FocusHistory::default()));
+        let clicked_at = Instant::now();
+        let emitted = resolve_one(history.clone(), "gedit", clicked_at, || {
+            // The focus change caused by the click arrives a little later.
+            history.lock().push(FocusRecord {
+                at: clicked_at + Duration::from_millis(20),
+                key: ":1.42/org/a11y/atspi/accessible/7".to_string(),
+                app: Some("gedit".to_string()),
+                focus: Focus::Element(button("Save")),
+            });
+        })
+        .expect("click emitted");
         assert!(clicked_at.elapsed() >= CLICK_SETTLE);
         let element = emitted.element.expect("clicked element");
         assert_eq!(element.role, "push button");
@@ -1676,9 +1726,83 @@ mod tests {
             emitted.data,
             EventData::Click { x: 10, y: 20, .. }
         ));
+    }
 
-        drop(click_tx);
-        resolver.join().unwrap();
+    /// Louis's P2: focus at +20 ms, metadata only 200 ms later (past the
+    /// 150 ms settle). The click must carry the new element, not the old one.
+    #[test]
+    fn click_waits_for_metadata_that_arrives_after_the_settle_time() {
+        use crate::platform::linux_focus::{Focus, FocusRecord};
+
+        let history = Arc::new(Mutex::new(FocusHistory::default()));
+        let clicked_at = Instant::now();
+        history.lock().push(FocusRecord {
+            at: clicked_at - Duration::from_secs(1),
+            key: "old".to_string(),
+            app: Some("gedit".to_string()),
+            focus: Focus::Element(button("Old")),
+        });
+        let changed = clicked_at + Duration::from_millis(20);
+        history.lock().focus_gained(changed, "new");
+        let slow = {
+            let history = history.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(220));
+                history.lock().resolve(
+                    changed,
+                    "new",
+                    Some("gedit".to_string()),
+                    Focus::Element(button("Save")),
+                );
+            })
+        };
+        let emitted = resolve_one(history, "gedit", clicked_at, || {}).expect("click emitted");
+        slow.join().unwrap();
+        assert_eq!(
+            emitted.element.and_then(|e| e.name).as_deref(),
+            Some("Save")
+        );
+    }
+
+    /// Metadata that never arrives: the click goes out at the deadline,
+    /// without an element, never with the previously focused one.
+    #[test]
+    fn click_whose_metadata_never_arrives_has_no_element() {
+        use crate::platform::linux_focus::{Focus, FocusRecord};
+
+        let history = Arc::new(Mutex::new(FocusHistory::default()));
+        let clicked_at = Instant::now();
+        history.lock().push(FocusRecord {
+            at: clicked_at - Duration::from_secs(1),
+            key: "old".to_string(),
+            app: Some("gedit".to_string()),
+            focus: Focus::Element(button("Old")),
+        });
+        history
+            .lock()
+            .focus_gained(clicked_at + Duration::from_millis(20), "hung");
+        let emitted = resolve_one(history, "gedit", clicked_at, || {}).expect("click emitted");
+        assert!(emitted.element.is_none());
+        let waited = clicked_at.elapsed();
+        assert!(waited >= CLICK_SETTLE + ENRICH_BUDGET, "{waited:?}");
+        assert!(waited < CLICK_SETTLE + ENRICH_BUDGET + Duration::from_millis(300));
+    }
+
+    /// Louis's P1, end to end through the resolver: the observer still says
+    /// gedit, focus went to an excluded app. Nothing is emitted.
+    #[test]
+    fn click_into_an_excluded_app_is_not_emitted() {
+        use crate::platform::linux_focus::{Focus, FocusRecord};
+
+        let history = Arc::new(Mutex::new(FocusHistory::default()));
+        let clicked_at = Instant::now();
+        history.lock().push(FocusRecord {
+            at: clicked_at + Duration::from_millis(30),
+            key: "keepass".to_string(),
+            app: Some("KeePassXC".to_string()),
+            focus: Focus::Excluded,
+        });
+        assert!(resolve_one(history, "gedit", clicked_at, || {}).is_none());
     }
 
     #[test]
