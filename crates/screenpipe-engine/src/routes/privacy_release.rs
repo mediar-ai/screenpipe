@@ -15,6 +15,18 @@ pub(crate) fn pending() -> Response {
     (StatusCode::SERVICE_UNAVAILABLE,[("retry-after","5")],Json(serde_json::json!({"error":"Privacy processing is pending","code":"privacy_pending","retryable":true}))).into_response()
 }
 
+fn mark_protected(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        "x-screenpipe-privacy-completeness",
+        "unknown".parse().unwrap(),
+    );
+    response.headers_mut().insert(
+        "x-screenpipe-privacy-status",
+        "/privacy/status".parse().unwrap(),
+    );
+    response
+}
+
 pub(crate) async fn release_middleware(
     State(state): State<Arc<AppState>>,
     request: Request,
@@ -40,24 +52,26 @@ pub(crate) async fn release_middleware(
     {
         return (StatusCode::SERVICE_UNAVAILABLE,Json(serde_json::json!({"error":"This surface has no privacy release adapter","code":"privacy_surface_unavailable","retryable":false}))).into_response();
     }
+    // A successful mutation can revoke the receipt it just changed. The write
+    // has already committed when `next` returns, so replacing that response
+    // with a retryable 503 would tell clients to repeat a successful action.
+    // Protected DB views still gate every read performed by write handlers;
+    // response admission is only needed for read-only requests whose snapshot
+    // may become stale while the handler is assembling it.
+    let admit_response = matches!(
+        *request.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD
+    );
+    if !admit_response {
+        return mark_protected(next.run(request).await);
+    }
     let before = match state.db.release_revocation().await {
         Ok(epoch) => epoch,
         Err(_) => return pending(),
     };
     let response = next.run(request).await;
     match state.db.release_revocation().await {
-        Ok(epoch) if epoch == before => {
-            let mut response = response;
-            response.headers_mut().insert(
-                "x-screenpipe-privacy-completeness",
-                "unknown".parse().unwrap(),
-            );
-            response.headers_mut().insert(
-                "x-screenpipe-privacy-status",
-                "/privacy/status".parse().unwrap(),
-            );
-            response
-        }
+        Ok(epoch) if epoch == before => mark_protected(response),
         _ => pending(),
     }
 }
@@ -181,6 +195,7 @@ mod tests {
         .unwrap();
         db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,app_name,window_name) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET','Test','Test')").await.unwrap();
         db.execute_raw_sql_write("INSERT INTO meetings(id,meeting_start,meeting_app,title,note) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET','SYNTHETIC_SECRET','SYNTHETIC_SECRET')").await.unwrap();
+        db.execute_raw_sql_write("INSERT INTO memories(id,content,source,tags,importance) VALUES(1,'SYNTHETIC_SECRET','test','[]',0.5)").await.unwrap();
         db.execute_raw_sql_write("INSERT INTO activity_tasks(id,task_key,kind,title,confidence,producer,user_locked) VALUES(1,'task','task','SYNTHETIC_SECRET',1,'test',1); INSERT INTO activity_intervals(id,interval_key,task_id,start_at,end_at,state,confidence,producer) VALUES(1,'interval',1,'2026-10-14T10:00:00Z','2026-10-14T10:05:00Z','final',1,'test'); INSERT INTO activity_actions(id,action_key,interval_id,occurred_at,action_type,summary,confidence,source_type,source_id) VALUES(1,'action',1,'2026-10-14T10:00:00Z','view','SYNTHETIC_SECRET',1,'frame',1)").await.unwrap();
         let audio = Arc::new(
             screenpipe_audio::audio_manager::AudioManagerBuilder::new()
@@ -330,13 +345,13 @@ mod tests {
             loop {
                 worker.process_release_batch(7).await.unwrap();
                 let ready: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM _privacy_release WHERE kind IN ('frames','activity_tasks','activity_actions') AND id='1' AND policy=(SELECT receipt_key FROM _privacy_policy WHERE identity='synthetic-v1')",
+                    "SELECT COUNT(*) FROM _privacy_release WHERE kind IN ('frames','activity_tasks','activity_actions','memory') AND id='1' AND policy=(SELECT receipt_key FROM _privacy_policy WHERE identity='synthetic-v1')",
                 )
                 .fetch_one(&db.pool)
                 .await
                 .unwrap();
                 let local_ready: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_exports e JOIN _privacy_release r ON r.kind='exports' AND r.id=CAST(e.id AS TEXT) JOIN _privacy_policy p ON r.policy=CAST(p.receipt_key AS TEXT) WHERE e.stream='local_meetings' AND e.source_id='1')").fetch_one(&db.pool).await.unwrap();
-                if ready == 3 && local_ready {
+                if ready == 4 && local_ready {
                     break;
                 }
                 tokio::task::yield_now().await;
@@ -379,6 +394,17 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(page["rows"][0]["text"], "[PRIVATE]");
+        let deleted = client
+            .delete(format!("{base}/memories/1"))
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            deleted.status().is_success(),
+            "a committed delete must not be reported as retryable: {}",
+            deleted.text().await.unwrap()
+        );
+        assert!(db.get_memory_by_id(1).await.is_err());
         assert_eq!(
             calls.load(Ordering::SeqCst),
             before,
