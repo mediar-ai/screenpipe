@@ -1378,9 +1378,7 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     // Detect DB write stalls: capture loop is alive (heartbeat fresh) but DB
     // writes have stopped. This indicates pool exhaustion or DB lock contention
     // — data is being captured but silently lost.
-    let vision_db_write_stalled = if !state.vision_disabled
-        && vision_capture_expected
-    {
+    let vision_db_write_stalled = if !state.vision_disabled && vision_capture_expected {
         let stalled = vision_persistence_stalled(
             now_ts,
             vision_snap.last_capture_attempt_ts,
