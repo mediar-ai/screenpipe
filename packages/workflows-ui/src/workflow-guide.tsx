@@ -13,6 +13,7 @@ import {
   ExternalLink,
   ImageOff,
   Loader2,
+  List,
   MoreHorizontal,
   Plus,
   Trash2,
@@ -268,7 +269,7 @@ export function WorkflowGuide({
           )}
           {draft && (
             <>
-              <button className={styles.actionButton} aria-expanded={outlineOpen} onClick={() => setOutlineOpen(!outlineOpen)}>Contents</button>
+              <button type="button" className={styles.actionButton} aria-label={ui("Contents")} title={ui("Contents")} aria-expanded={outlineOpen} onClick={() => setOutlineOpen(!outlineOpen)}><List size={16} aria-hidden="true" /></button>
               <DocumentActions document={{ kind: "sop", title: draft.title, markdown: guideMarkdown(draft) }} onShare={platform.openWeb ? () => { setWebError(""); webDialog.current?.showModal(); } : onShareDocument} download={downloadDocument} />
               {platform.video && <GuideVideoPanel container={videoContainer} onOpenChange={setVideoOpen} ref={videoHandle} guide={draft} workflow={workflow} platform={platform.video} loadScreenshot={platform.loadScreenshot} loadSourceScreenshot={platform.loadSourceScreenshot} save={persist} onVideoMode={setVideoMode} onLayoutChange={videoLayout => update({ ...latest.current!, videoLayout })} assistantBusy={videoBusy} onCreate={platform.video.edit ? () => {
                 if (videoRequested.current) return;
@@ -291,7 +292,6 @@ export function WorkflowGuide({
                   }}
                 >
                   <ExternalLink size={16} aria-hidden="true" />
-                  {ui("Open on web")}
                 </button>
               )}
               <button
@@ -305,7 +305,6 @@ export function WorkflowGuide({
                 }}
               >
                 <Download size={16} aria-hidden="true" />
-                {ui("Export")}
               </button>
             </>
           )}
