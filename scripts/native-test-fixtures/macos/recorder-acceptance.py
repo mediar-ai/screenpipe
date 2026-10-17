@@ -119,12 +119,19 @@ def main():
                 wait_frame(mode, secondary, size, after)
             with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/health", timeout=10) as response:
                 health = json.load(response)
-            assert health["frame_status"] == "ok", health
+            assert health["status"] == "healthy" and health["frame_status"] == "ok", health
             print("HEALTH", health["status"], health["frame_status"], flush=True)
             recorder.send_signal(signal.SIGINT)
             code = recorder.wait(timeout=40)
             assert code == 0, f"unclean recorder shutdown: {code}"
             print("CLI_EXIT", code, flush=True)
+            # Use the product verifier, which registers the hybrid storage
+            # functions and checks payloads as well as SQLite integrity.
+            verify = subprocess.run([args.engine, "db", "check"],
+                                    env=dict(env, SCREENPIPE_DATA_DIR=str(data)),
+                                    text=True, capture_output=True, timeout=60)
+            (output / "storage-check.log").write_text(verify.stdout + verify.stderr)
+            assert verify.returncode == 0, verify.stdout + verify.stderr
             # New installs use a versioned hybrid index; existing installs may
             # still use the legacy db.sqlite. Follow the active descriptor.
             descriptor = data / "storage.json"
@@ -137,7 +144,6 @@ def main():
             # With the process gone and no WAL, immutable avoids macOS SQLite
             # trying to create shared-memory sidecars through a read-only handle.
             with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as db:
-                assert db.execute("pragma integrity_check").fetchone()[0] == "ok"
                 for snapshot in snapshots:
                     count = db.execute("select count(*) from frames where snapshot_path=?",
                                        (snapshot["path"],)).fetchone()[0]
