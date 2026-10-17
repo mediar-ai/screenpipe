@@ -17,6 +17,7 @@ export type StageEdit = {
   responseTemplate?: string;
   linkedWorkflowId?: string;
   sourceIndex: number | null;
+  imageLayout?: WorkflowStage["imageLayout"];
   name: string;
   description: string;
   procedure: ProcedureEdit[];
@@ -68,6 +69,7 @@ export function workflowEdit(workflow: WorkflowMap): WorkflowEdit {
       sourceIndex,
       name: stage.name,
       description: stage.description,
+      ...(stage.imageLayout ? { imageLayout: stage.imageLayout } : {}),
       procedure: (()=>{
         const ids = new Set((stage.procedure ?? []).flatMap(p=>p.id ? [p.id] : []));
         return (stage.procedure ?? []).map(({id,kind,text},sourceIndex)=>({id:id ?? availableId(ids,`block-${sourceIndex}`),sourceIndex,kind,text}));
@@ -116,6 +118,7 @@ export function validWorkflowEdit(
         text(s.name, true) &&
         text(s.description) &&
         [s.requiredAccess,s.exceptions,s.escalation,s.responseTemplate,s.linkedWorkflowId].every(v => v === undefined || text(v)) &&
+        (!s.imageLayout || (typeof s.imageLayout.beforeText === "boolean" && [s.imageLayout.order, s.imageLayout.hidden].every(ids => Array.isArray(ids) && ids.length <= 100 && new Set(ids).size === ids.length && ids.every(id => Number.isSafeInteger(id) && id >= 0)))) &&
         Array.isArray(s.procedure) &&
         s.procedure.length <= 100 &&
         s.procedure.every(

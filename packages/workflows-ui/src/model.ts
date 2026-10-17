@@ -92,6 +92,8 @@ export type WorkflowScreenshot = {
   dataUrl: string;
 };
 
+export type WorkflowImageLayout = { order: number[]; hidden: number[]; beforeText: boolean };
+
 export type WorkflowVariable = {
   id: string; kind: "input" | "output"; name: string; description: string;
   examples: { stepId: string; field: string; value: string }[];
@@ -104,6 +106,7 @@ export type WorkflowStage = {
   escalation?: string;
   responseTemplate?: string;
   linkedWorkflowId?: string;
+  imageLayout?: WorkflowImageLayout;
   timing?: WorkflowTiming | null;
   userEdited?: boolean;
   name: string;

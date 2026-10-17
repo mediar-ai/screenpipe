@@ -554,7 +554,8 @@ export function createFixtureWorkflowsPlatform(analysis: WorkflowAnalysis = fixt
           id:s.id,
           ...Object.fromEntries(["requiredAccess","exceptions","escalation","responseTemplate","linkedWorkflowId"].filter(key=>key in s).map(key=>[key,s[key as keyof typeof s]])),
           timing: isUnchangedStage(s, prior ?? undefined) ? prior?.timing : null,
-          name: s.name.trim(), description: s.description.trim(), userEdited: true,
+          name: s.name.trim(), description: s.description.trim(), userEdited: prior?.userEdited || !isUnchangedStage(s, prior ?? undefined),
+          imageLayout: s.imageLayout,
           procedure: s.procedure.map(p => ({ ...(p.sourceIndex === null ? { quote: "", timestamp: "", app: "" } : prior?.procedure?.[p.sourceIndex] ?? { quote: "", timestamp: "", app: "" }), id:p.id, kind: p.kind, text: p.text.trim(), userEdited: true })),
         };
       });

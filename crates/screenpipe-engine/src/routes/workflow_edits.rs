@@ -51,10 +51,32 @@ pub struct StageEdit {
     pub response_template: Option<String>,
     #[serde(default)]
     pub linked_workflow_id: Option<String>,
+    pub image_layout: Option<ImageLayout>,
     pub source_index: Option<usize>,
     pub name: String,
     pub description: String,
     pub procedure: Vec<ProcedureEdit>,
+}
+#[derive(Deserialize, Serialize, OaSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ImageLayout {
+    pub order: Vec<u64>,
+    pub hidden: Vec<u64>,
+    pub before_text: bool,
+}
+fn image_layout_ok(layout: &ImageLayout) -> bool {
+    [&layout.order, &layout.hidden].iter().all(|ids| {
+        ids.len() <= 100
+            && ids.iter().all(|id| *id <= 9_007_199_254_740_991)
+            && ids.iter().collect::<HashSet<_>>().len() == ids.len()
+    })
+}
+fn without_image_layout(value: &Value) -> Value {
+    let mut value = value.clone();
+    if let Some(object) = value.as_object_mut() {
+        object.remove("imageLayout");
+    }
+    value
 }
 #[derive(Deserialize, OaSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -222,7 +244,13 @@ pub(super) fn preserve_edits(previous: &Value, next: &mut Value) {
                         .filter(|candidate| candidate["name"] == stage["name"])
                         .collect();
                     if stage["userEdited"] != true && matches.len() == 1 {
-                        matches[0].clone()
+                        let mut enriched = matches[0].clone();
+                        if let Some(layout) = stage.get("imageLayout") {
+                            enriched["imageLayout"] = layout.clone();
+                        } else if let Some(object) = enriched.as_object_mut() {
+                            object.remove("imageLayout");
+                        }
+                        enriched
                     } else {
                         stage.clone()
                     }
@@ -230,7 +258,17 @@ pub(super) fn preserve_edits(previous: &Value, next: &mut Value) {
                 .collect::<Vec<_>>());
             // Prior edits alone do not invalidate newly verified timing. Only
             // invalidate when preserving owner changes alters the reviewed map.
-            if next["stages"] != json!(proposed) {
+            if next["stages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(without_image_layout)
+                .collect::<Vec<_>>()
+                != proposed
+                    .iter()
+                    .map(without_image_layout)
+                    .collect::<Vec<_>>()
+            {
                 invalidate_step_claims(next);
             }
         }
@@ -308,6 +346,10 @@ fn apply_edit(previous: &Value, body: &EditRequest) -> Result<Value, ApiError> {
         if !text_ok(&stage.name, true)
             || !text_ok(&stage.description, false)
             || stage.procedure.len() > 100
+            || stage
+                .image_layout
+                .as_ref()
+                .is_some_and(|layout| !image_layout_ok(layout))
         {
             return Err(invalid());
         }
@@ -393,6 +435,9 @@ fn apply_edit(previous: &Value, body: &EditRequest) -> Result<Value, ApiError> {
             next["timing"] = Value::Null;
             next["userEdited"] = json!(true);
         }
+        if let Some(layout) = &stage.image_layout {
+            next["imageLayout"] = json!(layout);
+        }
         stages.push(next);
     }
     let mut next = previous.clone();
@@ -414,21 +459,31 @@ fn apply_edit(previous: &Value, body: &EditRequest) -> Result<Value, ApiError> {
     }
     next["stages"] = json!(stages);
     if without_ids(&next["stages"]) != without_ids(&json!(original)) {
+        let presentation_only = without_ids(&json!(stages
+            .iter()
+            .map(without_image_layout)
+            .collect::<Vec<_>>()))
+            == without_ids(&json!(original
+                .iter()
+                .map(without_image_layout)
+                .collect::<Vec<_>>()));
         edits.insert("stages".into(), json!(true));
-        // Rename surviving step associations and remove associations to deleted steps.
-        let mut friction = vec![];
-        for item in previous["bottlenecks"].as_array().into_iter().flatten() {
-            if let Some(name) =
-                names.get(&item["stage"].as_str().unwrap_or_default().to_lowercase())
-            {
-                let mut item = item.clone();
-                item["stage"] = json!(name);
-                friction.push(item);
+        if !presentation_only {
+            // Rename surviving step associations and remove associations to deleted steps.
+            let mut friction = vec![];
+            for item in previous["bottlenecks"].as_array().into_iter().flatten() {
+                if let Some(name) =
+                    names.get(&item["stage"].as_str().unwrap_or_default().to_lowercase())
+                {
+                    let mut item = item.clone();
+                    item["stage"] = json!(name);
+                    friction.push(item);
+                }
             }
+            next["bottlenecks"] = json!(friction);
+            edits.insert("bottlenecks".into(), json!(true));
+            invalidate_step_claims(&mut next);
         }
-        next["bottlenecks"] = json!(friction);
-        edits.insert("bottlenecks".into(), json!(true));
-        invalidate_step_claims(&mut next);
     }
     for (key, value) in [
         ("variables", body.variables.as_ref().map(|v| json!(v))),
@@ -572,6 +627,39 @@ mod tests {
             {"sourceIndex":1,"name":"Write","description":"Draft report","procedure":[]}]})).unwrap()
     }
     #[test]
+    fn image_selection_edits_preserve_sources_timing_and_survive_discovery() {
+        let prior = original();
+        let mut body = request();
+        body.stages[0].image_layout = Some(ImageLayout {
+            order: vec![2, 1],
+            hidden: vec![1],
+            before_text: true,
+        });
+        let saved = apply_edit(&prior, &body).unwrap();
+        assert_eq!(
+            saved["stages"][0]["screenshots"],
+            prior["stages"][0]["screenshots"]
+        );
+        assert_eq!(
+            saved["stages"][0]["evidence"],
+            prior["stages"][0]["evidence"]
+        );
+        assert_eq!(saved["timing"], prior["timing"]);
+        assert_eq!(saved["stages"][0]["imageLayout"]["hidden"], json!([1]));
+        let mut next = prior.clone();
+        preserve_edits(&saved, &mut next);
+        assert_eq!(
+            next["stages"][0]["imageLayout"],
+            saved["stages"][0]["imageLayout"]
+        );
+        assert_eq!(next["timing"], prior["timing"]);
+        body.stages[0].image_layout.as_mut().unwrap().order = vec![1, 1];
+        assert_eq!(
+            apply_edit(&prior, &body).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    #[test]
     fn unchanged_save_is_noop_and_conflict_does_not_mutate() {
         let prior = original();
         let mut body = request();
@@ -643,6 +731,7 @@ mod tests {
             escalation: None,
             response_template: None,
             linked_workflow_id: None,
+            image_layout: None,
             source_index: None,
             name: "Deliver".into(),
             description: "".into(),
