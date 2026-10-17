@@ -14,11 +14,16 @@
 //! A [`FocusTracker`] lives exactly as long as a recording session. Its
 //! listener records every focus change the moment the signal arrives (as
 //! [`Focus::Pending`]), then enriches it under a total deadline
-//! ([`ENRICH_BUDGET`]). A click is attributed to:
-//!
-//! 1. the element that gains focus within [`CLICK_SETTLE`] after the click;
-//! 2. otherwise the element that already had focus, unless it belongs to an
-//!    app other than the one the click landed in.
+//! ([`ENRICH_BUDGET`]). A click is attributed to the element that gains focus
+//! within [`CLICK_SETTLE`] after it. A click that moves no focus (empty space,
+//! plain text, an element that is already focused) gets no element: the
+//! element that already had focus is not necessarily what was clicked, and an
+//! empty element is better than a wrong one. It is still dropped when focus
+//! sits in an excluded app. A click that activates a window gets no element
+//! either: on activation the toolkit restores focus to the window's last
+//! focused element, and the event sequence is the same whether that is the
+//! clicked control (Qt gives focus to a clicked button) or not (a click on a
+//! label restores the text field), so the two cannot be told apart.
 //!
 //! Privacy, in the same order as the code:
 //!
@@ -103,6 +108,10 @@ pub(crate) enum Focus {
     Unknown,
     /// The element lost focus.
     Lost,
+    /// A window became active (`object:state-changed:active` or
+    /// `window:activate`). A focus change that follows may be the toolkit
+    /// restoring that window's focus rather than the click.
+    Activated,
 }
 
 /// One focus change seen on the AT-SPI2 bus.
@@ -182,44 +191,80 @@ impl FocusHistory {
         }
     }
 
+    /// Record that a window became active.
+    pub fn window_activated(&mut self, at: Instant, key: &str) {
+        self.push(FocusRecord {
+            at,
+            key: key.to_string(),
+            app: None,
+            focus: Focus::Activated,
+        });
+    }
+
     pub fn clear(&mut self) {
         self.records.clear();
     }
 
     /// Where a click at `click_at` landed, once `CLICK_SETTLE` has elapsed.
-    /// `clicked_app` is the app the window observer attributed the click to.
-    pub fn element_for_click(&self, click_at: Instant, clicked_app: Option<&str>) -> ClickTarget {
+    pub fn element_for_click(&self, click_at: Instant) -> ClickTarget {
         // 1. The click moved focus: that element is what was clicked.
+        //    Exceptions: any focus in an excluded app drops the click, and a
+        //    click that activated a window gets no element (see module doc).
         let settle_end = click_at + CLICK_SETTLE;
-        if let Some(record) = self
-            .records
-            .iter()
-            .find(|r| r.at >= click_at && r.at <= settle_end && !matches!(r.focus, Focus::Lost))
-        {
-            return target_of(record, clicked_app);
+        let settled = || {
+            self.records
+                .iter()
+                .filter(move |r| r.at >= click_at && r.at <= settle_end)
+        };
+        if settled().any(|r| matches!(r.focus, Focus::Excluded)) {
+            return ClickTarget::Excluded;
+        }
+        if settled().any(|r| matches!(r.focus, Focus::Activated)) {
+            // A pending record may still turn out to be excluded.
+            return if settled().any(|r| matches!(r.focus, Focus::Pending)) {
+                ClickTarget::Wait
+            } else {
+                ClickTarget::Nothing
+            };
+        }
+        if let Some(record) = settled().find(|r| !matches!(r.focus, Focus::Lost)) {
+            return target_of(record);
         }
 
-        // 2. Focus did not move: fall back to the element that had it, as
-        //    long as it is in the app that received the click.
-        match self.records.iter().rev().find(|r| r.at < click_at) {
-            Some(record) => target_of(record, clicked_app),
+        // 2. Focus did not move: the focused element is not necessarily what
+        //    was clicked (empty space, plain text), so it is not attached. A
+        //    focus inside an excluded app still drops the click.
+        match self
+            .records
+            .iter()
+            .rev()
+            .find(|r| r.at < click_at && !matches!(r.focus, Focus::Activated))
+        {
+            Some(record) => match target_of(record) {
+                ClickTarget::Excluded => ClickTarget::Excluded,
+                ClickTarget::Wait => ClickTarget::Wait,
+                ClickTarget::Element(_) | ClickTarget::Nothing => ClickTarget::Nothing,
+            },
             None => ClickTarget::Nothing,
         }
     }
 }
 
-fn target_of(record: &FocusRecord, clicked_app: Option<&str>) -> ClickTarget {
+/// What a focus record says about a click. The element is attached whatever
+/// app the window observer named: its process name ("python3",
+/// "gnome-text-editor") rarely matches the AT-SPI2 application name ("Text
+/// Editor"), the observer can lag by up to 200 ms, and exclusions were
+/// already applied to the element's real owner.
+fn target_of(record: &FocusRecord) -> ClickTarget {
     match &record.focus {
         Focus::Pending => ClickTarget::Wait,
         Focus::Excluded => ClickTarget::Excluded,
-        Focus::Unknown | Focus::Lost => ClickTarget::Nothing,
-        Focus::Element(element) => match (clicked_app, record.app.as_deref()) {
-            (Some(clicked), Some(owner)) if !same_app(clicked, owner) => ClickTarget::Nothing,
-            _ => ClickTarget::Element(element.clone()),
-        },
+        Focus::Unknown | Focus::Lost | Focus::Activated => ClickTarget::Nothing,
+        Focus::Element(element) => ClickTarget::Element(element.clone()),
     }
 }
 
+#[cfg(test)]
 /// App names come from different sources (process name for the click, AT-SPI
 /// application name for the element), e.g. `firefox` vs `Firefox`.
 fn same_app(a: &str, b: &str) -> bool {
@@ -339,12 +384,29 @@ fn listen(
         "RegisterEvent",
         &("object:state-changed:focused",),
     );
+    let _ = call(
+        &conn,
+        "org.a11y.atspi.Registry",
+        "/org/a11y/atspi/registry",
+        "org.a11y.atspi.Registry",
+        "RegisterEvent",
+        &("object:state-changed:active",),
+    );
+    let _ = call(
+        &conn,
+        "org.a11y.atspi.Registry",
+        "/org/a11y/atspi/registry",
+        "org.a11y.atspi.Registry",
+        "RegisterEvent",
+        &("window:activate",),
+    );
 
+    // Focus changes come as Object.StateChanged; window activation as
+    // Object.StateChanged("active") from GTK and Window.Activate from Qt.
+    // Object paths are toolkit-specific (GTK4 uses its own), so signals are
+    // filtered here by interface and member.
     let rule = zbus::MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
-        .interface("org.a11y.atspi.Event.Object")?
-        .member("StateChanged")?
-        .add_arg("focused")?
         .build();
     let messages = zbus::blocking::MessageIterator::for_match_rule(rule, &conn, Some(256))?;
     debug!("AT-SPI2 focus listener connected");
@@ -363,10 +425,31 @@ fn listen(
             bus: sender.to_string(),
             path: path.to_string(),
         };
-        // detail1 of the signal says gained (1) or lost (0). Its body
-        // signature differs between at-spi2-core versions, so fall back to
-        // reading the state when it cannot be parsed.
-        let gained = focus_detail(&message).unwrap_or_else(|| is_focused(&conn, &target));
+        let interface = header.interface().map(|i| i.as_str());
+        let member = header.member().map(|m| m.as_str());
+        if interface == Some("org.a11y.atspi.Event.Window") && member == Some("Activate") {
+            history.lock().window_activated(at, &target.key());
+            continue;
+        }
+        if interface != Some("org.a11y.atspi.Event.Object") || member != Some("StateChanged") {
+            continue;
+        }
+        // The state that changed and detail1, gained (1) or lost (0). The
+        // body signature differs between at-spi2-core versions; when detail1
+        // cannot be read, the focused state is read instead.
+        let (state, detail) = state_change(&message);
+        if state.as_deref() == Some("active") {
+            if detail == Some(true) {
+                history.lock().window_activated(at, &target.key());
+            }
+            continue;
+        }
+        // Only focus changes from here; a body that cannot be parsed does
+        // not say which state changed, so it is not taken as focus.
+        if state.as_deref() != Some("focused") {
+            continue;
+        }
+        let gained = detail.unwrap_or_else(|| is_focused(&conn, &target));
         if !gained {
             history.lock().focus_lost(at, &target.key());
             continue;
@@ -383,14 +466,22 @@ fn listen(
     Ok(())
 }
 
-/// `true`/`false` from detail1 of an `object:state-changed:focused` signal.
-fn focus_detail(message: &zbus::Message) -> Option<bool> {
+/// The state named by an `object:state-changed:*` signal ("focused",
+/// "active") and its detail1 (gained or lost), when the body can be parsed.
+fn state_change(message: &zbus::Message) -> (Option<String>, Option<bool>) {
     let body = message.body();
-    let body: Structure = body.deserialize().ok()?;
-    match body.fields().get(1)? {
-        Value::I32(detail) => Some(*detail != 0),
+    let Ok(body) = body.deserialize::<Structure>() else {
+        return (None, None);
+    };
+    let state = match body.fields().first() {
+        Some(Value::Str(s)) => Some(s.to_string()),
         _ => None,
-    }
+    };
+    let detail = match body.fields().get(1) {
+        Some(Value::I32(detail)) => Some(*detail != 0),
+        _ => None,
+    };
+    (state, detail)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -754,7 +845,7 @@ mod tests {
             el("push button", "Save"),
         ));
 
-        let ClickTarget::Element(clicked) = history.element_for_click(click, Some("gedit")) else {
+        let ClickTarget::Element(clicked) = history.element_for_click(click) else {
             panic!("expected an element");
         };
         assert_eq!(clicked.role, "push button");
@@ -774,31 +865,77 @@ mod tests {
             el("push button", "Later"),
         ));
 
-        assert_eq!(
-            name_of(history.element_for_click(click, Some("gedit"))),
-            Some("Body".to_string())
-        );
+        assert!(matches!(
+            history.element_for_click(click),
+            ClickTarget::Nothing
+        ));
     }
 
+    /// Seen live: a click that activates a window is followed by a focus the
+    /// toolkit may have restored (Qt: the clicked button, or the text field
+    /// when a label was clicked). It gets no element; later clicks do.
     #[test]
-    fn click_without_focus_change_falls_back_to_focused_element_of_same_app() {
+    fn click_that_activates_a_window_gets_no_element() {
+        let t0 = Instant::now();
+        let click = t0 + Duration::from_secs(1);
+        let mut history = FocusHistory::default();
+        history.window_activated(click + Duration::from_millis(40), "frame");
+        history.push(record(
+            click + Duration::from_millis(45),
+            "field",
+            "qtapp",
+            el("text", "Search"),
+        ));
+        history.push(record(
+            click + Duration::from_millis(60),
+            "button",
+            "qtapp",
+            el("push button", "Send"),
+        ));
+        assert!(matches!(
+            history.element_for_click(click),
+            ClickTarget::Nothing
+        ));
+
+        // The next click, in the now active window, is attributed.
+        let later = click + Duration::from_secs(1);
+        history.push(record(
+            later + Duration::from_millis(30),
+            "button2",
+            "qtapp",
+            el("push button", "Save"),
+        ));
+        assert_eq!(
+            name_of(history.element_for_click(later)),
+            Some("Save".to_string())
+        );
+
+        // Activation into an excluded app still drops the click.
+        let third = later + Duration::from_secs(1);
+        history.window_activated(third + Duration::from_millis(20), "kp");
+        history.push(record(
+            third + Duration::from_millis(30),
+            "k",
+            "KeePassXC",
+            Focus::Excluded,
+        ));
+        assert!(matches!(
+            history.element_for_click(third),
+            ClickTarget::Excluded
+        ));
+    }
+
+    /// Seen live with Qt: a click on empty space moves no focus. The text
+    /// field that had focus is not what was clicked and must not be attached.
+    #[test]
+    fn click_that_moves_no_focus_is_not_attributed_to_the_focused_element() {
         let t0 = Instant::now();
         let mut history = FocusHistory::default();
         history.push(record(t0, "a", "Firefox", el("entry", "Search")));
         let click = t0 + Duration::from_secs(5);
 
-        assert_eq!(
-            name_of(history.element_for_click(click, Some("firefox"))),
-            Some("Search".to_string())
-        );
-        // Unknown clicked app: keep the focused element.
-        assert_eq!(
-            name_of(history.element_for_click(click, None)),
-            Some("Search".to_string())
-        );
-        // The focused element belongs to another app: attribute nothing.
         assert!(matches!(
-            history.element_for_click(click, Some("konsole")),
+            history.element_for_click(click),
             ClickTarget::Nothing
         ));
     }
@@ -821,33 +958,34 @@ mod tests {
         ));
 
         assert!(matches!(
-            history.element_for_click(click, Some("gedit")),
+            history.element_for_click(click),
             ClickTarget::Excluded
         ));
         // A later click while focus is still in the excluded app: same.
         assert!(matches!(
-            history.element_for_click(click + Duration::from_secs(2), Some("gedit")),
+            history.element_for_click(click + Duration::from_secs(2)),
             ClickTarget::Excluded
         ));
     }
 
-    /// The first focus change after the click belongs to another (allowed)
-    /// app than the click: do not attach it.
+    /// Seen live: the window observer names the process ("python3"), the
+    /// element's owner is its AT-SPI2 name ("appgtk"). The focus that the
+    /// click moved is still what was clicked.
     #[test]
-    fn focus_change_in_another_app_is_not_attached_to_the_click() {
+    fn click_is_attributed_when_observer_and_atspi_names_differ() {
         let t0 = Instant::now();
         let click = t0 + Duration::from_secs(1);
         let mut history = FocusHistory::default();
         history.push(record(
             click + Duration::from_millis(30),
             "b",
-            "konsole",
-            el("terminal", "Shell"),
+            "appgtk",
+            el("push button", "Envoyer facture"),
         ));
-        assert!(matches!(
-            history.element_for_click(click, Some("gedit")),
-            ClickTarget::Nothing
-        ));
+        assert_eq!(
+            name_of(history.element_for_click(click)),
+            Some("Envoyer facture".to_string())
+        );
     }
 
     /// Louis's P2 (deadline): the focus change is known before its metadata.
@@ -862,7 +1000,7 @@ mod tests {
         history.focus_gained(changed, "b");
 
         assert!(matches!(
-            history.element_for_click(click, Some("gedit")),
+            history.element_for_click(click),
             ClickTarget::Wait
         ));
         history.resolve(
@@ -872,7 +1010,7 @@ mod tests {
             el("push button", "Save"),
         );
         assert_eq!(
-            name_of(history.element_for_click(click, Some("gedit"))),
+            name_of(history.element_for_click(click)),
             Some("Save".to_string())
         );
     }
@@ -886,7 +1024,7 @@ mod tests {
         history.focus_gained(click + Duration::from_millis(20), "b");
         history.resolve(click + Duration::from_millis(20), "b", None, Focus::Unknown);
         assert!(matches!(
-            history.element_for_click(click, Some("gedit")),
+            history.element_for_click(click),
             ClickTarget::Nothing
         ));
     }
@@ -914,7 +1052,7 @@ mod tests {
         history.focus_lost(t0 + Duration::from_millis(20), "other");
 
         assert!(matches!(
-            history.element_for_click(t0 + Duration::from_secs(1), Some("gedit")),
+            history.element_for_click(t0 + Duration::from_secs(1)),
             ClickTarget::Nothing
         ));
     }
@@ -923,7 +1061,7 @@ mod tests {
     fn empty_history_attributes_nothing() {
         let history = FocusHistory::default();
         assert!(matches!(
-            history.element_for_click(Instant::now(), None),
+            history.element_for_click(Instant::now()),
             ClickTarget::Nothing
         ));
     }
@@ -1170,7 +1308,7 @@ mod tests {
             assert!(!leaked, "label of the excluded app reached the history");
             let click = record.at - Duration::from_millis(40);
             assert!(matches!(
-                history.lock().element_for_click(click, Some("allowed-app")),
+                history.lock().element_for_click(click),
                 ClickTarget::Excluded
             ));
             tracker.shutdown();
@@ -1195,10 +1333,7 @@ mod tests {
         };
         // A click 40 ms before that focus change resolves to the element.
         let click = record.at - Duration::from_millis(40);
-        let ClickTarget::Element(element) = history
-            .lock()
-            .element_for_click(click, record.app.as_deref())
-        else {
+        let ClickTarget::Element(element) = history.lock().element_for_click(click) else {
             panic!("click not attributed");
         };
         println!("app={:?} element={:?}", record.app, element);

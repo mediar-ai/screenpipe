@@ -536,7 +536,7 @@ fn run_click_resolver(
         if ready_at > now {
             thread::sleep(ready_at - now);
         }
-        match resolve_click(&history, clicked_at, event.app_name.as_deref(), &stop) {
+        match resolve_click(&history, clicked_at, &stop) {
             ClickTarget::Excluded => continue,
             ClickTarget::Element(element) => event.element = Some(element),
             ClickTarget::Nothing | ClickTarget::Wait => {}
@@ -545,16 +545,28 @@ fn run_click_resolver(
     }
 }
 
+/// When the button was really pressed. The mouse loop polls every 10 ms, so
+/// the read happens after the press, and a fast app can move focus in
+/// between; the kernel timestamp of the evdev event (CLOCK_REALTIME) dates the
+/// press. Bounded so a wall-clock jump cannot move it far.
+fn press_instant(kernel_time: std::time::SystemTime) -> Instant {
+    let lag = std::time::SystemTime::now()
+        .duration_since(kernel_time)
+        .unwrap_or_default()
+        .min(Duration::from_millis(100));
+    let now = Instant::now();
+    now.checked_sub(lag).unwrap_or(now)
+}
+
 /// The click's target, waiting for a focus record still being described.
 fn resolve_click(
     history: &Mutex<FocusHistory>,
     clicked_at: Instant,
-    clicked_app: Option<&str>,
     stop: &AtomicBool,
 ) -> ClickTarget {
     let deadline = clicked_at + CLICK_SETTLE + ENRICH_BUDGET;
     loop {
-        let target = history.lock().element_for_click(clicked_at, clicked_app);
+        let target = history.lock().element_for_click(clicked_at);
         if !matches!(target, ClickTarget::Wait) {
             return target;
         }
@@ -908,7 +920,8 @@ fn monitor_mice(
                                 Some(click_tx) => {
                                     // Resolver backlogged: emit the click
                                     // without its element rather than drop it.
-                                    if let Err(e) = click_tx.try_send((ui_event, Instant::now())) {
+                                    let pressed_at = press_instant(event.timestamp());
+                                    if let Err(e) = click_tx.try_send((ui_event, pressed_at)) {
                                         let _ = tx.try_send(e.into_inner().0);
                                     }
                                 }
@@ -1803,6 +1816,23 @@ mod tests {
             focus: Focus::Excluded,
         });
         assert!(resolve_one(history, "gedit", clicked_at, || {}).is_none());
+    }
+
+    #[test]
+    fn press_is_dated_by_the_kernel_timestamp_within_bounds() {
+        use std::time::SystemTime;
+        let before = Instant::now();
+        let at = press_instant(SystemTime::now() - Duration::from_millis(30));
+        assert!(
+            at <= before - Duration::from_millis(25),
+            "{:?}",
+            before - at
+        );
+        // A future timestamp or a clock jump never moves it past now or by
+        // more than 100 ms.
+        assert!(press_instant(SystemTime::now() + Duration::from_secs(5)) >= before);
+        let jumped = press_instant(SystemTime::now() - Duration::from_secs(3600));
+        assert!(Instant::now() - jumped < Duration::from_millis(150));
     }
 
     #[test]
