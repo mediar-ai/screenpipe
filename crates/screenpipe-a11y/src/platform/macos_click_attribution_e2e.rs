@@ -362,6 +362,32 @@ fn live_recorder_does_not_capture_excluded_app_after_allowed_app() {
     exercise_live_typing(true);
 }
 
+fn run_display_fixture(path: &str, args: &[&str]) -> String {
+    let mut child = Command::new(path)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("native display command timed out");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "native display command failed: {args:?}"
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+
 fn exercise_live_typing(exclude_terminal: bool) {
     assert_eq!(
         std::env::var("SCREENPIPE_ISOLATED_VM_TEST").as_deref(),
@@ -401,6 +427,57 @@ fn exercise_live_typing(exclude_terminal: bool) {
     )
     .unwrap();
     wait_for_window_snapshot(terminal.0, Duration::from_secs(10)).unwrap();
+    // Optional native topology acceptance; exact placement and distinct display
+    // membership are checked before posting any synthetic input.
+    let display_fixture = std::env::var("SCREENPIPE_DISPLAY_FIXTURE").ok();
+    let origins = std::env::var("SCREENPIPE_E2E_DISPLAY_ORIGINS")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(|x| x.parse::<f64>().unwrap())
+                .collect::<Vec<_>>()
+        });
+    if let Some(points) = &origins {
+        assert_eq!(points.len(), 4);
+        let mut displays = HashSet::new();
+        for (index, pid) in [textedit.0, terminal.0].iter().enumerate() {
+            let x = points[index * 2] + 40.;
+            let y = points[index * 2 + 1] + 80.;
+            let id = run_display_fixture(
+                display_fixture.as_ref().unwrap(),
+                &[
+                    "place-window",
+                    &pid.to_string(),
+                    &x.to_string(),
+                    &y.to_string(),
+                ],
+            );
+            displays.insert(id.trim().parse::<u32>().unwrap());
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let (_, bounds) = wait_for_window_snapshot(*pid, Duration::from_secs(1)).unwrap();
+                if (bounds.origin.x - x).abs() < 2. && (bounds.origin.y - y).abs() < 2. {
+                    eprintln!(
+                        "MULTIMON fixture pid={pid} native_display={} window_origin=({}, {})",
+                        id.trim(),
+                        bounds.origin.x,
+                        bounds.origin.y
+                    );
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "window did not move to requested display: {bounds:?}"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+        assert_eq!(
+            displays.len(),
+            2,
+            "typing apps must occupy distinct native displays"
+        );
+    }
     let handle = recorder.start().unwrap();
     let rx = handle.receiver().clone();
     std::thread::sleep(Duration::from_secs(1));
@@ -414,6 +491,15 @@ fn exercise_live_typing(exclude_terminal: bool) {
             let activated: bool = unsafe { objc2::msg_send![object, activateWithOptions: 2usize] };
             assert!(activated, "failed to activate fixture pid {pid}");
             wait_for_focus(pid, Duration::from_secs(5)).unwrap();
+            if let Some(points) = &origins {
+                let index = if pid == textedit.0 { 0 } else { 1 };
+                let x = points[index * 2] + 100.;
+                let y = points[index * 2 + 1] + 120.;
+                run_display_fixture(
+                    display_fixture.as_ref().unwrap(),
+                    &["warp-to", &x.to_string(), &y.to_string()],
+                );
+            }
             // Shorter than the text debounce: a flush-time identity read fails
             // this test by attributing the earlier app's text to the later app.
             std::thread::sleep(Duration::from_millis(150));
