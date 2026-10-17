@@ -1108,23 +1108,19 @@ pub async fn start_monitor_watcher(
                 }
             }
 
-            // A bounded SCK failure can start a monitor on the privacy-safe
-            // CoreGraphics fallback. Once a fresh enumeration returns an SCK
-            // handle, display IDs alone cannot reveal that the active task is
-            // still holding the fallback generation. Upgrade it immediately;
-            // otherwise excluded-window capture keeps failing closed forever.
+            // Reconcile immutable capture handles even when display IDs remain
+            // unchanged: Retina scale/layout changes and recovered SCK handles
+            // must replace the generation used by screenshots and HD recording.
             #[cfg(target_os = "macos")]
             for monitor in &current_monitors {
-                if monitor.uses_sck_backend()
-                    && vision_manager.active_monitor_uses_sck(monitor.id()) == Some(false)
-                {
+                if vision_manager.active_monitor_needs_refresh(monitor) {
                     info!(
-                        "ScreenCaptureKit recovered for monitor {}; replacing temporary CoreGraphics fallback",
+                        "Capture configuration changed for monitor {}; refreshing recording task",
                         monitor.id()
                     );
                     if let Err(e) = vision_manager.stop_monitor(monitor.id()).await {
                         warn!(
-                            "failed to stop CoreGraphics fallback for monitor {}: {:?}",
+                            "failed to stop stale capture configuration for monitor {}: {:?}",
                             monitor.id(),
                             e
                         );
@@ -1132,7 +1128,7 @@ pub async fn start_monitor_watcher(
                     }
                     if let Err(e) = vision_manager.start_monitor_handle(monitor.clone()).await {
                         warn!(
-                            "failed to upgrade monitor {} back to ScreenCaptureKit: {:?}",
+                            "failed to refresh capture configuration for monitor {}: {:?}",
                             monitor.id(),
                             e
                         );

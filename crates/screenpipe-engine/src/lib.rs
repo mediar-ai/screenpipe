@@ -134,5 +134,5 @@ pub use ui_recorder::{start_ui_recording, UiRecorderConfig, UiRecorderHandle};
 pub use video::{video_quality_to_crf, video_quality_to_jpeg_q, video_quality_to_preset};
 pub mod search_only;
 
-#[cfg(all(test, target_os = "macos"))]
-mod multi_monitor_vm_test;
+#[cfg(target_os = "macos")]
+pub mod macos_run_loop;
