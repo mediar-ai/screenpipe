@@ -431,6 +431,7 @@
       "crate": "screenpipe-engine",
       "files": [
         "src/focus_tracker/darwin.rs",
+        "src/multi_monitor_vm_test.rs",
         "src/focus_tracker/windows.rs",
         "src/process_priority.rs"
       ],
