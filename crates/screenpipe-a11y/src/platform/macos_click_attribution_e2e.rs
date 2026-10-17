@@ -347,3 +347,209 @@ fn live_ax_click_attribution_uses_event_target_process_and_window() {
         "the resolved AXWindow must enforce scoped app/window exclusions"
     );
 }
+
+/// Exercise the real CGEvent tap and AX observer, not a constructed UiEvent.
+/// Opt-in is deliberately separate from --ignored: this types into real apps.
+#[test]
+#[ignore = "requires SCREENPIPE_ISOLATED_VM_TEST=1 in a disposable logged-in Mac VM"]
+fn live_recorder_keeps_typing_attribution_across_app_switches() {
+    exercise_live_typing(false);
+}
+
+#[test]
+#[ignore = "requires SCREENPIPE_ISOLATED_VM_TEST=1 in a disposable logged-in Mac VM"]
+fn live_recorder_does_not_capture_excluded_app_after_allowed_app() {
+    exercise_live_typing(true);
+}
+
+fn exercise_live_typing(exclude_terminal: bool) {
+    assert_eq!(
+        std::env::var("SCREENPIPE_ISOLATED_VM_TEST").as_deref(),
+        Ok("1")
+    );
+    let _serial = LIVE_E2E_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _restore = RestoreFrontmostApp::capture();
+    let mut config = UiCaptureConfig {
+        capture_text: true,
+        capture_clipboard: false,
+        capture_context: false,
+        text_timeout_ms: 2_000,
+        excluded_apps: if exclude_terminal {
+            vec!["Terminal".into()]
+        } else {
+            Vec::new()
+        },
+        ..UiCaptureConfig::new()
+    };
+    config.compile_patterns();
+    let recorder = UiRecorder::new(config);
+    assert!(recorder.check_permissions().all_granted());
+    let mut document = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
+    writeln!(document, "isolated typing fixture").unwrap();
+    let textedit = launch_fresh_app(
+        "TextEdit",
+        TEXTEDIT_BUNDLE_ID,
+        Some(document.path()),
+        Duration::from_secs(10),
+    )
+    .unwrap();
+    let terminal = launch_fresh_app(
+        "Terminal",
+        TERMINAL_BUNDLE_ID,
+        None,
+        Duration::from_secs(10),
+    )
+    .unwrap();
+    wait_for_window_snapshot(terminal.0, Duration::from_secs(10)).unwrap();
+    let handle = recorder.start().unwrap();
+    let rx = handle.receiver().clone();
+    std::thread::sleep(Duration::from_secs(1));
+    for _ in 0..10 {
+        for (_bundle, pid, key) in [
+            (TEXTEDIT_BUNDLE_ID, textedit.0, 0),
+            (TERMINAL_BUNDLE_ID, terminal.0, 11),
+        ] {
+            let app = ns::RunningApp::with_pid(pid).unwrap();
+            let object = (&*app as *const ns::RunningApp).cast::<objc2::runtime::AnyObject>();
+            let activated: bool = unsafe { objc2::msg_send![object, activateWithOptions: 2usize] };
+            assert!(activated, "failed to activate fixture pid {pid}");
+            wait_for_focus(pid, Duration::from_secs(5)).unwrap();
+            // Shorter than the text debounce: a flush-time identity read fails
+            // this test by attributing the earlier app's text to the later app.
+            std::thread::sleep(Duration::from_millis(150));
+            for down in [true, false] {
+                cg::Event::keyboard(None, key, down)
+                    .unwrap()
+                    .post(cg::EventTapLocation::Hid);
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    std::thread::sleep(Duration::from_millis(2500));
+    handle.stop();
+    let events: Vec<_> = rx.try_iter().collect();
+    let mut a = String::new();
+    let mut b = String::new();
+    for event in &events {
+        if let EventData::Text { content, .. } = &event.data {
+            eprintln!(
+                "text app={:?} window={:?} content={content:?}",
+                event.app_name, event.window_title
+            );
+            match event.app_name.as_deref() {
+                Some("TextEdit") => a.push_str(content),
+                Some("Terminal") => b.push_str(content),
+                app => panic!("unexpected typing app {app:?}: {content:?}"),
+            }
+        }
+    }
+    assert_eq!(a, "a".repeat(10), "TextEdit must retain every input");
+    assert_eq!(
+        b,
+        if exclude_terminal {
+            String::new()
+        } else {
+            "b".repeat(10)
+        },
+        "Terminal input must respect exclusion"
+    );
+    let switches = events
+        .iter()
+        .filter(|e| matches!(e.data, EventData::AppSwitch { .. }))
+        .count();
+    if !exclude_terminal {
+        assert!(switches >= 20, "missing app switches: {switches}");
+        let typing: Vec<_> = events
+            .iter()
+            .filter_map(|e| match &e.data {
+                EventData::Text { content, .. } => {
+                    Some((e.app_name.as_deref().unwrap(), content.as_str()))
+                }
+                _ => None,
+            })
+            .collect();
+        let expected: Vec<_> = (0..10)
+            .flat_map(|_| [("TextEdit", "a"), ("Terminal", "b")])
+            .collect();
+        assert_eq!(typing, expected, "burst order must match input order");
+    }
+}
+
+#[test]
+#[ignore = "requires SCREENPIPE_ISOLATED_VM_TEST=1 in a disposable logged-in Mac VM"]
+fn live_clipboard_shortcut_dedup_and_slow_consumer_recover() {
+    assert_eq!(
+        std::env::var("SCREENPIPE_ISOLATED_VM_TEST").as_deref(),
+        Ok("1")
+    );
+    let _serial = LIVE_E2E_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut document = tempfile::Builder::new().suffix(".txt").tempfile().unwrap();
+    write!(document, "clipboard-fixture-original").unwrap();
+    let app = launch_fresh_app(
+        "TextEdit",
+        TEXTEDIT_BUNDLE_ID,
+        Some(document.path()),
+        Duration::from_secs(10),
+    )
+    .unwrap();
+    wait_for_focus(app.0, Duration::from_secs(5)).unwrap();
+    let mut config = UiCaptureConfig {
+        capture_text: false,
+        capture_keystrokes: false,
+        capture_clicks: false,
+        capture_app_switch: false,
+        capture_window_focus: false,
+        capture_clipboard: true,
+        capture_clipboard_content: true,
+        apply_pii_removal: false,
+        max_buffer_size: 1,
+        ..UiCaptureConfig::new()
+    };
+    config.compile_patterns();
+    let handle = UiRecorder::new(config).start().unwrap();
+    let rx = handle.receiver().clone();
+    std::thread::sleep(Duration::from_secs(1));
+    // Real Cmd+A / Cmd+C in the fixture app exercises both native producers.
+    for key in [0, 8] {
+        for down in [true, false] {
+            let mut event = cg::Event::keyboard(None, key, down).unwrap();
+            event.set_flags(cg::EventFlags::CMD);
+            event.post(cg::EventTapLocation::Hid);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(
+        matches!(first.data, EventData::Clipboard { content: Some(ref text), .. } if text == "clipboard-fixture-original"),
+        "{first:?}"
+    );
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(
+        rx.try_recv().is_err(),
+        "shortcut and poller must not duplicate one copy"
+    );
+    for text in ["slow-consumer-one", "slow-consumer-two"] {
+        let mut process = Command::new("pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        process
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        assert!(process.wait().unwrap().success());
+        // First snapshot occupies the sole output slot; second waits behind it.
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    for expected in ["slow-consumer-one", "slow-consumer-two"] {
+        let event = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(
+            matches!(event.data, EventData::Clipboard { content: Some(ref text), .. } if text == expected),
+            "{event:?}"
+        );
+    }
+    handle.stop();
+    assert!(rx.try_recv().is_err(), "no duplicate clipboard tail");
+}

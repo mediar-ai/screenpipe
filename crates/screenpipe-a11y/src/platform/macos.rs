@@ -17,7 +17,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use parking_lot::Mutex;
 use screenpipe_core::pii_removal::remove_pii;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI8, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI8, AtomicPtr, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -26,6 +26,13 @@ use tracing::{debug, error, warn};
 use cidre::cg::event::access as cg_access;
 use cidre::{arc, arc::Retained, ax, cf, cg, ns};
 use objc2_app_kit::NSPasteboard;
+
+mod clipboard_delivery;
+mod input_focus;
+mod text_buffer;
+use clipboard_delivery::{stable_snapshot, ClipboardDelivery};
+use input_focus::{with_allowed_focus, InputFocus};
+use text_buffer::TextBuffer;
 
 /// Guard to serialize accessibility queries – concurrent calls to
 /// AXUIElementCopyElementAtPosition can corrupt AppKit's internal
@@ -414,9 +421,7 @@ impl UiRecorder {
         let mut threads = Vec::new();
 
         // Shared state for current app/window between threads (lock-free)
-        let current_app = Arc::new(ArcSwap::from_pointee(None::<String>));
-        let current_window = Arc::new(ArcSwap::from_pointee(None::<String>));
-        let current_pid = Arc::new(AtomicI32::new(0));
+        let current_focus = Arc::new(ArcSwap::from_pointee(InputFocus::default()));
 
         // Thread 1: CGEventTap for input events. Requires Input Monitoring.
         // When not granted we skip it and fall back to the clipboard poller
@@ -426,12 +431,10 @@ impl UiRecorder {
             let tx1 = tx.clone();
             let stop1 = stop.clone();
             let config1 = self.config.clone();
-            let app1 = current_app.clone();
-            let window1 = current_window.clone();
-            let pid1 = current_pid.clone();
+            let focus1 = current_focus.clone();
             let feed1 = activity_feed.clone();
             threads.push(thread::spawn(move || {
-                run_event_tap(tx1, stop1, start_time, config1, app1, window1, pid1, feed1);
+                run_event_tap(tx1, stop1, start_time, config1, focus1, feed1);
             }));
         } else {
             tracing::warn!(
@@ -446,11 +449,10 @@ impl UiRecorder {
                 let stop_p = stop.clone();
                 let tx_p = tx.clone();
                 let config_p = self.config.clone();
-                let app_p = current_app.clone();
-                let window_p = current_window.clone();
+                let focus_p = current_focus.clone();
                 threads.push(thread::spawn(move || {
-                    let seen = Arc::new(Mutex::new(get_clipboard_change_count()));
-                    run_clipboard_poller(stop_p, tx_p, config_p, start_time, app_p, window_p, seen);
+                    let seen = Arc::new(ClipboardDelivery::new(get_clipboard_change_count()));
+                    run_clipboard_poller(stop_p, tx_p, config_p, start_time, focus_p, seen);
                 }));
             }
         }
@@ -460,11 +462,9 @@ impl UiRecorder {
         let tx2 = tx.clone();
         let stop2 = stop.clone();
         let config2 = self.config.clone();
-        let app2 = current_app.clone();
-        let window2 = current_window.clone();
-        let pid2 = current_pid.clone();
+        let focus2 = current_focus.clone();
         threads.push(thread::spawn(move || {
-            run_app_observer(tx2, stop2, start_time, config2, app2, window2, pid2);
+            run_app_observer(tx2, stop2, start_time, config2, focus2);
         }));
 
         Ok((
@@ -538,48 +538,6 @@ pub fn request_input_monitoring() -> bool {
 // reads — we replace that with periodic change_count polling when the tap
 // is unavailable.
 
-/// Both producers must agree whether this pasteboard generation was emitted.
-fn claim_clipboard_generation(last: &Mutex<Option<i64>>, generation: Option<i64>) -> bool {
-    let Some(generation) = generation else {
-        return false;
-    };
-    let mut last = last.lock();
-    if last.is_some_and(|seen| generation <= seen) {
-        return false;
-    }
-    *last = Some(generation);
-    true
-}
-
-#[cfg(test)]
-mod clipboard_generation_regression {
-    use super::*;
-    #[test]
-    fn keyboard_and_poll_of_one_copy_emit_once_but_menu_copy_is_preserved() {
-        let seen = Mutex::new(Some(40));
-        assert!(claim_clipboard_generation(&seen, Some(41)));
-        assert!(!claim_clipboard_generation(&seen, Some(41)));
-        assert!(claim_clipboard_generation(&seen, Some(42)));
-        assert!(!claim_clipboard_generation(&seen, None));
-    }
-    #[test]
-    fn racing_producers_claim_each_generation_once() {
-        for generation in 1..=100 {
-            let seen = Arc::new(Mutex::new(Some(generation - 1)));
-            let barrier = Arc::new(std::sync::Barrier::new(2));
-            let worker_seen = seen.clone();
-            let worker_barrier = barrier.clone();
-            let worker = std::thread::spawn(move || {
-                worker_barrier.wait();
-                claim_clipboard_generation(&worker_seen, Some(generation))
-            });
-            barrier.wait();
-            let poll = claim_clipboard_generation(&seen, Some(generation));
-            assert_eq!(usize::from(poll) + usize::from(worker.join().unwrap()), 1);
-        }
-    }
-}
-
 /// Spawn the clipboard-capture worker thread and return its request sender.
 ///
 /// One worker handles all clipboard reads regardless of the source
@@ -588,9 +546,9 @@ mod clipboard_generation_regression {
 /// thread (the worker hops to the main queue itself) and bounds the
 /// in-flight read count.
 fn spawn_clipboard_worker_thread(
-    current_app: Arc<ArcSwap<Option<String>>>,
-    current_window: Arc<ArcSwap<Option<String>>>,
-    seen: Arc<Mutex<Option<i64>>>,
+    current_focus: Arc<ArcSwap<InputFocus>>,
+    seen: Arc<ClipboardDelivery>,
+    stop: Arc<AtomicBool>,
 ) -> Sender<ClipboardRequest> {
     let (clipboard_tx, clipboard_rx) = bounded::<ClipboardRequest>(4);
     thread::Builder::new()
@@ -600,33 +558,19 @@ fn spawn_clipboard_worker_thread(
                 if req.delay_ms > 0 {
                     std::thread::sleep(std::time::Duration::from_millis(req.delay_ms));
                 }
-                if req.operation != 'v'
-                    && !claim_clipboard_generation(&seen, get_clipboard_change_count())
-                {
-                    continue;
-                }
-                let content = if req.capture_content {
-                    let _pool = cidre::objc::AutoreleasePoolPage::push();
-                    get_clipboard().map(|s| {
-                        let truncated = truncate(&s, 1000);
-                        if req.apply_pii {
-                            remove_pii(&truncated)
-                        } else {
-                            truncated
-                        }
-                    })
-                } else {
-                    None
-                };
-                let event = clipboard_event(
-                    req.operation,
-                    content,
-                    req.start,
-                    &current_app,
-                    &current_window,
-                );
-                if let Err(err) = req.tx.try_send(event) {
-                    debug!(?err, "clipboard worker dropped event");
+                if !seen.capture_and_deliver(
+                    || {
+                        with_allowed_focus(&current_focus, |focus| {
+                            let (generation, content) =
+                                clipboard_snapshot(req.capture_content, req.apply_pii)?;
+                            let event = clipboard_event(req.operation, content, req.start, &focus);
+                            Some(((req.operation != 'v').then_some(generation), event))
+                        })
+                    },
+                    &req.tx,
+                    &stop,
+                ) {
+                    debug!("clipboard snapshot unavailable or worker stopped before delivery");
                 }
             }
         })
@@ -634,20 +578,41 @@ fn spawn_clipboard_worker_thread(
     clipboard_tx
 }
 
+/// Read content and its pasteboard identity together, then process the stable
+/// content outside the snapshot window. Both native producers use this policy.
+fn clipboard_snapshot(capture_content: bool, apply_pii: bool) -> Option<(i64, Option<String>)> {
+    let (generation, content) = stable_snapshot(get_clipboard_change_count, || {
+        if capture_content {
+            let _pool = cidre::objc::AutoreleasePoolPage::push();
+            get_clipboard()
+        } else {
+            None
+        }
+    })?;
+    let content = content.map(|text| {
+        let truncated = truncate(&text, 1000);
+        if apply_pii {
+            remove_pii(&truncated)
+        } else {
+            truncated
+        }
+    });
+    Some((generation, content))
+}
+
 fn clipboard_event(
     operation: char,
     content: Option<String>,
     start: Instant,
-    current_app: &Arc<ArcSwap<Option<String>>>,
-    current_window: &Arc<ArcSwap<Option<String>>>,
+    focus: &InputFocus,
 ) -> UiEvent {
     UiEvent {
         id: None,
         timestamp: Utc::now(),
         relative_ms: start.elapsed().as_millis() as u64,
         data: EventData::Clipboard { operation, content },
-        app_name: current_app.load().as_ref().clone(),
-        window_title: current_window.load().as_ref().clone(),
+        app_name: focus.app_name.clone(),
+        window_title: focus.window_title.clone(),
         browser_url: None,
         element: None,
         frame_id: None,
@@ -688,9 +653,8 @@ fn run_clipboard_poller(
     tx: Sender<UiEvent>,
     config: UiCaptureConfig,
     start: Instant,
-    current_app: Arc<ArcSwap<Option<String>>>,
-    current_window: Arc<ArcSwap<Option<String>>>,
-    seen: Arc<Mutex<Option<i64>>>,
+    current_focus: Arc<ArcSwap<InputFocus>>,
+    seen: Arc<ClipboardDelivery>,
 ) {
     // Seed with the current pasteboard generation so we don't fire an event for
     // pre-existing content copied before launching the recorder.
@@ -727,35 +691,31 @@ fn run_clipboard_poller(
             continue;
         }
 
-        last_seen = Some(current);
-        if !claim_clipboard_generation(&seen, Some(current)) {
+        let focus = current_focus.load_full();
+        if !focus.allowed {
+            last_seen = Some(current);
             continue;
         }
-        debug!("clipboard change-count poller detected a pasteboard mutation");
-        let content = if config.capture_clipboard_content {
-            let _pool = cidre::objc::AutoreleasePoolPage::push();
-            get_clipboard().map(|s| {
-                let truncated = truncate(&s, 1000);
-                if config.apply_pii_removal {
-                    remove_pii(&truncated)
-                } else {
-                    truncated
-                }
-            })
-        } else {
-            None
-        };
-        let event = clipboard_event(
-            CLIPBOARD_OP_POLLED,
-            content,
-            start,
-            &current_app,
-            &current_window,
+        let mut observed_generation = None;
+        let delivered = seen.capture_and_deliver(
+            || {
+                with_allowed_focus(&current_focus, |focus| {
+                    let (generation, content) = clipboard_snapshot(
+                        config.capture_clipboard_content,
+                        config.apply_pii_removal,
+                    )?;
+                    observed_generation = Some(generation);
+                    let event = clipboard_event(CLIPBOARD_OP_POLLED, content, start, &focus);
+                    Some((Some(generation), event))
+                })
+            },
+            &tx,
+            &stop,
         );
-        if let Err(err) = tx.try_send(event) {
-            debug!(?err, "clipboard poller dropped event");
-        } else {
-            debug!("clipboard poller emitted event");
+        if delivered || observed_generation.is_some() {
+            last_seen = observed_generation;
+        } else if stop.load(Ordering::Acquire) {
+            return;
         }
     }
 }
@@ -842,9 +802,7 @@ struct TapState {
     scroll_buf: Mutex<ScrollBuffer>,
     /// Lock-free reads for app/window context — no mutex contention in the
     /// event tap callback (the hot path for every input event).
-    current_app: Arc<ArcSwap<Option<String>>>,
-    current_window: Arc<ArcSwap<Option<String>>>,
-    current_pid: Arc<AtomicI32>,
+    current_focus: Arc<ArcSwap<InputFocus>>,
     activity_feed: Option<ActivityFeed>,
     /// Bounded channel for authoritative click capture — a single worker
     /// resolves the CGEvent target's app/window and optional AX element without
@@ -853,90 +811,6 @@ struct TapState {
     /// Bounded channel for clipboard capture — avoids spawning a thread per
     /// Cmd+C/X/V and blocks the event tap with get_clipboard().
     clipboard_tx: Sender<ClipboardRequest>,
-}
-
-struct TextBuffer {
-    chars: String,
-    pending: std::collections::VecDeque<UiEvent>,
-    app_name: Option<String>,
-    window_title: Option<String>,
-    relative_ms: u64,
-    timestamp: chrono::DateTime<Utc>,
-    last_time: Option<Instant>,
-    timeout_ms: u64,
-}
-
-impl TextBuffer {
-    fn new(timeout_ms: u64) -> Self {
-        Self {
-            chars: String::new(),
-            pending: std::collections::VecDeque::new(),
-            app_name: None,
-            window_title: None,
-            relative_ms: 0,
-            timestamp: Utc::now(),
-            last_time: None,
-            timeout_ms,
-        }
-    }
-
-    fn push(&mut self, c: char) {
-        if c == '\x08' {
-            // Backspace - remove last char
-            self.chars.pop();
-        } else {
-            self.chars.push(c);
-        }
-        self.last_time = Some(Instant::now());
-    }
-
-    fn flush(&mut self) -> Option<String> {
-        if self.chars.is_empty() {
-            return None;
-        }
-        let s = std::mem::take(&mut self.chars);
-        self.last_time = None;
-        Some(s)
-    }
-
-    /// Keep attribution at input time. A focus/window transition splits the
-    /// burst, so delayed flushing cannot relabel earlier keystrokes.
-    fn push_attributed(
-        &mut self,
-        c: char,
-        app: Option<String>,
-        window: Option<String>,
-        relative_ms: u64,
-    ) -> Option<UiEvent> {
-        let previous =
-            if !self.chars.is_empty() && (self.app_name != app || self.window_title != window) {
-                self.flush_event()
-            } else {
-                None
-            };
-        if self.chars.is_empty() {
-            self.app_name = app;
-            self.window_title = window;
-            self.relative_ms = relative_ms;
-            self.timestamp = Utc::now();
-        }
-        self.push(c);
-        previous
-    }
-
-    fn flush_event(&mut self) -> Option<UiEvent> {
-        let text = self.flush()?;
-        let mut event = UiEvent::text(self.timestamp, self.relative_ms, text);
-        event.app_name = self.app_name.take();
-        event.window_title = self.window_title.take();
-        Some(event)
-    }
-
-    fn should_flush(&self) -> bool {
-        self.last_time
-            .map(|t| t.elapsed().as_millis() as u64 >= self.timeout_ms)
-            .unwrap_or(false)
-    }
 }
 
 /// Convert a coalesced scroll burst into the `UiEvent` shape the recorder
@@ -1036,18 +910,38 @@ impl Drop for InstalledTap {
     }
 }
 
-fn flush_text_event(state: &TapState, force: bool) -> Option<UiEvent> {
-    let event = {
+/// Delivery owns an event until admission succeeds. A full channel leaves the
+/// exact already-redacted event at the head for the next run-loop iteration.
+fn flush_text_event(state: &TapState, force: bool) -> bool {
+    let (ready, rejected) = {
         let mut buf = state.text_buf.lock();
-        if let Some(event) = buf.pending.pop_front() {
-            Some(event)
-        } else if force || buf.should_flush() {
-            buf.flush_event()
-        } else {
-            None
-        }
+        (buf.take_ready(force), buf.take_rejected_count())
     };
-    event.map(|event| redact_text_event(event, &state.config))
+    if rejected > 0 {
+        warn!(
+            rejected_characters = rejected,
+            "text capture saturated; accepted bursts retained, new input missing"
+        );
+    }
+    let Some((event, prepared)) = ready else {
+        return false;
+    };
+    let event = if prepared {
+        event
+    } else {
+        redact_text_event(event, &state.config)
+    };
+    match state.tx.try_send(event) {
+        Ok(()) => true,
+        Err(crossbeam_channel::TrySendError::Full(event)) => {
+            state.text_buf.lock().retain_for_retry(event);
+            false
+        }
+        Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
+            warn!("text event consumer disconnected");
+            false
+        }
+    }
 }
 
 fn redact_text_event(mut event: UiEvent, config: &UiCaptureConfig) -> UiEvent {
@@ -1069,9 +963,7 @@ fn run_event_tap(
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
-    current_app: Arc<ArcSwap<Option<String>>>,
-    current_window: Arc<ArcSwap<Option<String>>>,
-    current_pid: Arc<AtomicI32>,
+    current_focus: Arc<ArcSwap<InputFocus>>,
     activity_feed: Option<ActivityFeed>,
 ) {
     // Build event mask - always include KEY_UP for activity tracking
@@ -1113,18 +1005,14 @@ fn run_event_tap(
 
     // Single worker thread for clipboard capture — avoids spawning a thread per
     // Cmd+C/X and avoids blocking the event tap callback on Cmd+V.
-    let clipboard_seen = Arc::new(Mutex::new(get_clipboard_change_count()));
-    let clipboard_tx = spawn_clipboard_worker_thread(
-        current_app.clone(),
-        current_window.clone(),
-        clipboard_seen.clone(),
-    );
+    let clipboard_seen = Arc::new(ClipboardDelivery::new(get_clipboard_change_count()));
+    let clipboard_tx =
+        spawn_clipboard_worker_thread(current_focus.clone(), clipboard_seen.clone(), stop.clone());
     if config.capture_clipboard {
         let poller_stop = stop.clone();
         let poller_tx = tx.clone();
         let poller_config = config.clone();
-        let poller_app = current_app.clone();
-        let poller_window = current_window.clone();
+        let poller_focus = current_focus.clone();
         thread::Builder::new()
             .name("clipboard-poller".into())
             .spawn(move || {
@@ -1133,8 +1021,7 @@ fn run_event_tap(
                     poller_tx,
                     poller_config,
                     start,
-                    poller_app,
-                    poller_window,
+                    poller_focus,
                     clipboard_seen,
                 );
             })
@@ -1152,9 +1039,7 @@ fn run_event_tap(
         scroll_buf: Mutex::new(ScrollBuffer::with_live_interval(
             config.scroll_interval_ms.clone(),
         )),
-        current_app,
-        current_window,
-        current_pid,
+        current_focus,
         activity_feed,
         context_tx,
         clipboard_tx,
@@ -1196,9 +1081,7 @@ fn run_event_tap(
         // during an expensive regex blocks the event-tap callback on every
         // KEY_DOWN, which can push the callback past the kernel's tap-timeout
         // (~1 s) and trigger a burst-replay of queued events (phantom keystrokes).
-        if let Some(event) = flush_text_event(state, false) {
-            let _ = state.tx.try_send(event);
-        }
+        flush_text_event(state, false);
 
         // Drain a scroll burst whose quiet gap elapsed with no follow-up tick
         // (the common "scrolled, then read" case). Same lock discipline as the
@@ -1237,8 +1120,15 @@ fn run_event_tap(
     drop(installed);
 
     // Final flush — same lock discipline: release before PII removal.
-    while let Some(event) = flush_text_event(state, true) {
-        let _ = state.tx.try_send(event);
+    let flush_deadline = Instant::now() + Duration::from_millis(250);
+    while state.text_buf.lock().has_pending() {
+        if !flush_text_event(state, true) {
+            if Instant::now() >= flush_deadline {
+                warn!("text shutdown drain timed out; consumer did not accept retained text");
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
     }
 
     // Same for an in-flight scroll burst — the callback is inert now, so this
@@ -1301,8 +1191,9 @@ extern "C" fn tap_callback(
     let mods = Modifiers::from_cg_flags(flags);
 
     // Lock-free reads — no mutex contention in the input event path
-    let app_name = (**state.current_app.load()).clone();
-    let window_title = (**state.current_window.load()).clone();
+    let focus = state.current_focus.load();
+    let app_name = focus.app_name.clone();
+    let window_title = focus.window_title.clone();
     let event_target_pid =
         i32::try_from(event.field_i64(CG_EVENT_TARGET_UNIX_PROCESS_ID)).unwrap_or(0);
 
@@ -1314,17 +1205,8 @@ extern "C" fn tap_callback(
     // Keyboard/move/scroll events describe the current focus. Clicks do not:
     // macOS sends mouse-down to the window under the pointer before the focus
     // observer updates, so their filters run later against the CGEvent target.
-    if !is_click {
-        if let Some(ref app) = app_name {
-            if !state.config.should_capture_app(app) {
-                return Some(event);
-            }
-        }
-        if let Some(ref window) = window_title {
-            if !state.config.should_capture_window(window) {
-                return Some(event);
-            }
-        }
+    if !is_click && !focus.allowed {
+        return Some(event);
     }
 
     match event_type {
@@ -1409,7 +1291,7 @@ extern "C" fn tap_callback(
                     // pid keys the buffer so bursts split when the cursor moves
                     // to another app's window.
                     let target_pid = event_target_pid;
-                    let focused_pid = state.current_pid.load(Ordering::Acquire);
+                    let focused_pid = focus.pid;
                     let (scroll_app, scroll_window) =
                         if target_pid <= 0 || target_pid == focused_pid {
                             (app_name, window_title)
@@ -1503,17 +1385,7 @@ extern "C" fn tap_callback(
                 // still reaches the focused app normally (LISTEN_ONLY tap).
                 if let Some(c) = keycode_to_char(keycode, mods) {
                     if let Some(mut buf) = state.text_buf.try_lock() {
-                        if let Some(previous) = buf.push_attributed(c, app_name, window_title, t) {
-                            // Redaction runs outside the tap callback on the normal
-                            // flush path. Keep transition backlog bounded like tx.
-                            if buf.pending.len() < state.config.max_buffer_size.max(1) {
-                                buf.pending.push_back(previous);
-                            } else {
-                                debug!("text transition queue full; dropping oldest burst");
-                                buf.pending.pop_front();
-                                buf.pending.push_back(previous);
-                            }
-                        }
+                        buf.capture(c, app_name, window_title, t, state.config.max_buffer_size);
                     }
                 } else if state.config.capture_keystrokes {
                     // Unknown key, record as key event
@@ -1572,9 +1444,7 @@ struct ObserverCallbackState {
     tx: Sender<UiEvent>,
     start: Instant,
     config: UiCaptureConfig,
-    current_app: Arc<ArcSwap<Option<String>>>,
-    current_window: Arc<ArcSwap<Option<String>>>,
-    current_pid: Arc<AtomicI32>,
+    current_focus: Arc<ArcSwap<InputFocus>>,
     focus: Mutex<FocusState>,
     refresh_requested: Arc<AtomicBool>,
 }
@@ -1616,12 +1486,20 @@ fn observed_ax_notifications() -> [&'static ax::Notification; 5] {
 /// return the *next* element on a fast app switch.
 fn emit_focus_state(state: &ObserverCallbackState, focused_elem: Option<&ax::UiElement>) {
     let Some((pid, name)) = get_focused_app_info() else {
+        state.current_focus.store(Arc::new(InputFocus::default()));
         return;
     };
-
-    state.current_pid.store(pid, Ordering::Release);
-
-    if !state.config.should_capture_app(&name) {
+    let window_title = if state.config.should_capture_app(&name) {
+        get_focused_window_title(pid)
+    } else {
+        None
+    };
+    let input_focus = InputFocus::resolved(pid, name.clone(), window_title.clone(), &state.config);
+    let allowed = input_focus.allowed;
+    // Publish identity and privacy decision atomically, including exclusions.
+    // Keeping the previous allowed identity would capture excluded input.
+    state.current_focus.store(Arc::new(input_focus));
+    if !allowed {
         return;
     }
 
@@ -1629,8 +1507,6 @@ fn emit_focus_state(state: &ObserverCallbackState, focused_elem: Option<&ax::UiE
     let app_changed = focus.last_app.as_ref() != Some(&name) || focus.last_pid != pid;
 
     if app_changed {
-        state.current_app.store(Arc::new(Some(name.clone())));
-
         if state.config.capture_app_switch {
             let focused_element = focused_element_context(&state.config, focused_elem);
 
@@ -1648,15 +1524,7 @@ fn emit_focus_state(state: &ObserverCallbackState, focused_elem: Option<&ax::UiE
         focus.last_pid = pid;
     }
 
-    let window_title = get_focused_window_title(pid);
-    let should_capture = window_title
-        .as_ref()
-        .map(|w| state.config.should_capture_window(w))
-        .unwrap_or(true);
-
-    if should_capture && (window_title != focus.last_window || app_changed) {
-        state.current_window.store(Arc::new(window_title.clone()));
-
+    if window_title != focus.last_window || app_changed {
         if state.config.capture_window_focus {
             let focused_element = focused_element_context(&state.config, focused_elem);
 
@@ -1722,9 +1590,7 @@ fn run_app_observer(
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
-    current_app: Arc<ArcSwap<Option<String>>>,
-    current_window: Arc<ArcSwap<Option<String>>>,
-    current_pid: Arc<AtomicI32>,
+    current_focus: Arc<ArcSwap<InputFocus>>,
 ) {
     let workspace = ns::Workspace::shared();
     let mut notification_center = workspace.notification_center();
@@ -1733,9 +1599,7 @@ fn run_app_observer(
         tx,
         start,
         config,
-        current_app,
-        current_window,
-        current_pid,
+        current_focus,
         focus: Mutex::new(FocusState {
             last_app: None,
             last_pid: 0,
@@ -1811,13 +1675,15 @@ fn run_app_observer(
     let mut observer: Option<cidre::arc::R<ax::Observer>> = None;
 
     let mut reattach_observer = || {
+        let state = unsafe { &*callback_state_ptr };
         let Some((pid, _name)) = get_focused_app_info() else {
-            return;
+            state.current_focus.store(Arc::new(InputFocus::default()));
+            return false;
         };
 
         if observed_pid == pid {
             emit_focus_state(unsafe { &*callback_state_ptr }, None);
-            return;
+            return true;
         }
 
         if let Some(existing) = observer.take() {
@@ -1830,7 +1696,8 @@ fn run_app_observer(
             Err(err) => {
                 error!("failed to create AXObserver for pid {}: {:?}", pid, err);
                 observed_pid = 0;
-                return;
+                state.current_focus.store(Arc::new(InputFocus::default()));
+                return false;
             }
         };
 
@@ -1847,8 +1714,10 @@ fn run_app_observer(
         run_loop.add_src(new_observer.run_loop_src(), run_loop_mode);
         observed_pid = pid;
         observer = Some(new_observer);
-        emit_focus_state(unsafe { &*callback_state_ptr }, None);
+        emit_focus_state(state, None);
+        true
     };
+    let mut retry_at: Option<Instant> = None;
 
     while !stop.load(Ordering::Acquire) {
         let result = cf::RunLoop::run_in_mode(run_loop_mode, AX_RUN_LOOP_SLICE_SECS, true);
@@ -1873,8 +1742,14 @@ fn run_app_observer(
             std::thread::sleep(AX_RUN_LOOP_IDLE_BACKOFF);
         }
 
-        if refresh_requested.swap(false, Ordering::SeqCst) {
-            reattach_observer();
+        if refresh_requested.swap(false, Ordering::SeqCst)
+            || retry_at.is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            retry_at = if reattach_observer() {
+                None
+            } else {
+                Some(Instant::now() + Duration::from_secs(1))
+            };
         }
     }
 
@@ -3706,6 +3581,57 @@ mod text_attribution_regression {
 #[cfg(test)]
 mod text_burst_eval {
     use super::*;
+    #[test]
+    fn full_text_channel_retries_in_order_with_privacy_intact() {
+        let (tx, rx) = bounded(1);
+        tx.send(UiEvent::text(Utc::now(), 0, "occupied".into()))
+            .unwrap();
+        let state = TapState {
+            tx,
+            start: Instant::now(),
+            config: UiCaptureConfig {
+                apply_pii_removal: true,
+                ..UiCaptureConfig::new()
+            },
+            stop: Arc::new(AtomicBool::new(false)),
+            tap_ptr: AtomicPtr::new(std::ptr::null_mut()),
+            last_mouse: Mutex::new((0.0, 0.0)),
+            text_buf: Mutex::new(TextBuffer::new(0)),
+            scroll_buf: Mutex::new(ScrollBuffer::with_live_interval(None)),
+            current_focus: Arc::new(ArcSwap::from_pointee(InputFocus::default())),
+            activity_feed: None,
+            context_tx: bounded(1).0,
+            clipboard_tx: bounded(1).0,
+        };
+        let raw = format!(
+            "{}alice@example.com 123-45-6789 4111 1111 1111 1111",
+            " ".repeat(8187)
+        );
+        for c in raw.chars() {
+            state
+                .text_buf
+                .lock()
+                .capture(c, Some("A".into()), None, 1, 4);
+        }
+        state
+            .text_buf
+            .lock()
+            .capture('b', Some("B".into()), None, 2, 4);
+        assert!(!flush_text_event(&state, true));
+        rx.recv().unwrap();
+        assert!(flush_text_event(&state, true));
+        let first = rx.recv().unwrap();
+        assert_eq!(first.app_name.as_deref(), Some("A"));
+        assert_eq!(first.text_content(), Some(remove_pii(&raw).as_str()));
+        assert!(!first.text_content().unwrap().contains("alice@example.com"));
+        assert!(!first.text_content().unwrap().contains("123-45-6789"));
+        assert!(flush_text_event(&state, true));
+        let second = rx.recv().unwrap();
+        assert_eq!(second.app_name.as_deref(), Some("B"));
+        assert_eq!(second.text_content(), Some("b"));
+        assert!(!state.text_buf.lock().has_pending());
+    }
+
     #[test]
     fn split_bursts_preserve_context_backspace_and_repeated_flush() {
         for count in 1..=100 {
