@@ -177,8 +177,8 @@ export const GuideVideoPanel = forwardRef<GuideVideoHandle, {
 
     </section>;
   return <>
-    <button ref={trigger} className={styles.actionButton} aria-label="Video SOP" aria-expanded={open} aria-controls="sop-video-panel" onClick={() => { if (open) backToSop(); else setOpen(true); }}>
-      {working ? <Loader2 size={16} className={styles.spin} aria-hidden="true" /> : <Film size={16} aria-hidden="true" />} {working ? "Creating video…" : "Video SOP"}
+    <button ref={trigger} className={styles.actionButton} aria-label="Video SOP" title={working ? "Creating video…" : "Video SOP"} aria-busy={working} aria-expanded={open} aria-controls="sop-video-panel" onClick={() => { if (open) backToSop(); else setOpen(true); }}>
+      {working ? <Loader2 size={16} className={styles.spin} aria-hidden="true" /> : <Film size={16} aria-hidden="true" />}
     </button>
     {container ? createPortal(content, container) : content}
   </>;
