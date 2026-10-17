@@ -3,7 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Maximize2, Minimize2, Play, X } from "lucide-react";
+import { Loader2, ArrowUp, ArrowDown, Trash2, Play, X } from "lucide-react";
 import type { WorkflowMap, WorkflowStage, WorkflowScreenshot } from "./model";
 import type { WorkflowsPlatform } from "./platform";
 import { WorkflowReplay } from "./workflow-replay";
@@ -14,10 +14,11 @@ import styles from "./workflow-step-evidence.module.css";
 const when = (value: string) => Number.isFinite(Date.parse(value))
   ? new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Date unavailable";
 
-export function WorkflowStepEvidence({ workflow, stage, platform }: {
+export function WorkflowStepEvidence({ workflow, stage, platform, onImageLayoutChange }: {
   workflow: WorkflowMap; stage: WorkflowStage; platform: WorkflowsPlatform;
+  onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void;
 }) {
-  const [reduced, setReduced] = useState<Set<number>>(() => new Set());
+  const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [previewHeight, setPreviewHeight] = useState(0);
   const [selected, setSelected] = useState<WorkflowScreenshot | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -31,7 +32,27 @@ export function WorkflowStepEvidence({ workflow, stage, platform }: {
   } : stage] }), [workflow, stage, selected]);
   const attached = verifiedStageScreenshots(stage);
   const preview = useSourceScreenshot(stage, attached.length > 0, platform.loadWorkflowScreenshot);
-  const screenshots = attached.length ? attached : preview.image ? [preview.image] : [];
+  const available = attached.length ? attached : preview.image ? [preview.image] : [];
+  const layout = stage.imageLayout ?? { order: [], hidden: [], beforeText: false };
+  const ordered = [...available].sort((a, b) => {
+    const rank = (id: number) => { const index = layout.order.indexOf(id); return index < 0 ? layout.order.length : index; };
+    return rank(a.frameId) - rank(b.frameId);
+  });
+  const screenshots = ordered.filter(image => !layout.hidden.includes(image.frameId));
+  const removeImage = (id: number) => {
+    onImageLayoutChange?.({ ...layout, hidden: [...new Set([...layout.hidden, id])] });
+    setSelectedImage(null);
+  };
+  const moveImage = (index: number, direction: -1 | 1) => {
+    const next = index + direction;
+    if (next < 0 || next >= screenshots.length) {
+      onImageLayoutChange?.({ ...layout, beforeText: direction === -1 });
+    } else {
+      const order = screenshots.map(image => image.frameId);
+      [order[index], order[next]] = [order[next], order[index]];
+      onImageLayoutChange?.({ ...layout, order });
+    }
+  };
   const screenshot = screenshots[0];
   const canReplay = platform.loadWorkflowRecording && stage.evidence.some(e => !["audio", "meeting"].includes(e.source ?? "") && Number.isFinite(Date.parse(e.timestamp)));
   const openRecording = async (capture = screenshot) => {
@@ -54,19 +75,23 @@ export function WorkflowStepEvidence({ workflow, stage, platform }: {
       else if (media?.url && platform.releaseWorkflowRecording) void platform.releaseWorkflowRecording(media.url).catch(() => {});
     }
   };
-  return <section ref={preview.ref} onLoad={() => setPreviewHeight(preview.ref.current?.getBoundingClientRect().height ?? 0)} style={!attached.length && !screenshots.length && previewHeight ? { minHeight: previewHeight } : undefined} className={`${styles.evidence} ph-no-capture ph-mask`} aria-label={`References for ${stage.name}`}>
-    {!playing && !screenshots.length && <div className={styles.previewStatus} role="status">
+  return <section ref={preview.ref} onKeyDown={event => {
+    if (event.key === "Escape") { setSelectedImage(null); event.stopPropagation(); }
+  }} onBlur={event => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) setSelectedImage(null); }} onLoad={() => setPreviewHeight(preview.ref.current?.getBoundingClientRect().height ?? 0)} style={!attached.length && !screenshots.length && previewHeight ? { minHeight: previewHeight } : undefined} className={`${styles.evidence} ph-no-capture ph-mask`} aria-label={`References for ${stage.name}`}>
+    {!playing && !available.length && <div className={styles.previewStatus} role="status">
       {preview.status === "loading" ? "Loading source screenshot…" : preview.status === "error" ? "Could not load the source screenshot." : "No screenshot available for this step."}
       {preview.canRetry && preview.status !== "loading" && <button type="button" onClick={preview.retry}>Retry screenshot</button>}
     </div>}
     {!playing && screenshots.map((capture, index) => {
-      const expanded = !reduced.has(capture.frameId);
       const suffix = screenshots.length > 1 ? ` ${index + 1}` : "";
-      return <EvidenceFigure key={`${capture.frameId}:${capture.timestamp}`} capture={capture} stage={stage} platform={platform} suffix={suffix} expanded={expanded} opening={opening}
-        toggle={() => setReduced(previous => { const next = new Set(previous); if (expanded) next.add(capture.frameId); else next.delete(capture.frameId); return next; })}
+      return <EvidenceFigure key={`${capture.frameId}:${capture.timestamp}`} capture={capture} stage={stage} platform={platform} suffix={suffix} selected={selectedImage === capture.frameId} opening={opening}
+        select={() => setSelectedImage(capture.frameId)}
+        actions={onImageLayoutChange ? { remove: () => removeImage(capture.frameId), up: () => moveImage(index, -1), down: () => moveImage(index, 1),
+          upDisabled: index === 0 && layout.beforeText, downDisabled: index === screenshots.length - 1 && !layout.beforeText } : undefined}
         replay={canReplay || !!platform.openCapturedMoment ? () => void openRecording(capture) : undefined}
         resolved={capture === preview.image} />;
     })}
+    {!playing && onImageLayoutChange && layout.hidden.length > 0 && <button type="button" className={styles.restore} onClick={() => onImageLayoutChange({ ...layout, hidden: [] })}>Restore deleted images</button>}
     {playing && <div ref={playerRef} className={styles.player}>
       <button type="button" className={styles.close} aria-label={`Close recording for ${stage.name}`} title="Close recording" onClick={() => setPlaying(false)}><X size={15} /></button>
       <WorkflowReplay workflow={replay} loadRecording={platform.loadWorkflowRecording} releaseRecording={platform.releaseWorkflowRecording} openCapturedMoment={platform.openCapturedMoment} />
@@ -78,9 +103,10 @@ export function WorkflowStepEvidence({ workflow, stage, platform }: {
   </section>;
 }
 
-function EvidenceFigure({ capture, stage, platform, suffix, expanded, opening, toggle, replay, resolved }: {
+function EvidenceFigure({ capture, stage, platform, suffix, selected, opening, select, actions, replay, resolved }: {
   capture: WorkflowScreenshot; stage: WorkflowStage; platform: WorkflowsPlatform; suffix: string;
-  expanded: boolean; opening: boolean; toggle: () => void; replay?: () => void; resolved: boolean;
+  selected: boolean; opening: boolean; select: () => void; replay?: () => void; resolved: boolean;
+  actions?: { remove: () => void; up: () => void; down: () => void; upDisabled: boolean; downDisabled: boolean };
 }) {
   const load = resolved ? undefined : platform.loadWorkflowScreenshot;
   const preview = useSourceScreenshot(stage, !load, load, capture);
@@ -89,13 +115,18 @@ function EvidenceFigure({ capture, stage, platform, suffix, expanded, opening, t
   const [failed, setFailed] = useState(false);
   const [ratio, setRatio] = useState("16 / 10");
   useEffect(() => setFailed(false), [url]);
-  return <figure ref={preview.ref} className={`${styles.figure} ${expanded ? styles.expanded : ""}`}>
-    {url && !failed ? <button className={styles.imageButton} type="button" aria-label={`${expanded ? "Reduce" : "Enlarge"} screenshot${suffix} for ${stage.name}`} aria-expanded={expanded} onClick={toggle}>
+  return <figure ref={preview.ref} className={`${styles.figure} ${selected ? styles.selected : ""}`}>
+    {url && !failed ? <button className={styles.imageButton} type="button" aria-label={`Select screenshot${suffix} for ${stage.name}`} aria-pressed={selected} onClick={select}
+      onKeyDown={event => { if (selected && actions && ["Delete", "Backspace"].includes(event.key)) { event.preventDefault(); event.stopPropagation(); actions.remove(); } }}>
       <img src={url} alt={`Captured reference${suffix} for ${stage.name}`} loading="lazy" decoding="async" draggable={false} data-lm-disable="true" onLoad={event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight) setRatio(`${image.naturalWidth} / ${image.naturalHeight}`); }} onError={() => setFailed(true)} />
-      <span className={styles.zoom}>{expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</span>
     </button> : <div className={styles.previewStatus} role="status" style={preview.status === "loading" && !failed ? { aspectRatio: ratio } : undefined}>
       {failed || preview.status === "error" ? "Could not load the source screenshot." : preview.status === "loading" ? "Loading source screenshot…" : "This screenshot is no longer available."}
       {(failed || preview.status === "error") && load && <button onClick={() => { setFailed(false); preview.retry(); }}>Retry screenshot</button>}
+    </div>}
+    {selected && actions && <div className={styles.imageActions} role="toolbar" aria-label="Selected image">
+      <button type="button" onClick={actions.up} disabled={actions.upDisabled} aria-label="Move image up"><ArrowUp size={15} />Move up</button>
+      <button type="button" onClick={actions.down} disabled={actions.downDisabled} aria-label="Move image down"><ArrowDown size={15} />Move down</button>
+      <button type="button" onClick={actions.remove} aria-label="Delete image"><Trash2 size={15} />Delete</button>
     </div>}
     <figcaption><span>{!capture.visualVerified ? "Source screenshot · " : ""}{capture.app} · {when(capture.timestamp)}</span>
       {replay && <button className={styles.recording} title="Open recording" type="button" disabled={opening} onClick={replay} aria-label={`${platform.openCapturedMoment ? "Open" : "View"} recording${suffix} for ${stage.name}`}>{opening ? <Loader2 size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}</button>}
