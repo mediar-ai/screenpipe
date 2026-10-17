@@ -102,10 +102,13 @@ fn vision_persistence_stalled(
     now: u64,
     last_attempt: u64,
     last_progress: u64,
+    uptime_secs: f64,
     threshold: u64,
 ) -> bool {
+    if uptime_secs <= 120.0 || last_attempt == 0 {
+        return false;
+    }
     let capture_fresh = now.saturating_sub(last_attempt) < threshold;
-    // Caller already gates this on >120s uptime and a real capture attempt.
     // Never having made progress is a failure after warm-up, not perpetual startup.
     let db_stale = last_progress == 0 || now.saturating_sub(last_progress) > threshold;
     capture_fresh && db_stale
@@ -115,14 +118,37 @@ fn vision_persistence_stalled(
 mod persistence_startup_regression {
     use super::vision_persistence_stalled;
     #[test]
+    fn startup_and_freshness_boundaries_and_recovery() {
+        for (attempt, progress, uptime, expected) in [
+            (999, 0, 119.0, false),
+            (999, 0, 120.0, false),
+            (999, 0, 120.001, true),
+            (0, 0, 300.0, false),
+            (940, 0, 300.0, false),
+            (941, 0, 300.0, true),
+            (999, 940, 300.0, false),
+            (999, 939, 300.0, true),
+            (999, 999, 300.0, false),
+            (999, 1001, 300.0, false),
+        ] {
+            assert_eq!(
+                vision_persistence_stalled(1000, attempt, progress, uptime, 60),
+                expected,
+                "attempt={attempt} progress={progress} uptime={uptime}"
+            );
+        }
+        assert!(vision_persistence_stalled(1000, 999, 0, 300.0, 60));
+        assert!(!vision_persistence_stalled(1001, 1001, 1001, 301.0, 60));
+    }
+    #[test]
     fn active_capture_with_no_success_after_warmup_is_stalled() {
-        assert!(vision_persistence_stalled(1000, 999, 0, 60));
+        assert!(vision_persistence_stalled(1000, 999, 0, 121.0, 60));
     }
     #[test]
     fn recent_progress_and_idle_capture_are_not_write_stalls() {
-        assert!(!vision_persistence_stalled(1000, 999, 990, 60));
-        assert!(!vision_persistence_stalled(1000, 800, 800, 60));
-        assert!(vision_persistence_stalled(1000, 999, 800, 60));
+        assert!(!vision_persistence_stalled(1000, 999, 990, 121.0, 60));
+        assert!(!vision_persistence_stalled(1000, 800, 800, 121.0, 60));
+        assert!(vision_persistence_stalled(1000, 999, 800, 121.0, 60));
     }
 }
 
@@ -755,6 +781,7 @@ pub struct HealthCheckResponse {
     /// macOS monitor focus has remained unresolved beyond the grace period.
     #[serde(default)]
     pub vision_focus_unresolved: bool,
+    /// Capture attempts are fresh but persistence progress is stale after warm-up.
     #[serde(default)]
     pub vision_db_write_stalled: bool,
     /// True when audio devices are active but DB writes have stopped (pool exhaustion).
@@ -1353,13 +1380,12 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     // — data is being captured but silently lost.
     let vision_db_write_stalled = if !state.vision_disabled
         && vision_capture_expected
-        && vision_snap.last_capture_attempt_ts > 0
-        && vision_snap.uptime_secs > 120.0
     {
         let stalled = vision_persistence_stalled(
             now_ts,
             vision_snap.last_capture_attempt_ts,
             vision_snap.last_db_write_ts,
+            vision_snap.uptime_secs,
             threshold_secs,
         );
 

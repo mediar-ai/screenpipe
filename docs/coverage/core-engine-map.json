@@ -754,6 +754,7 @@
         "tests/cancellable_query_test.rs",
         "tests/cancellation_performance_bench.rs",
         "tests/close_severs_connections_test.rs",
+        "tests/physical_disk_full_vm_test.rs",
         "tests/hybrid_recovery.rs",
         "tests/memory_pressure_test.rs",
         "tests/multi_pool_wal_parity_test.rs",
