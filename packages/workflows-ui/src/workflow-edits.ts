@@ -9,6 +9,7 @@ export type ProcedureEdit = {
 };
 export type StageEdit = {
   sourceIndex: number | null;
+  imageLayout?: WorkflowStage["imageLayout"];
   name: string;
   description: string;
   procedure: ProcedureEdit[];
@@ -42,6 +43,7 @@ export function workflowEdit(workflow: WorkflowMap): WorkflowEdit {
       sourceIndex,
       name: stage.name,
       description: stage.description,
+      ...(stage.imageLayout ? { imageLayout: stage.imageLayout } : {}),
       procedure: (stage.procedure ?? []).map(({ kind, text }, sourceIndex) => ({
         sourceIndex,
         kind,
@@ -86,6 +88,7 @@ export function validWorkflowEdit(
       (s) =>
         text(s.name, true) &&
         text(s.description) &&
+        (!s.imageLayout || (typeof s.imageLayout.beforeText === "boolean" && [s.imageLayout.order, s.imageLayout.hidden].every(ids => Array.isArray(ids) && ids.length <= 100 && new Set(ids).size === ids.length && ids.every(id => Number.isSafeInteger(id) && id >= 0)))) &&
         Array.isArray(s.procedure) &&
         s.procedure.length <= 100 &&
         s.procedure.every(

@@ -61,7 +61,7 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
   workflow: WorkflowMap;
   save: (draft: WorkflowEdit) => Promise<WorkflowMap>;
   actions?: ReactNode;
-  renderSource?: (stage: WorkflowStage) => ReactNode;
+  renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
   const key = `screenpipe:workflow-edit:${workflow.id ?? workflow.title}`;
   const [initial, setInitial] = useState(() => keyedDraft(workflowEdit(workflow)));
@@ -415,6 +415,7 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                     ? workflow.stages[stage.sourceIndex]?.timing : null} />
                 </div>
               </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
               <Text
                 rich
                 label={`Step ${index + 1} description`}
@@ -554,7 +555,8 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, stepsOnl
                 disabled={stage.procedure.length >= 100} onClick={() => addDetail(index)}>
                 <Plus size={14} aria-hidden="true" />{singleCheck ? "Add expected result" : "Add detail"}
               </button>}
-              {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && <div className={styles.source}>{renderSource?.(workflow.stages[stage.sourceIndex])}</div>}
+              {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && <div className={styles.source} style={stage.imageLayout?.beforeText ? { order: -1 } : undefined}>{renderSource?.({ ...workflow.stages[stage.sourceIndex], imageLayout: stage.imageLayout }, layout => stageChange(index, { ...stage, imageLayout: layout }))}</div>}
+              </div>
             </article>
             </Fragment>
           ))}
@@ -591,7 +593,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
   workflow: WorkflowMap;
   actions?: ReactNode;
   sourceLabel?: string;
-  renderSource?: (stage: WorkflowStage) => ReactNode;
+  renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
   return <section className={styles.editor} aria-label="Workflow document">
     <header className={styles.toolbar}>
@@ -615,6 +617,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
           <h2 className={`${styles.title} ${styles.readOnlyText}`}>{stage.name}</h2>
           <div className={styles.stepActions}><TimingDisclosure hideWhenUnknown showDuration label={`Timing for step ${index + 1}`} value={stage.timing} /></div>
         </div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
         {stage.description && <WorkflowRichText label={`Step ${index + 1} description`} value={stage.description} />}
         <div className={styles.blocks}>
           {stage.procedure?.map((detail, detailIndex) => {
@@ -635,7 +638,8 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
           })}
         </div>
         {!!stage.apps.length && <p className={styles.stepApps}>{stage.apps.join(" · ")}</p>}
-        {renderSource && <div className={styles.source}>{renderSource(stage)}</div>}
+        {renderSource && <div className={styles.source} style={stage.imageLayout?.beforeText ? { order: -1 } : undefined}>{renderSource(stage)}</div>}
+        </div>
       </article>)}
     </div>
     <div className={styles.endpoint}>Ends with<span className={styles.readOnlyText}>{workflow.outcome}</span></div>
