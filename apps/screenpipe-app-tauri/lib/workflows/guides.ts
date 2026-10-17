@@ -79,7 +79,7 @@ export const desktopGuides: NonNullable<WorkflowsPlatform["guides"]> = {
     const result = await response.json();
     if (typeof result.id !== "string" || !/^[a-f0-9-]{36}$/.test(result.id))
       throw new Error("The web editor returned an invalid page.");
-    await open(screenpipeWebUrl(`/sops/${result.id}`, PROD_WEB_BASE));
+    await open(screenpipeWebUrl(`/s/${result.id}`, PROD_WEB_BASE));
   },
   list: listGuidesFromDisk,
   load: (workflow) => loadGuideFromDisk(guideKey(workflow)),

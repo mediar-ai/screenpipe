@@ -108,7 +108,7 @@ it("uploads included screenshots with the SOP and existing authentication", asyn
     expect(payload.content).toContain(imageUrl);
     expect(payload.previousContent).not.toContain(imageUrl);
     expect(mocks.open).toHaveBeenCalledWith(
-      `https://screenpipe.com/sops/${id}`,
+      `https://screenpipe.com/s/${id}`,
     );
   } finally {
     vi.unstubAllGlobals();
