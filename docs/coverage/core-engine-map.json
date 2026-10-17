@@ -431,7 +431,6 @@
       "crate": "screenpipe-engine",
       "files": [
         "src/focus_tracker/darwin.rs",
-        "src/multi_monitor_vm_test.rs",
         "src/focus_tracker/windows.rs",
         "src/process_priority.rs"
       ],
@@ -450,7 +449,7 @@
       "criticality": "medium",
       "confidence": "conditional",
       "kind": "unit",
-      "notes": "Platform focus-tracker parsing/helpers. These files are cfg-gated and only execute on their target OS."
+      "notes": "Platform focus-tracker parsing/helpers. These files are cfg-gated and only execute on their target OS. The separately invoked harness=false tests/native_multi_monitor.rs acceptance is documented in scripts/native-test-fixtures/macos/README.md and is not counted as an automatic Rust test block."
     },
     {
       "id": "engine-meeting-privacy-sync",

@@ -86,7 +86,23 @@
 // BSD-3-Clause: https://chromium.googlesource.com/chromium/src/+/HEAD/LICENSE
 static CGVirtualDisplay *extra;
 static NSMutableDictionary<NSNumber *, NSWindow *> *markers;
-static unsigned serial = 20261017;
+static unsigned serial;
+// Close the marker before unplug: WindowServer otherwise relocates the blue
+// window onto the primary, contaminating its real capture during teardown.
+static void removeDisplay(void) {
+    if (extra) {
+        NSNumber *key = @(extra.displayID);
+        [markers[key] close];
+        [markers removeObjectForKey:key];
+        extra = nil;
+    }
+}
+static void setMode(BOOL retina) {
+    CGVirtualDisplaySettings *settings = [CGVirtualDisplaySettings new];
+    settings.hiDPI = retina;
+    settings.modes = @[[[CGVirtualDisplayMode alloc] initWithWidth:1280 height:720 refreshRate:60]];
+    if (![extra applySettings:settings]) exit(3);
+}
 static void addDisplay(BOOL retina) {
     CGVirtualDisplayDescriptor *d = [CGVirtualDisplayDescriptor new];
     d.name = @"Screenpipe disposable acceptance display";
@@ -98,13 +114,10 @@ static void addDisplay(BOOL retina) {
     d.queue = dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0);
     extra = [[CGVirtualDisplay alloc] initWithDescriptor:d];
     if (!extra) { fprintf(stderr,"virtual display creation failed\n"); exit(2); }
-    CGVirtualDisplaySettings *settings = [CGVirtualDisplaySettings new];
-    settings.hiDPI = retina;
-    settings.modes = @[[[CGVirtualDisplayMode alloc] initWithWidth:1280 height:720 refreshRate:60]];
-    if (![extra applySettings:settings]) exit(3);
+    setMode(retina);
 }
 static void settle(void) {
-    NSDate *end=[NSDate dateWithTimeIntervalSinceNow:0.6];
+    NSDate *end=[NSDate dateWithTimeIntervalSinceNow:2.0];
     while ([end timeIntervalSinceNow]>0) [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
 }
 static void report(void) {
@@ -126,7 +139,7 @@ static void report(void) {
         }
         [marker setFrame:NSMakeRect(r.origin.x+20,mainHeight-r.origin.y-220,200,200) display:YES];[marker orderFrontRegardless];
         CGDisplayModeRef mode=CGDisplayCopyDisplayMode(ids[i]);
-        [items addObject:@{@"id":@(ids[i]),@"x":@(r.origin.x),@"y":@(r.origin.y),@"w":@(r.size.width),@"h":@(r.size.height),@"pixels_w":@(CGDisplayModeGetPixelWidth(mode)),@"pixels_h":@(CGDisplayModeGetPixelHeight(mode)),@"main":@(CGDisplayIsMain(ids[i])),@"mirror":@(CGDisplayMirrorsDisplay(ids[i]))}];
+        [items addObject:@{@"id":@(ids[i]),@"x":@(r.origin.x),@"y":@(r.origin.y),@"w":@(r.size.width),@"h":@(r.size.height),@"mode_w":@(CGDisplayModeGetWidth(mode)),@"mode_h":@(CGDisplayModeGetHeight(mode)),@"pixels_w":@(CGDisplayModeGetPixelWidth(mode)),@"pixels_h":@(CGDisplayModeGetPixelHeight(mode)),@"main":@(CGDisplayIsMain(ids[i])),@"mirror":@(CGDisplayMirrorsDisplay(ids[i]))}];
         CGDisplayModeRelease(mode);
     }
     for(NSNumber *key in [markers.allKeys copy]) if(![live containsObject:key]) { [markers[key] close];[markers removeObjectForKey:key]; }
@@ -152,6 +165,7 @@ static int placeWindow(pid_t pid,double x,double y) {
 int main(int argc,char **argv) { @autoreleasepool {
     const char *opt=getenv("SCREENPIPE_ISOLATED_VM_TEST");
     if (!opt || strcmp(opt,"1")!=0) return 10;
+    serial = arc4random_uniform(UINT32_MAX - 100) + 1;
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     if(argc==2 && strcmp(argv[1],"--list-only")==0) {
@@ -172,11 +186,13 @@ int main(int argc,char **argv) { @autoreleasepool {
         } else if(sscanf(line,"warp %lf %lf",&x,&y)==2) {
             CGError e=CGWarpMouseCursorPosition(CGPointMake(x,y));
             if(e) fprintf(stderr,"warp error %d\n",e);
-        } else if(strncmp(line,"remove",6)==0) { extra=nil;
-        } else if(strncmp(line,"add-retina",10)==0) { extra=nil;settle();addDisplay(YES);
-        } else if(strncmp(line,"add",3)==0) { extra=nil;settle();addDisplay(NO);
+        } else if(strncmp(line,"mode-retina",11)==0) { setMode(YES);
+        } else if(strncmp(line,"mode-standard",13)==0) { setMode(NO);
+        } else if(strncmp(line,"remove",6)==0) { removeDisplay();
+        } else if(strncmp(line,"add-retina",10)==0) { removeDisplay();settle();addDisplay(YES);
+        } else if(strncmp(line,"add",3)==0) { removeDisplay();settle();addDisplay(NO);
         } else if(strncmp(line,"quit",4)==0) { break; }
         settle();report();
     }}
-    free(line);extra=nil;return 0;
+    free(line);removeDisplay();return 0;
 }}

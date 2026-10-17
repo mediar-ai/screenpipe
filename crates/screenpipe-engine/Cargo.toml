@@ -208,6 +208,10 @@ jemalloc = ["tikv-jemallocator"]
 name = "screenpipe"
 path = "src/bin/screenpipe-engine.rs"
 
+[[test]]
+name = "native_multi_monitor"
+harness = false
+
 [[bench]]
 name = "hot_frame_cache"
 harness = false
@@ -244,3 +248,6 @@ tracing-oslog = { workspace = true }
 # screenpipe-redact is wired into the engine binary (image-PII
 # reconciliation worker, screenpipe-engine.rs:1571).
 ignored = []
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+xcap = { workspace = true }
