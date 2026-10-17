@@ -90,6 +90,8 @@ pub struct FocusAwareController {
     /// nothing arrives for `STALE_FOCUS_CUTOFF`, we treat the state as
     /// Unknown so all monitors stay Active (safe default).
     last_event_time: Mutex<Instant>,
+    /// Health grace measures continuous unresolved time, not notification age.
+    unresolved_since: Mutex<Option<Instant>>,
     /// Per-monitor Notify used to wake Cold capture loops when focus returns.
     monitor_notifies: Mutex<HashMap<u32, Arc<Notify>>>,
     stop_flag: Arc<AtomicBool>,
@@ -97,11 +99,13 @@ pub struct FocusAwareController {
 
 impl FocusAwareController {
     pub fn new(tracker: Arc<dyn FocusTracker>) -> Arc<Self> {
+        let unresolved_since = tracker.current().is_none().then(Instant::now);
         let ctrl = Arc::new(Self {
             tracker,
             last_focus_time: Mutex::new(HashMap::new()),
             current_focus: Mutex::new(None),
             last_event_time: Mutex::new(Instant::now()),
+            unresolved_since: Mutex::new(unresolved_since),
             monitor_notifies: Mutex::new(HashMap::new()),
             stop_flag: Arc::new(AtomicBool::new(false)),
         });
@@ -150,6 +154,10 @@ impl FocusAwareController {
     }
 
     fn apply_focus(&self, identity: MonitorIdentity) {
+        *self
+            .unresolved_since
+            .lock()
+            .expect("focus health mutex poisoned") = None;
         let prev = {
             let mut current = self
                 .current_focus
@@ -180,6 +188,10 @@ impl FocusAwareController {
     }
 
     fn apply_unknown(&self) {
+        self.unresolved_since
+            .lock()
+            .expect("focus health mutex poisoned")
+            .get_or_insert_with(Instant::now);
         {
             let mut current = self
                 .current_focus
@@ -215,6 +227,21 @@ impl FocusAwareController {
         monitor: &screenpipe_screen::monitor::SafeMonitor,
     ) -> bool {
         self.hosts_focus_for_identity(&MonitorIdentity::from_monitor(monitor))
+    }
+
+    /// A long-lived unresolved tracker must be visible to health consumers.
+    /// Keep capture fail-closed: never attach global AX to an arbitrary display.
+    pub fn resolution_degraded(&self) -> bool {
+        let resolved = self.tracker.current().is_some();
+        let mut since = self
+            .unresolved_since
+            .lock()
+            .expect("focus health mutex poisoned");
+        if resolved {
+            *since = None;
+            return false;
+        }
+        since.get_or_insert_with(Instant::now).elapsed() >= STALE_FOCUS_CUTOFF
     }
 
     fn hosts_focus_for_identity(&self, identity: &MonitorIdentity) -> bool {
@@ -447,6 +474,35 @@ mod tests {
             self.tx.subscribe()
         }
         fn stop(&self) {}
+    }
+
+    #[tokio::test]
+    async fn unresolved_focus_is_visible_after_grace_and_recovers() {
+        let identity = MonitorIdentity::runtime_id(1);
+        let tracker = Arc::new(StaticFocusTracker::resolving(identity.clone()));
+        let ctrl = FocusAwareController::new(tracker.clone());
+        *tracker.current.lock().unwrap() = None;
+        ctrl.set_unknown_for_test();
+        assert!(!ctrl.resolution_degraded());
+        ctrl.backdate_last_event_for_test(Instant::now() - Duration::from_secs(60));
+        *ctrl.unresolved_since.lock().unwrap() = Some(Instant::now() - Duration::from_secs(29));
+        assert!(!ctrl.resolution_degraded());
+        *ctrl.unresolved_since.lock().unwrap() = Some(Instant::now() - STALE_FOCUS_CUTOFF);
+        ctrl.apply_unknown(); // repeated unresolved notifications must not renew grace
+        assert!(!ctrl.hosts_focus(1));
+        assert!(!ctrl.hosts_focus(2));
+        assert!(ctrl.resolution_degraded());
+        *tracker.current.lock().unwrap() = Some(identity.clone());
+        ctrl.apply_focus(identity);
+        assert!(!ctrl.resolution_degraded());
+        assert!(ctrl.hosts_focus(1));
+        assert!(!ctrl.hosts_focus(2));
+        *tracker.current.lock().unwrap() = None;
+        ctrl.apply_unknown();
+        assert!(
+            !ctrl.resolution_degraded(),
+            "a new failure gets a new grace period"
+        );
     }
 
     #[tokio::test]
