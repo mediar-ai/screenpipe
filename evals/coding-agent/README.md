@@ -2017,3 +2017,19 @@ blanket-denial, no-op-script and missing-source controls. Hidden fixtures and
 third-party dependencies appear only when grading starts. This is synthetic
 HTTP evidence, not a real browser/DNS exploit test, remote network validation,
 all header-parser ambiguities, model performance or enforced host isolation.
+
+## Unique shared audio inventory
+
+`app-shared-inventory-duplicate-devices` executes the actual audio inventory cache
+with synthetic enumeration. Seven outcomes cover first-seen deduplication by
+exact name and direction, cache hits and topology refresh, case/whitespace and
+direction distinctions, empty/single inventories, TTL/error retry, concurrent
+readers and changes during enumeration. The broken parent fails two duplicate
+inventory outcomes and preserves five neighbors; the reference passes seven.
+
+Run `bun test evals/coding-agent/calibrate-audio-inventory.test.js` for nine
+calibration controls, including an equivalent vector implementation, name-only
+merging, sorting, raw-result bypass, cache bypass, unused correct code and lost
+topology events. Each native command retains the 180-second bound. Hidden
+fixtures appear only at grading; this case uses no build-cache links. These are
+synthetic cache tests, not hardware, HTTP, capture/pause, migration or model trials.
