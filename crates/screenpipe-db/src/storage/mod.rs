@@ -37,7 +37,7 @@ pub use lifecycle::{
     MigrationReport,
 };
 pub use maintenance::{compact, export_sqlite, recover_interrupted_compaction};
-pub use reader::StorageReadToken;
+pub use reader::{is_revision_change, is_revision_change_message, StorageReadToken};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;

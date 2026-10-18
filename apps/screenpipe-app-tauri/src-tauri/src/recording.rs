@@ -563,6 +563,7 @@ pub async fn stop_capture(
     // off). Clear the intent so a later engine crash doesn't get auto-respawned
     // — which would resurrect capture the user deliberately stopped.
     state.set_capture_intent(false);
+    screenpipe_engine::meeting_watcher::set_capture_stopped(true);
 
     remember_active_meeting_for_capture_restart(&state).await;
 
@@ -924,6 +925,7 @@ pub(crate) async fn stop_screenpipe_inner(state: &RecordingState) -> Result<(), 
         // the call. The capture-only path (`stop_capture`) has always done this;
         // the full restart used by "Apply & Restart", audio shortcuts, updates,
         // and the health overlay's RESTART button cleared it instead.
+        screenpipe_engine::meeting_watcher::set_capture_stopped(true);
         remember_active_meeting_for_capture_restart(state).await;
         let mut capture_guard = state.capture.lock().await;
         if let Some(session) = capture_guard.take() {
@@ -1825,7 +1827,9 @@ async fn spawn_screenpipe_after_migration(
             // coordinator; without this the full-restart path (unlike the
             // capture-only path) left the call transcribing on the delayed
             // background chunker only, with no live notes and no way back.
-            if let Err(e) = restore_interrupted_meeting_for_capture_restart(&state).await {
+            if state.capture.lock().await.is_none() {
+                *state.interrupted_meeting.lock().await = None;
+            } else if let Err(e) = restore_interrupted_meeting_for_capture_restart(&state).await {
                 warn!("failed to restore interrupted meeting after restart: {}", e);
             }
             let spawn_epoch = std::time::SystemTime::now()

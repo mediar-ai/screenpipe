@@ -1,0 +1,68 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import React from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { PrivacyProcessingStatus, PrivacyStatusView, type PrivacyQueueStatus } from "./privacy-processing-status";
+import { localFetch } from "@/lib/api";
+vi.mock("@/lib/api", () => ({ localFetch: vi.fn() }));
+vi.mock("gt-react", () => ({ useGT: () => (text: string) => text }));
+const status: PrivacyQueueStatus = { enabled:true,scope:"protected_capture_surfaces",surfaces:[
+  {kind:"frames",discovering:false,pending:12,pending_capped:false,deferred:0},
+  {kind:"image",discovering:false,pending:5,pending_capped:false,deferred:0},
+] };
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
+describe("privacy processing status", () => {
+  it("shows pending text and images separately without claiming synced", () => {
+    render(<PrivacyStatusView status={status} unavailable={false} />);
+    expect(screen.getByRole("status").textContent).toBe("Privacy processing");
+    expect(screen.getByText("Text records waiting")).toBeTruthy();
+    expect(screen.getByText("12")).toBeTruthy();
+    expect(screen.getByText("5")).toBeTruthy();
+    expect(screen.queryByText("Synced")).toBeNull();
+  });
+  it("distinguishes discovery, retry, ready and inactive protection", () => {
+    const {rerender}=render(<PrivacyStatusView status={{...status,surfaces:status.surfaces.map(s=>({...s,discovering:true,pending_capped:true}))}} unavailable={false} />);
+    expect(screen.getByRole("status").textContent).toBe("Checking existing history");
+    expect(screen.getByText("12+")).toBeTruthy();
+    rerender(<PrivacyStatusView status={{...status,surfaces:status.surfaces.map(s=>({...s,deferred:1}))}} unavailable={false} />);
+    expect(screen.getByRole("status").textContent).toBe("Privacy processing will retry");
+    rerender(<PrivacyStatusView status={{...status,surfaces:status.surfaces.map(s=>({...s,pending:0}))}} unavailable={false} />);
+    expect(screen.getByRole("status").textContent).toBe("Enabled privacy checks complete");
+    rerender(<PrivacyStatusView status={{...status,enabled:false}} unavailable={false} />);
+    expect(screen.getByRole("status").textContent).toBe("Waiting for protection to start");
+  });
+  it("labels disabled modalities instead of claiming they are processed", () => {
+    const {rerender}=render(<PrivacyStatusView status={{...status,surfaces:[{...status.surfaces[0],pending:0}]}} unavailable={false} />);
+    expect(screen.getByRole("status").textContent).toBe("Enabled privacy checks complete");
+    expect(screen.getByText("Not enabled")).toBeTruthy();
+    rerender(<PrivacyStatusView status={{...status,surfaces:[status.surfaces[1]]}} unavailable={false} />);
+    expect(screen.getByText("Not enabled")).toBeTruthy();
+  });
+  it("rejects malformed status instead of showing a false ready state", async () => {
+    vi.mocked(localFetch).mockResolvedValue(Response.json({enabled:true,scope:"protected_capture_surfaces",surfaces:[]}));
+    render(<PrivacyProcessingStatus />);
+    await waitFor(()=>expect(screen.getByRole("status").textContent).toBe("Processing status unavailable"));
+  });
+  it("keeps polls sequential and aborts the outstanding request on unmount", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.mocked(localFetch).mockImplementation((_path, init)=> {signal=init?.signal as AbortSignal;return new Promise(()=>{});});
+    const {unmount}=render(<PrivacyProcessingStatus />);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(30000);});
+    expect(localFetch).toHaveBeenCalledTimes(1);
+    expect(signal?.aborted).toBe(true);
+    unmount();
+    await act(async()=>{await vi.advanceTimersByTimeAsync(30000);});
+    expect(localFetch).toHaveBeenCalledTimes(1);
+  });
+  it("recovers after an unavailable engine", async () => {
+    vi.useFakeTimers();
+    vi.mocked(localFetch).mockResolvedValueOnce(new Response(null,{status:503})).mockResolvedValueOnce(Response.json(status));
+    render(<PrivacyProcessingStatus />);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+    expect(screen.getByRole("status").textContent).toBe("Processing status unavailable");
+    await act(async()=>{await vi.advanceTimersByTimeAsync(15000);});
+    expect(screen.getByRole("status").textContent).toBe("Privacy processing");
+  });
+});

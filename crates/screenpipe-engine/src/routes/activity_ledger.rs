@@ -108,6 +108,8 @@ pub struct ActivityLedgerTimeRange {
 
 #[derive(Debug, Serialize, OaSchema)]
 pub struct ActivityLedgerResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub privacy: Option<super::search::SearchPrivacy>,
     pub intervals: Vec<ActivityLedgerInterval>,
     pub depth: ActivityLedgerDepth,
     pub data_status: String,
@@ -129,7 +131,7 @@ pub async fn get_activity_ledger(
     if query.end_time - query.start_time > Duration::days(31) {
         return Err(bad_request("activity ledger ranges are limited to 31 days"));
     }
-    if query.refresh {
+    let sources_ready = if query.refresh {
         crate::activity_ledger::reconcile_range(&state.db, query.start_time, query.end_time)
             .await
             .map_err(|error| {
@@ -138,8 +140,14 @@ pub async fn get_activity_ledger(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(json!({"error": "activity ledger generation failed"})),
                 )
-            })?;
-    }
+            })?
+    } else {
+        state.db.activity_sources_ready(query.start_time, query.end_time)
+            .await.map_err(|error| {
+                error!(%error, "activity ledger privacy readiness failed");
+                (StatusCode::SERVICE_UNAVAILABLE, JsonResponse(json!({"error":"Privacy processing is pending", "code":"privacy_pending", "retryable":true})))
+            })?
+    };
     let include_actions = query.depth == ActivityLedgerDepth::Action;
     let include_evidence = include_actions || query.include_artifacts;
     let records = state
@@ -166,8 +174,16 @@ pub async fn get_activity_ledger(
         query.include_artifacts,
         state.history_access.is_restricted(),
     );
-    let data_status = if intervals.is_empty() { "empty" } else { "ok" }.to_string();
+    let data_status = if !sources_ready {
+        "privacy_processing"
+    } else if intervals.is_empty() {
+        "empty"
+    } else {
+        "ok"
+    }
+    .to_string();
     Ok(JsonResponse(ActivityLedgerResponse {
+        privacy: super::search::search_privacy(state.db.protected_reads_enabled()),
         intervals,
         depth: query.depth,
         data_status,
@@ -196,6 +212,7 @@ fn apply_activity_ledger_history_access(
 
 fn empty_activity_ledger_response(query: &ActivityLedgerQuery) -> ActivityLedgerResponse {
     ActivityLedgerResponse {
+        privacy: None,
         intervals: Vec::new(),
         depth: query.depth,
         data_status: "empty".to_string(),

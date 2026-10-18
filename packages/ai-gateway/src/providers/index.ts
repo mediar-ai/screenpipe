@@ -7,6 +7,8 @@ import { AstraProvider } from './astra';
 import { AnthropicProvider } from './anthropic';
 import { ScreenpipeEnclaveProvider, isScreenpipeEnclaveModel } from './screenpipe-enclave';
 import { ScreenpipeGlmProvider, isScreenpipeGlmModel } from './screenpipe-glm';
+import { GeminiProvider } from './gemini';
+import { GEMINI_ARGON_MODEL, argonVertexConfig } from './gemini-argon';
 import { AIProvider } from './base';
 import { Env } from '../types';
 
@@ -62,6 +64,8 @@ const RETIRED_HOSTED_MODEL_IDS = new Set([
  */
 export function resolveModelAlias(model: string): string {
 	const lower = model.toLowerCase();
+	if (lower === 'claude-haiku-5-5') return lower;
+	if (lower === GEMINI_ARGON_MODEL) return GEMINI_ARGON_MODEL;
 	if (isScreenpipeGlmModel(lower)) return model;
 	if (isRetiredHostedModel(lower)) {
 		console.log(`[router] retired hosted model ${model} → ${RETIRED_HOSTED_MODEL_FALLBACK}`);
@@ -142,6 +146,14 @@ export function createProvider(model: string, env: Env, connection?: ProviderCon
 	// Defensive: chat.ts resolves first, but voice/other callers may not — resolve
 	// here too so a removed hosted id can never reach its former provider.
 	model = resolveModelAlias(model);
+
+	if (model === GEMINI_ARGON_MODEL) {
+		const vertex = argonVertexConfig(env);
+		if (!vertex || !connection?.baseURL) {
+			throw new ProviderConfigurationError('Argon requires Vertex credentials and Cloudflare AI Gateway');
+		}
+		return new GeminiProvider(vertex, connection);
+	}
 
 	// Screenpipe event classifier — routes to self-hosted vLLM
 	if (model === 'screenpipe-event-classifier') {

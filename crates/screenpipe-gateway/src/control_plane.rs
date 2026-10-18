@@ -1424,6 +1424,7 @@ mod tests {
                 "dev-a",
                 "alice-mbp",
                 &[FrameRow {
+                    accessibility_tree: None,
                     frame_id: 1,
                     timestamp: "2026-07-22T10:00:00Z".to_string(),
                     app_name: Some("Arc".to_string()),

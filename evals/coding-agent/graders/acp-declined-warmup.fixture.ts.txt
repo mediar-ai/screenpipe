@@ -1,0 +1,101 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+const port = vi.hoisted(() => ({ start: vi.fn() }));
+vi.mock('@/lib/utils/tauri', () => ({ commands: { piStart: port.start } }));
+import { useAcpWarmup } from './components/chat/standalone/hooks/use-acp-warmup';
+
+let sequence = 0;
+function options() {
+  const id = `synthetic-${++sequence}`;
+  return {
+    enabled: true, activePreset: { id, provider: 'acp', acpAgent: { id: 'test-agent' } } as any,
+    piInfo: null as any, piStartInFlightRef: { current: false }, piSessionIdRef: { current: `${id}-chat` },
+    piProjectDirForSession: vi.fn(async (session: string) => `/synthetic/${session}`),
+    buildProviderConfig: vi.fn(() => ({ provider: 'acp', model: 'test-agent' }) as any),
+    userToken: 'synthetic-token', setPiInfo: vi.fn(), setPiStarting: vi.fn(),
+    setRunningConfigFromProviderConfig: vi.fn(), syncThinkingLevelAfterStart: vi.fn(),
+  };
+}
+const settle = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
+afterEach(() => { cleanup(); port.start.mockReset(); });
+
+it.each(['cancelled', 'error', 'rejected'])('unsuccessful %s attempt stays quiet across new chat and remount', async kind => {
+  if (kind === 'rejected') port.start.mockRejectedValue(new Error('synthetic refusal'));
+  else port.start.mockResolvedValue(kind === 'cancelled' ? { status: 'ok', data: { running: false } } : { status: 'error', error: 'synthetic refusal' });
+  const o = options(); const first = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenCalledTimes(1);
+  expect(o.piStartInFlightRef.current).toBe(false);
+  expect(o.setPiStarting).toHaveBeenLastCalledWith(false);
+  expect(o.setPiInfo).not.toHaveBeenCalled();
+  expect(o.setRunningConfigFromProviderConfig).not.toHaveBeenCalled();
+  expect(o.syncThinkingLevelAfterStart).not.toHaveBeenCalled();
+  o.piSessionIdRef.current += '-next'; first.rerender(); await settle(); first.unmount();
+  const second = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenCalledTimes(1); second.unmount();
+});
+
+it('pending attempt is not duplicated by remount with a new conversation', async () => {
+  let resolve!: (value: any) => void;
+  port.start.mockImplementation(() => new Promise(r => { resolve = r; }));
+  const o = options(); const first = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenCalledTimes(1); const finishFirst = resolve;
+  first.unmount(); expect(o.piStartInFlightRef.current).toBe(false);
+  o.piSessionIdRef.current += '-next'; const second = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenCalledTimes(1);
+  await act(async () => finishFirst({ status: 'ok', data: { running: false } })); second.unmount();
+});
+
+it('successful handshakes continue on new conversations with state and request inputs preserved', async () => {
+  const info = { running: true, busy: false }; port.start.mockResolvedValue({ status: 'ok', data: info });
+  const o = options(); const firstSession = o.piSessionIdRef.current;
+  const hook = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenLastCalledWith(firstSession, `/synthetic/${firstSession}`, 'synthetic-token', { provider: 'acp', model: 'test-agent' });
+  expect(o.setPiInfo).toHaveBeenLastCalledWith(info);
+  expect(o.setRunningConfigFromProviderConfig).toHaveBeenLastCalledWith({ provider: 'acp', model: 'test-agent' });
+  expect(o.syncThinkingLevelAfterStart).toHaveBeenLastCalledWith(firstSession);
+  o.piSessionIdRef.current += '-next'; hook.rerender(); await settle();
+  expect(port.start).toHaveBeenCalledTimes(2);
+  expect(o.syncThinkingLevelAfterStart).toHaveBeenLastCalledWith(o.piSessionIdRef.current);
+  expect(o.piStartInFlightRef.current).toBe(false);
+});
+
+it.each(['preset', 'agent'])('failure does not suppress a different %s', async field => {
+  port.start.mockResolvedValue({ status: 'error', error: 'synthetic refusal' });
+  const o = options(); const hook = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenCalledTimes(1);
+  o.activePreset = field === 'preset' ? { ...o.activePreset, id: o.activePreset.id + '-other' } : { ...o.activePreset, acpAgent: { id: 'other-agent' } };
+  hook.rerender(); await settle(); expect(port.start).toHaveBeenCalledTimes(2);
+});
+
+it.each(['disabled', 'hosted', 'missing-preset', 'missing-agent', 'running', 'in-flight'])('preserves %s start guard', async guard => {
+  port.start.mockResolvedValue({ status: 'ok', data: { running: true } }); const o = options();
+  if (guard === 'disabled') o.enabled = false;
+  if (guard === 'hosted') o.activePreset.provider = 'openai';
+  if (guard === 'missing-preset') o.activePreset.id = '';
+  if (guard === 'missing-agent') o.activePreset.acpAgent.id = '';
+  if (guard === 'running') o.piInfo = { running: true, sessionId: o.piSessionIdRef.current };
+  if (guard === 'in-flight') o.piStartInFlightRef.current = true;
+  renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).not.toHaveBeenCalled(); expect(o.setPiStarting).not.toHaveBeenCalled();
+});
+
+it('process liveness does not release a still-pending handshake guard', async () => {
+  let finish!: (value: any) => void; port.start.mockReturnValue(new Promise(r => { finish = r; }));
+  const o = options(); const hook = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(port.start).toHaveBeenCalledTimes(1); expect(o.piStartInFlightRef.current).toBe(true);
+  o.piInfo = { running: true, sessionId: o.piSessionIdRef.current }; hook.rerender();
+  expect(o.piStartInFlightRef.current).toBe(true); expect(o.setPiStarting).not.toHaveBeenCalledWith(false);
+  await act(async () => finish({ status: 'ok', data: o.piInfo }));
+  expect(o.piStartInFlightRef.current).toBe(false); expect(o.setPiStarting).toHaveBeenLastCalledWith(false);
+});
+
+it('unmount releases its guard and ignores late UI state updates', async () => {
+  let finish!: (value: any) => void; port.start.mockReturnValue(new Promise(r => { finish = r; }));
+  const o = options(); const hook = renderHook(() => useAcpWarmup(o)); await settle();
+  expect(o.piStartInFlightRef.current).toBe(true); hook.unmount();
+  expect(o.piStartInFlightRef.current).toBe(false); expect(o.setPiStarting).toHaveBeenLastCalledWith(false);
+  await act(async () => finish({ status: 'ok', data: { running: true } }));
+  expect(o.setPiInfo).not.toHaveBeenCalled(); expect(o.setRunningConfigFromProviderConfig).not.toHaveBeenCalled(); expect(o.syncThinkingLevelAfterStart).not.toHaveBeenCalled();
+});

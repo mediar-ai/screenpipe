@@ -1079,7 +1079,7 @@ pub(crate) async fn build_candidates(
         retain_candidates_with_required_call_signal(&mut candidates, profiles, &call_evidence);
     }
 
-    filter_suppressed_candidates(&mut candidates, suppressed_sessions);
+    suppress_candidates(&mut candidates, suppressed_sessions, state);
     let live_candidates: Vec<_> = candidates
         .iter()
         .filter(|candidate| {

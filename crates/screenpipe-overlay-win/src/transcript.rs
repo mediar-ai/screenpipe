@@ -23,9 +23,9 @@ pub const WINDOW_SECONDS: f64 = 6.0;
 pub const COVERAGE: f32 = 0.6;
 pub const MIN_CHARACTERS: usize = 24;
 
-/// How many lines the card keeps. The card shows four at most; a little history
-/// beyond that absorbs a burst without the feed jumping.
-pub const MAX_LINES: usize = 8;
+/// How many lines the card keeps. This matches the other native overlays while
+/// remaining small enough to bound the always-live meeting state.
+pub const MAX_LINES: usize = 50;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FeedItem {
@@ -121,11 +121,68 @@ impl TranscriptFeed {
         self.items
             .iter()
             .map(|i| TranscriptItem {
+                id: i.id.clone(),
                 speaker: i.speaker.clone(),
                 text: i.text.clone(),
                 device_type: i.device_type.clone(),
             })
             .collect()
+    }
+}
+
+/// Window-owned transcript viewport. While the reader is away from the live
+/// edge, `display` is an immutable, bounded snapshot and `latest` continues to
+/// receive the rolling feed.
+#[derive(Debug, Default)]
+pub struct TranscriptScroll {
+    from_latest: usize,
+    wheel_remainder: i32,
+    latest: Vec<TranscriptItem>,
+    display: Vec<TranscriptItem>,
+}
+
+impl TranscriptScroll {
+    pub fn from_latest(&self) -> usize {
+        self.from_latest
+    }
+
+    pub fn display(&self) -> &[TranscriptItem] {
+        &self.display
+    }
+
+    pub fn reset(&mut self) {
+        self.from_latest = 0;
+        self.wheel_remainder = 0;
+        self.display.clone_from(&self.latest);
+    }
+
+    pub fn sync(&mut self, new: &[TranscriptItem], preserve: bool) {
+        self.latest.clear();
+        self.latest.extend_from_slice(new);
+        if !preserve || self.from_latest == 0 {
+            self.reset();
+        }
+    }
+
+    /// Accumulate high-resolution wheel input. Returns true when the displayed
+    /// snapshot or row offset changed.
+    pub fn wheel(&mut self, delta: i16, capacity: usize) -> bool {
+        let before = self.from_latest;
+        self.wheel_remainder += i32::from(delta);
+        while self.wheel_remainder.abs() >= 120 {
+            let step = self.wheel_remainder.signum();
+            self.wheel_remainder -= step * 120;
+            if step > 0 {
+                let max = self.display.len().saturating_sub(capacity);
+                self.from_latest = (self.from_latest + 1).min(max);
+            } else {
+                self.from_latest = self.from_latest.saturating_sub(1);
+            }
+        }
+        if before != 0 && self.from_latest == 0 {
+            self.display.clone_from(&self.latest);
+        }
+        before != self.from_latest
     }
 }
 
@@ -234,5 +291,85 @@ mod tests {
         feed.push(item("a", "output", "the first thing that was said", 100.0));
         let lines = feed.lines();
         assert!(lines[0].text.starts_with("the first"));
+    }
+
+    fn displayed(id: usize, text: &str) -> TranscriptItem {
+        TranscriptItem {
+            id: id.to_string(),
+            speaker: "speaker".into(),
+            text: text.into(),
+            device_type: "output".into(),
+        }
+    }
+
+    #[test]
+    fn streaming_and_partial_updates_do_not_move_a_reader() {
+        let mut scroll = TranscriptScroll::default();
+        let old: Vec<_> = (0..6).map(|id| displayed(id, "original")).collect();
+        scroll.sync(&old, false);
+        scroll.wheel(120, 4);
+        let mut appended = old.clone();
+        appended.push(displayed(6, "new"));
+        scroll.sync(&appended, true);
+        assert_eq!(scroll.from_latest(), 1);
+        assert_eq!(
+            scroll.display(),
+            old,
+            "append leaves every displayed byte frozen"
+        );
+
+        let mut partial = appended.clone();
+        partial[2].text = "same id and length, different words".into();
+        scroll.sync(&partial, true);
+        assert_eq!(scroll.display(), old, "partial replacement stays frozen");
+    }
+
+    #[test]
+    fn rolling_history_eviction_does_not_change_the_snapshot() {
+        let mut scroll = TranscriptScroll::default();
+        let old: Vec<_> = (0..MAX_LINES).map(|id| displayed(id, "line")).collect();
+        scroll.sync(&old, false);
+        scroll.wheel(120, 4);
+        scroll.wheel(120, 4);
+        let new: Vec<_> = (1..=MAX_LINES).map(|id| displayed(id, "line")).collect();
+        scroll.sync(&new, true);
+        assert_eq!(scroll.display(), old);
+        assert_eq!(scroll.display().len(), MAX_LINES);
+    }
+
+    #[test]
+    fn reaching_latest_flushes_quiet_stream_and_reset_flushes_reopen() {
+        let lines: Vec<_> = (0..8).map(|id| displayed(id, "line")).collect();
+        let mut scroll = TranscriptScroll::default();
+        scroll.sync(&lines, false);
+        scroll.wheel(120, 4);
+        let mut latest = lines.clone();
+        latest.push(displayed(8, "quiet latest"));
+        scroll.sync(&latest, true); // pin toggled while still visible
+        assert_eq!(scroll.from_latest(), 1);
+        assert_eq!(scroll.display(), lines);
+        scroll.wheel(-120, 4);
+        assert_eq!(scroll.from_latest(), 0, "wheel down reaches live edge");
+        assert_eq!(
+            scroll.display(),
+            latest,
+            "latest flushes without a stream event"
+        );
+        scroll.wheel(120, 4);
+        scroll.reset(); // collapsed/hidden or new meeting
+        assert_eq!(scroll.from_latest(), 0);
+        assert_eq!(scroll.display(), latest);
+    }
+
+    #[test]
+    fn high_resolution_wheel_accumulates_and_reversal_cancels() {
+        let lines: Vec<_> = (0..8).map(|id| displayed(id, "line")).collect();
+        let mut scroll = TranscriptScroll::default();
+        scroll.sync(&lines, false);
+        assert!(!scroll.wheel(60, 4));
+        assert!(!scroll.wheel(-30, 4));
+        assert!(!scroll.wheel(89, 4));
+        assert!(scroll.wheel(1, 4));
+        assert_eq!(scroll.from_latest(), 1);
     }
 }

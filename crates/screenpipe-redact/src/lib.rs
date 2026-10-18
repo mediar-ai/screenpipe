@@ -154,6 +154,24 @@ pub struct RedactionOutput {
     pub spans: Vec<RedactedSpan>,
 }
 
+/// One resumable required detection operation. A step is a backend-native unit
+/// (one overlapping model context for local ONNX), never a truncation boundary.
+#[async_trait]
+pub trait RequiredRedaction: Send {
+    async fn step(&mut self) -> Result<Option<RedactionOutput>, RedactError>;
+}
+
+struct RequiredOnce<R: Redactor + ?Sized> {
+    redactor: std::sync::Arc<R>,
+    text: String,
+}
+#[async_trait]
+impl<R: Redactor + ?Sized> RequiredRedaction for RequiredOnce<R> {
+    async fn step(&mut self) -> Result<Option<RedactionOutput>, RedactError> {
+        self.redactor.redact_required(&self.text).await.map(Some)
+    }
+}
+
 /// Anything that takes text and returns redacted text.
 ///
 /// Implementors **must** be safe to call concurrently and **must not**
@@ -163,6 +181,16 @@ pub struct RedactionOutput {
 /// [`redact`](Redactor::redact) from many tasks concurrently.
 #[async_trait]
 pub trait Redactor: Send + Sync {
+    fn required_session(self: std::sync::Arc<Self>, text: String) -> Box<dyn RequiredRedaction>
+    where
+        Self: 'static,
+    {
+        Box::new(RequiredOnce {
+            redactor: self,
+            text,
+        })
+    }
+
     /// A short identifier — historically written into the database
     /// `redaction_version` column. The column is gone (the 20260507
     /// drop-duplicates migration removed re-redaction tracking — the
@@ -184,6 +212,21 @@ pub trait Redactor: Send + Sync {
     /// Composite adapters override this when ordinary reads permit fallback.
     async fn redact_complete(&self, text: &str) -> Result<RedactionOutput, RedactError> {
         self.redact(text).await
+    }
+
+    /// Strict release processing requires an actual configured model. Regex
+    /// adapters deliberately do not claim this capability.
+    fn provides_model_detection(&self) -> bool {
+        false
+    }
+
+    async fn redact_required(&self, text: &str) -> Result<RedactionOutput, RedactError> {
+        if !self.provides_model_detection() {
+            return Err(RedactError::Unavailable(
+                "required PII model is unavailable".into(),
+            ));
+        }
+        self.redact_complete(text).await
     }
 
     /// Preferred number of inputs for one backend inference call.
@@ -226,4 +269,24 @@ pub trait Redactor: Send + Sync {
     ) -> Result<Option<(RedactionOutput, RedactionMap)>, RedactError> {
         Ok(None)
     }
+}
+
+/// Desired detector contract, available before model initialization succeeds.
+/// Adapter model upgrades must bump their existing version constants.
+pub fn release_model_identity() -> String {
+    let mut versions = vec![
+        format!("tinfoil:{}", adapters::tinfoil::TINFOIL_REDACTOR_VERSION),
+        format!(
+            "tinfoil-image:{}",
+            adapters::tinfoil_image::TINFOIL_IMAGE_VERSION
+        ),
+        format!("rfdetr:{}", adapters::rfdetr::RFDETR_VERSION),
+        format!("mlx:{}", adapters::rfdetr_mlx::VERSION),
+    ];
+    #[cfg(feature = "onnx-cpu")]
+    versions.push(format!("onnx:{}", adapters::onnx::ONNX_REDACTOR_VERSION));
+    #[cfg(feature = "opf-text")]
+    versions.push(format!("opf:{}", adapters::opf::OPF_TEXT_VERSION));
+    versions.shrink_to_fit();
+    versions.join(";")
 }

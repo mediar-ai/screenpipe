@@ -1,16 +1,13 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 
-use super::{report_failure, select, Identity, Request, Response, Selection, PROTOCOL};
+use super::{report_failure, select, Identity, Selection};
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::{
     fs::{File, OpenOptions},
-    os::unix::{
-        fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
-        io::AsRawFd,
-    },
+    os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -19,15 +16,12 @@ use std::{
     time::Duration,
 };
 use tauri::Manager;
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{UnixListener, UnixStream},
-};
 
-#[path = "signing.rs"]
-mod signing;
 #[path = "kernel_signature.rs"]
 mod kernel_signature;
+#[path = "signing.rs"]
+mod signing;
+pub(crate) use signing::process_stamp;
 
 const WAIT: Duration = Duration::from_secs(30);
 const EXPECTED_BUILD_ENV: &str = "SCREENPIPE_MANUAL_HANDOFF_BUILD";
@@ -39,7 +33,6 @@ static CAPTURE_BEFORE_HANDOFF: AtomicBool = AtomicBool::new(false);
 struct Runtime {
     identity: Identity,
     requirement: String,
-    socket: PathBuf,
     lock: PathBuf,
     root: PathBuf,
     executable_stamp: (u64, u64, i64, i64, u64),
@@ -60,7 +53,7 @@ fn manual_launch() -> bool {
 
 fn private_directory(root: &Path, identifier: &str) -> Result<PathBuf> {
     let hash = Sha256::digest(format!("{}:{identifier}", root.display()).as_bytes());
-    // Darwin sockaddr_un has only 104 bytes. Keep the owner-only path short.
+    // Retain the existing owner-only launch-lock directory across app versions.
     let digest = format!("{hash:x}");
     let directory = PathBuf::from(format!(
         "/tmp/screenpipe-handoff-{}-{}",
@@ -101,86 +94,6 @@ async fn acquire(path: &Path) -> Result<File> {
             Err(e) => return Err(e).context("another app launch has not finished"),
         }
     }
-}
-
-fn peer_token(stream: &UnixStream) -> Result<[u32; 8]> {
-    // The kernel audit token includes pidversion, unlike LOCAL_PEERPID. Security
-    // binds signature validation to the process that connected, even after PID reuse.
-    let mut token = [0u32; 8];
-    let mut len = std::mem::size_of_val(&token) as libc::socklen_t;
-    let result = unsafe {
-        libc::getsockopt(
-            stream.as_raw_fd(),
-            0,     /* SOL_LOCAL */
-            0x006, /* LOCAL_PEERTOKEN, sys/un.h */
-            token.as_mut_ptr().cast(),
-            &mut len,
-        )
-    };
-    if result != 0 || len as usize != std::mem::size_of_val(&token) {
-        bail!("could not authenticate local peer audit token");
-    }
-    Ok(token)
-}
-
-fn authenticated_peer(stream: &UnixStream, requirement: &str) -> Result<i32> {
-    signing::verify_audit_token(&peer_token(stream)?, requirement)
-}
-
-async fn read_message<T: serde::de::DeserializeOwned>(stream: &mut UnixStream) -> Result<T> {
-    let mut bytes = Vec::new();
-    // A length cap prevents even a same-user local client from allocating unbounded memory.
-    use tokio::io::AsyncReadExt;
-    let mut reader = BufReader::new(stream.take(8193));
-    tokio::time::timeout(WAIT, reader.read_until(b'\n', &mut bytes)).await??;
-    if bytes.len() > 8192 || bytes.last() != Some(&b'\n') {
-        bail!("invalid handoff message");
-    }
-    Ok(serde_json::from_slice(&bytes)?)
-}
-
-async fn write_message<T: serde::Serialize>(stream: &mut UnixStream, message: &T) -> Result<()> {
-    let mut bytes = serde_json::to_vec(message)?;
-    bytes.push(b'\n');
-    tokio::time::timeout(WAIT, stream.write_all(&bytes)).await??;
-    Ok(())
-}
-
-async fn exchange(runtime: &Runtime, replace: bool) -> Result<Option<Response>> {
-    let mut stream = match UnixStream::connect(&runtime.socket).await {
-        Ok(stream) => stream,
-        Err(e)
-            if matches!(
-                e.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
-            ) =>
-        {
-            return Ok(None)
-        }
-        Err(e) => return Err(e.into()),
-    };
-    let pid = authenticated_peer(&stream, &runtime.requirement)?;
-    let stamp = signing::process_stamp(pid)?;
-    let hash = signing::process_hash(pid)?;
-    authenticated_peer(&stream, &runtime.requirement)?;
-    write_message(
-        &mut stream,
-        &Request {
-            protocol: PROTOCOL,
-            replace,
-        },
-    )
-    .await?;
-    let response: Response = read_message(&mut stream).await?;
-    if response.protocol != PROTOCOL
-        || response.identity.pid != pid
-        || response.identity.identifier != runtime.identity.identifier
-        || (response.identity.uid, response.identity.started) != stamp
-        || response.identity.hash != hash
-    {
-        bail!("instance identity changed during handshake");
-    }
-    Ok(Some(response))
 }
 
 async fn wait_for_exit(old: &Identity) -> Result<()> {
@@ -240,50 +153,18 @@ async fn initialize_inner(root: PathBuf) -> Result<()> {
     let runtime = Runtime {
         identity,
         requirement,
-        socket: directory.join("ipc"),
         lock: directory.join("launch"),
         executable_stamp,
         root,
     };
     let lock = acquire(&runtime.lock).await?;
-    let existing = exchange(&runtime, false).await?;
-    if let Some(old) = existing {
-        record_selection(&runtime, &old.identity, &runtime.identity);
-        let mut replaced = false;
-        if manual_launch() {
-            match select(&old.identity, &runtime.identity) {
-                Selection::Replace => {
-                    verify_selected_bundle(&runtime)?;
-                    let reply = exchange(&runtime, true)
-                        .await?
-                        .context("old instance disappeared before handoff")?;
-                    if reply.outcome != "exiting" {
-                        bail!("{}", reply.error.unwrap_or(reply.outcome));
-                    }
-                    wait_for_exit(&old.identity).await?;
-                    replaced = true;
-                }
-                Selection::Reject => {
-                    bail!("the opened copy is older or belongs to a different edition")
-                }
-                Selection::Focus => {}
-            }
-        }
-        if !replaced {
-            // A verified identical build (or background/deep-link launch) must
-            // never fall through to engine initialization if focus is unavailable.
-            focus_existing(&old.identity).await?;
-            std::process::exit(0);
-        }
-    } else if manual_launch() {
-        legacy_takeover(&runtime).await?;
-    }
+    takeover(&runtime).await?;
     let _ = RUNTIME.set(runtime);
     *LAUNCH_LOCK.lock().unwrap_or_else(|e| e.into_inner()) = Some(lock);
     Ok(())
 }
 
-// Revalidate the selected bundle immediately before asking the old owner to exit.
+// Revalidate the selected bundle immediately before terminating the old owner.
 fn verify_selected_bundle(runtime: &Runtime) -> Result<()> {
     let verified = signing::on_disk(
         &runtime.identity.executable,
@@ -298,10 +179,7 @@ fn verify_selected_bundle(runtime: &Runtime) -> Result<()> {
 }
 
 async fn focus_existing(old: &Identity) -> Result<()> {
-    let port = std::env::var("SCREENPIPE_FOCUS_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(11435);
+    let port = focus_port();
     verify_listener(old.pid, port).await?;
     let args: Vec<String> = std::env::args().collect();
     let deep_link_url = crate::deep_link::url_from_args(&args);
@@ -322,6 +200,13 @@ async fn focus_existing(old: &Identity) -> Result<()> {
     Ok(())
 }
 
+fn focus_port() -> u16 {
+    std::env::var("SCREENPIPE_FOCUS_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(11435)
+}
+
 fn record_selection(runtime: &Runtime, source: &Identity, target: &Identity) {
     crate::update_diagnostics::append(
         &runtime.root,
@@ -334,97 +219,17 @@ fn record_selection(runtime: &Runtime, source: &Identity, target: &Identity) {
     );
 }
 
-pub(crate) fn install(app: &tauri::AppHandle) -> Result<()> {
+pub(crate) fn install(_app: &tauri::AppHandle) -> Result<()> {
     let Some(runtime) = RUNTIME.get() else {
         return Ok(());
     };
-    // The startup lock excludes other new builds. A stale socket has no live peer.
-    if runtime.socket.exists() {
-        std::fs::remove_file(&runtime.socket)?;
-    }
-    let listener = UnixListener::bind(&runtime.socket)?;
-    std::fs::set_permissions(&runtime.socket, std::fs::Permissions::from_mode(0o600))?;
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        while let Ok((mut stream, _)) = listener.accept().await {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = serve(&app, runtime, &mut stream).await {
-                    report_failure(&runtime.root, "request", &format!("{error:#}"));
-                }
-            });
-        }
-    });
     LAUNCH_LOCK.lock().unwrap_or_else(|e| e.into_inner()).take();
     crate::update_diagnostics::append(
         &runtime.root,
         "manual_handoff_ready",
-        &format!(
-            "identity={}; requirement={}",
-            serde_json::to_string(&runtime.identity).unwrap_or_default(),
-            runtime.requirement
-        ),
+        &format!("identity={}", serde_json::to_string(&runtime.identity)?),
     );
     Ok(())
-}
-
-async fn serve(app: &tauri::AppHandle, runtime: &Runtime, stream: &mut UnixStream) -> Result<()> {
-    let pid = authenticated_peer(stream, &runtime.requirement)?;
-    let peer = signing::running(pid, &runtime.requirement)?;
-    authenticated_peer(stream, &runtime.requirement)?;
-    if peer.identifier != runtime.identity.identifier {
-        bail!("different app edition");
-    }
-    let request: Request = read_message(stream).await?;
-    if request.protocol != PROTOCOL {
-        bail!("unsupported handoff protocol");
-    }
-    let mut response = Response {
-        protocol: PROTOCOL,
-        identity: runtime.identity.clone(),
-        outcome: "running".into(),
-        error: None,
-    };
-    if !request.replace {
-        return write_message(stream, &response).await;
-    }
-    if select(&runtime.identity, &peer) != Selection::Replace {
-        bail!("incoming build is not a replacement");
-    }
-    // Also validate all on-disk resources before the healthy owner gives up its API.
-    let candidate = signing::on_disk(&peer.executable, &runtime.requirement, &peer)?;
-    if candidate.hash != peer.hash {
-        bail!("incoming bundle changed during launch");
-    }
-    record_selection(runtime, &runtime.identity, &peer);
-    match prepare(app).await {
-        Ok(guard) => {
-            if !signing::is_same_process(&peer) {
-                recover(app);
-                bail!("incoming process exited before handoff");
-            }
-            response.outcome = "exiting".into();
-            if let Err(error) = write_message(stream, &response).await {
-                recover(app);
-                return Err(error);
-            }
-            crate::update_diagnostics::append(
-                &runtime.root,
-                "manual_handoff_drained",
-                "outcome=exiting; staged_install=suppressed",
-            );
-            // Keep native initialization excluded until the process is gone.
-            std::mem::forget(guard);
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            crate::process_exit::force_process_exit(0);
-        }
-        Err(error) => {
-            response.outcome = "failed".into();
-            response.error = Some(format!("{error:#}"));
-            write_message(stream, &response).await?;
-            Err(error)
-        }
-    }
 }
 
 async fn prepare(app: &tauri::AppHandle) -> Result<tokio::sync::RwLockWriteGuard<'static, ()>> {
@@ -471,7 +276,7 @@ async fn prepare(app: &tauri::AppHandle) -> Result<tokio::sync::RwLockWriteGuard
         let drain_started_at = std::time::Instant::now();
         // The five-second forced-exit budget is too short for an active
         // recorder (capture + durable database close took 6.5s in acceptance).
-        // Use the existing IPC reply deadline instead. Exceeding it cancels
+        // Use the existing handoff deadline instead. Exceeding it cancels
         // this replacement, but the owned stop task still finishes and the
         // previous owner recovers without abandoning pending writes.
         match wait_for_drain(stop, WAIT).await {
@@ -625,7 +430,7 @@ fn show_error(message: &str) {
         .args(["-e", "on run argv\ndisplay alert \"Screenpipe couldn't switch versions\" message (item 1 of argv)\nend run", "--", message]).spawn();
 }
 
-async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
+async fn takeover(runtime: &Runtime) -> Result<()> {
     let name = runtime
         .identity
         .executable
@@ -634,7 +439,8 @@ async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
     for pid in signing::candidates(name)? {
         if let Err(error) = signing::verify_process(pid, &runtime.requirement) {
             if signing::claimed_identifier(pid).as_deref() == Some(&runtime.identity.identifier)
-                || signing::process_path(pid).ok().as_ref() == Some(&runtime.identity.executable) {
+                || signing::process_path(pid).ok().as_ref() == Some(&runtime.identity.executable)
+            {
                 bail!("cannot authenticate the existing Screenpipe process {pid}: {error:#}");
             }
             continue;
@@ -644,63 +450,71 @@ async fn legacy_takeover(runtime: &Runtime) -> Result<()> {
             continue;
         }
         record_selection(runtime, &old, &runtime.identity);
+        if !manual_launch() {
+            focus_existing(&old).await?;
+            std::process::exit(0);
+        }
         match select(&old, &runtime.identity) {
-            Selection::Focus => {
+            Selection::Focus if owns_listener(pid, focus_port()).await? => {
                 focus_existing(&old).await?;
                 std::process::exit(0);
             }
             Selection::Reject => bail!("the opened copy is older than the running build"),
-            Selection::Replace => verify_selected_bundle(runtime)?,
+            Selection::Focus | Selection::Replace => verify_selected_bundle(runtime)?,
         }
-        let settings = crate::store::read_startup_store(&runtime.root.join("store.bin"))
-            .map_err(anyhow::Error::msg)?;
-        let settings = settings.get("settings").unwrap_or(&settings);
-        let settings: crate::store::SettingsStore = serde_json::from_value(settings.clone())?;
-        let data_dir = crate::config::selected_recording_data_dir(&settings.data_dir)?;
-        let mut api = crate::recording::LocalApiContext {
-            port: std::env::var("SCREENPIPE_PORT")
-                .ok()
-                .and_then(|p| p.parse().ok())
-                .unwrap_or(settings.recording.port),
-            api_key: std::env::var("SCREENPIPE_API_KEY")
-                .ok()
-                .filter(|k| !k.is_empty())
-                .or_else(|| {
-                    (!settings.recording.api_key.is_empty()).then_some(settings.recording.api_key)
-                }),
-        };
-        if api.api_key.is_none() {
-            api.api_key =
-                screenpipe_engine::auth_key::find_api_auth_key_for_data_dir(&data_dir).await;
-        }
-        if api.api_key.is_none() {
-            bail!("cannot authenticate the legacy search API without its existing key");
-        }
-        verify_listener(pid, api.port).await?;
-        verify_legacy_stopped(&api).await?;
-        // Recheck both immediately before targeting the exact process. Never kill by name/port.
-        verify_listener(pid, api.port).await?;
-        verify_legacy_stopped(&api).await?;
-        if !signing::is_same_process(&old) {
-            bail!("legacy process changed before termination");
-        }
-        if unsafe { libc::kill(old.pid, libc::SIGTERM) } != 0 {
-            return Err(std::io::Error::last_os_error()).context("legacy termination failed");
-        }
-        wait_for_exit(&old).await?;
-        crate::update_diagnostics::append(
-            &runtime.root,
-            "manual_handoff_legacy_exited",
-            "outcome=selected_copy_starting; capture=stopped",
-        );
+        // Opening another copy explicitly selects it. Do not require the old
+        // app's socket, API key, or recording state to cooperate with replacement.
+        retire_previous(&runtime.root, &old).await?;
     }
     Ok(())
 }
 
 async fn verify_listener(pid: i32, port: u16) -> Result<()> {
+    if !owns_listener(pid, port).await? {
+        bail!("process {pid} is not listening on port {port}");
+    }
+    Ok(())
+}
+
+async fn retire_previous(root: &Path, old: &Identity) -> Result<()> {
+    crate::update_diagnostics::append(
+        root,
+        "manual_handoff_terminate",
+        &format!(
+            "pid={}; cause=opened_copy_selected; action=terminate_verified_process",
+            old.pid
+        ),
+    );
+    terminate_previous(old).await?;
+    crate::update_diagnostics::append(
+        root,
+        "manual_handoff_previous_exited",
+        "outcome=selected_copy_starting; cause=opened_copy_selected",
+    );
+    Ok(())
+}
+
+// Call only after verifying the process and the selected bundle. Recheck the
+// process generation immediately before signalling; never terminate by name/port.
+async fn terminate_previous(old: &Identity) -> Result<()> {
+    if !signing::is_same_process(old) {
+        bail!(
+            "previous process changed before termination; pid={}",
+            old.pid
+        );
+    }
+    if unsafe { libc::kill(old.pid, libc::SIGTERM) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("previous process termination failed; pid={}", old.pid));
+    }
+    wait_for_exit(old).await
+}
+
+async fn owns_listener(pid: i32, port: u16) -> Result<bool> {
     let output = tokio::time::timeout(
         Duration::from_secs(3),
         tokio::process::Command::new("/usr/sbin/lsof")
+            .kill_on_drop(true)
             .args([
                 "-nP",
                 "-a",
@@ -712,64 +526,144 @@ async fn verify_listener(pid: i32, port: u16) -> Result<()> {
             ])
             .output(),
     )
-    .await??;
-    if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != pid.to_string()
-    {
-        bail!("legacy API listener does not belong to the verified app");
+    .await
+    .with_context(|| format!("listener inspection timed out; pid={pid}; port={port}"))?
+    .with_context(|| format!("could not inspect listener; pid={pid}; port={port}"))?;
+    // lsof uses exit 1 with empty output for no matching descriptors. Other
+    // failures must retain their cause rather than masquerading as a stale app.
+    if output.status.code() == Some(1) && output.stdout.is_empty() && output.stderr.is_empty() {
+        return Ok(false);
     }
-    Ok(())
-}
-
-async fn verify_legacy_stopped(api: &crate::recording::LocalApiContext) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(3))
-        .build()?;
-    let unauthenticated = client.get(api.url("/pipes")).send().await?;
-    if !matches!(unauthenticated.status().as_u16(), 401 | 403) {
-        bail!("legacy API does not enforce authentication; cannot verify search-only ownership");
+    if !output.status.success() {
+        bail!(
+            "listener inspection failed; pid={pid}; port={port}; status={}; cause={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+        );
     }
-    // This read-only route is blocked by the shipped search-only middleware.
-    let response = api.apply_auth(client.get(api.url("/pipes"))).send().await?;
-    if response.status() != reqwest::StatusCode::CONFLICT
-        || response.json::<serde_json::Value>().await?["error"] != "search_only"
-    {
-        bail!("legacy app is not in search-only mode");
-    }
-    for (route, field) in [
-        ("/audio/device/status", "is_running"),
-        ("/vision/device/status", "active"),
-    ] {
-        let response = api
-            .apply_auth(client.get(api.url(route)))
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<serde_json::Value>()
-            .await?;
-        let devices = response
-            .as_array()
-            .context("capture status is unavailable")?;
-        if devices.iter().any(|d| d[field].as_bool() != Some(false)) {
-            bail!("legacy capture has not stopped");
-        }
-    }
-    let health = api
-        .apply_auth(client.get(api.url("/health")))
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<serde_json::Value>()
-        .await?;
-    if health["ui_recorder"]["running"].as_bool() != Some(false) {
-        bail!("legacy UI capture has not been verified stopped");
-    }
-    Ok(())
+    let expected = pid.to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(!stdout.trim().is_empty() && stdout.lines().all(|line| line.trim() == expected))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_process_identity(pid: i32) -> Identity {
+        let (uid, started) = signing::process_stamp(pid).unwrap();
+        Identity {
+            pid,
+            uid,
+            started,
+            hash: signing::process_hash(pid).unwrap(),
+            executable: signing::process_path(pid).unwrap(),
+            identifier: "test".into(),
+            version: "1.0.0".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn replacement_retires_only_the_selected_process_without_ipc() {
+        let root = tempfile::tempdir().unwrap();
+        // This process owns the port; the stale process must not send it an
+        // API key or terminate it merely because it has the configured port.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let owner = test_process_identity(std::process::id() as i32);
+        let ready = root.path().join("ready");
+        let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "manual_handoff::macos::tests::replacement_process_fixture",
+            ])
+            .env("SCREENPIPE_HANDOFF_TEST_READY", &ready)
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        tokio::time::timeout(WAIT, async {
+            while !ready.exists() {
+                assert!(
+                    child.try_wait().unwrap().is_none(),
+                    "fixture exited before ready"
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let active_port: u16 = std::fs::read_to_string(&ready).unwrap().parse().unwrap();
+        let old = test_process_identity(child.id().unwrap() as i32);
+        assert!(owns_listener(old.pid, active_port).await.unwrap());
+        let exited = tokio::spawn(async move { child.wait().await.unwrap() });
+        retire_previous(root.path(), &old).await.unwrap();
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(exited.await.unwrap().signal(), Some(libc::SIGTERM));
+        // The selected process's live listener is released; the new copy can
+        // own it even though the previous process never answered IPC or HTTP.
+        let _replacement_listener = tokio::net::TcpListener::bind(("127.0.0.1", active_port))
+            .await
+            .unwrap();
+        assert!(owns_listener(owner.pid, port).await.unwrap());
+        assert!(signing::is_same_process(&owner));
+
+        // Recovery evidence uses the real collector after app-log rotation.
+        for day in 1..=7 {
+            std::fs::write(
+                root.path()
+                    .join(format!("screenpipe-app.2026-10-{day:02}.log")),
+                "restart\n",
+            )
+            .unwrap();
+        }
+        let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[root.path().into()])
+            .await
+            .unwrap();
+        assert!(report.contains("opened_copy_selected"));
+        assert!(report.contains(&format!("pid={}", old.pid)));
+        assert!(report.contains("outcome=selected_copy_starting"));
+
+        drop(listener);
+        assert!(!owns_listener(owner.pid, port).await.unwrap());
+    }
+
+    #[test]
+    fn replacement_process_fixture() {
+        let Some(ready) = std::env::var_os("SCREENPIPE_HANDOFF_TEST_READY") else {
+            return;
+        };
+        let _listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let ready = PathBuf::from(ready);
+        let staged = ready.with_extension("pending");
+        std::fs::write(&staged, _listener.local_addr().unwrap().port().to_string()).unwrap();
+        std::fs::rename(staged, ready).unwrap();
+        loop {
+            std::thread::park();
+        }
+    }
+
+    #[tokio::test]
+    async fn stale_identity_never_terminates_the_reused_pid_and_failure_reaches_support() {
+        let root = tempfile::tempdir().unwrap();
+        let mut old = test_process_identity(std::process::id() as i32);
+        old.started -= 1;
+        let error = retire_previous(root.path(), &old).await.unwrap_err();
+        report_failure(root.path(), "launch", &format!("{error:#}"));
+        for day in 1..=7 {
+            std::fs::write(
+                root.path()
+                    .join(format!("screenpipe-app.2026-10-{day:02}.log")),
+                "restart\n",
+            )
+            .unwrap();
+        }
+        let report = crate::diagnostic_logs::collect_redacted_from_dirs(&[root.path().into()])
+            .await
+            .unwrap();
+        assert!(report.contains("previous process changed before termination"));
+        assert!(report.contains("outcome=selected_copy_not_started"));
+        assert!(!report.contains("manual_handoff_previous_exited"));
+    }
 
     #[tokio::test]
     async fn completed_drain_and_originating_failure_reach_handoff() {
@@ -810,37 +704,6 @@ mod tests {
         finish.send(()).unwrap();
         let _recovery = lifecycle.lock().await;
         assert!(flushed.load(Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn socket_uses_os_peer_and_rejects_supplied_pid() {
-        let (mut left, right) = UnixStream::pair().unwrap();
-        let requirement = signing::own_requirement().unwrap();
-        assert_eq!(
-            authenticated_peer(&right, &requirement).unwrap(),
-            std::process::id() as i32
-        );
-        left.write_all(b"{\"protocol\":1,\"replace\":true,\"pid\":1}\n")
-            .await
-            .unwrap();
-        let mut right = right;
-        assert!(read_message::<Request>(&mut right).await.is_err());
-    }
-
-    #[tokio::test]
-    async fn stale_peer_process_generation_is_rejected() {
-        let (_left, right) = UnixStream::pair().unwrap();
-        let mut token = peer_token(&right).unwrap();
-        token[7] = token[7].wrapping_add(1);
-        assert!(signing::verify_audit_token(&token, &signing::own_requirement().unwrap()).is_err());
-    }
-
-    #[tokio::test]
-    async fn oversized_request_is_rejected() {
-        let (mut left, mut right) = UnixStream::pair().unwrap();
-        let writer = tokio::spawn(async move { left.write_all(&vec![b'x'; 8193]).await });
-        assert!(read_message::<Request>(&mut right).await.is_err());
-        writer.await.unwrap().unwrap();
     }
 
     #[tokio::test]
@@ -897,76 +760,5 @@ mod tests {
         std::fs::write(&replacement, "new").unwrap();
         std::fs::rename(&replacement, &path).unwrap();
         assert_ne!(before, file_stamp(&path).unwrap());
-    }
-
-    #[tokio::test]
-    async fn legacy_takeover_requires_authenticated_search_only_and_stopped_devices() {
-        use axum::{routing::get, Json, Router};
-        use serde_json::json;
-        use std::sync::Arc;
-        let active = Arc::new(AtomicBool::new(false));
-        let audio_active = active.clone();
-        let router =
-            Router::new()
-                .route(
-                    "/pipes",
-                    get(|headers: axum::http::HeaderMap| async move {
-                        if headers.get("authorization").and_then(|v| v.to_str().ok())
-                            == Some("Bearer handoff-test")
-                        {
-                            (
-                                axum::http::StatusCode::CONFLICT,
-                                Json(json!({"error":"search_only"})),
-                            )
-                        } else {
-                            (
-                                axum::http::StatusCode::UNAUTHORIZED,
-                                Json(json!({"error":"unauthorized"})),
-                            )
-                        }
-                    }),
-                )
-                .route(
-                    "/audio/device/status",
-                    get(move || {
-                        let audio_active = audio_active.clone();
-                        async move {
-                            Json(json!([{ "is_running": audio_active.load(Ordering::SeqCst) }]))
-                        }
-                    }),
-                )
-                .route(
-                    "/vision/device/status",
-                    get(|| async { Json(json!([{ "active":false }])) }),
-                )
-                .route(
-                    "/health",
-                    get(|| async { Json(json!({ "ui_recorder": {"running":false} })) }),
-                );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let listener = listener.into_std().unwrap();
-        let server = tokio::spawn(async move {
-            axum::Server::from_tcp(listener)
-                .unwrap()
-                .serve(router.into_make_service())
-                .await
-                .unwrap()
-        });
-        let mut api = crate::recording::LocalApiContext {
-            port,
-            api_key: Some("handoff-test".into()),
-        };
-        verify_legacy_stopped(&api).await.unwrap();
-        active.store(true, Ordering::SeqCst);
-        assert!(verify_legacy_stopped(&api)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("capture has not stopped"));
-        active.store(false, Ordering::SeqCst);
-        api.api_key = Some("wrong-key".into());
-        assert!(verify_legacy_stopped(&api).await.is_err());
-        server.abort();
     }
 }

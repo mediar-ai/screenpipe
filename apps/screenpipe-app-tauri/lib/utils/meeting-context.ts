@@ -129,6 +129,17 @@ function sortAudioChunks(chunks: MeetingAudioChunk[]): MeetingAudioChunk[] {
   });
 }
 
+/** Provider speaker numbers restart on each stream, so qualify generic labels by source. */
+export function sourceQualifiedSpeakerName(
+  speakerName: string,
+  deviceType: string | undefined,
+): string {
+  if (!/^speaker(?:[ _]\d+)?$/i.test(speakerName.trim())) return speakerName;
+  const direction = deviceType?.trim().toLowerCase();
+  const source = direction === "input" ? "Microphone" : direction === "output" ? "Meeting audio" : "Unidentified";
+  return `${source} · ${speakerName}`;
+}
+
 interface SpeakerTurn {
   speakerName: string;
   /** Timestamp of the first chunk in this turn — used for display. */
@@ -154,7 +165,7 @@ function groupConsecutiveSpeakerTurns(
   const MAX_GAP_MS = 10_000;
   const turns: SpeakerTurn[] = [];
   for (const c of chunks) {
-    const speakerName = c.speakerName ?? "";
+    const speakerName = sourceQualifiedSpeakerName(c.speakerName ?? "", c.deviceType);
     const text = c.transcription.replace(/\s+/g, " ").trim();
     if (!text) continue;
     const last = turns[turns.length - 1];

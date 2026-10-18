@@ -1,0 +1,23 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+import { expect, mock, test } from 'bun:test';
+mock.module('@/lib/api',()=>({localFetch:async()=>{throw Error('Unexpected local API call');}}));
+const {renderMeetingTranscript:render,buildMeetingMarkdown}=await import('./meeting-context.ts');
+const chunk=(overrides:Record<string,unknown>={})=>({audioChunkId:1,audioFilePath:'/synthetic/audio',speakerId:null,speakerName:'speaker 1',deviceType:'output',isInput:false,transcription:'remote words',timestamp:'2026-01-01T00:00:01Z',source:'live',...overrides});
+const pair=(name='speaker 1')=>[chunk({speakerName:name}),chunk({audioChunkId:2,speakerName:name,deviceType:'input',isInput:true,transcription:'local words',timestamp:'2026-01-01T00:00:03Z'})];
+for(const name of ['speaker 1','SPEAKER_2','speaker'])test(`source labels stay separate: ${name}`,()=>{
+ const lines=render(pair(name)).split('\n');expect(lines).toHaveLength(2);
+ expect(lines[0]).toContain(`[Meeting audio · ${name}] remote words`);expect(lines[1]).toContain(`[Microphone · ${name}] local words`);
+});
+test('unknown direction stays distinct from known microphone',()=>{const rows=pair();rows[0].deviceType='';const lines=render(rows).split('\n');expect(lines).toHaveLength(2);expect(lines[0]).toContain('[Unidentified · speaker 1] remote words');expect(lines[1]).toContain('[Microphone · speaker 1] local words');});
+test('full meeting markdown uses the same qualified transcript and preserves notes',()=>{
+ const markdown=buildMeetingMarkdown({meeting:{id:42,title:'Synthetic meeting',meeting_start:'2026-01-01T00:00:00Z',meeting_end:'2026-01-01T00:01:00Z',note:'Preserved note'},context:null,transcript:pair()});
+ expect(markdown).toContain('[Meeting audio · speaker 1] remote words');expect(markdown).toContain('[Microphone · speaker 1] local words');expect(markdown).toContain('## Notes\n\nPreserved note');
+});
+test('named identity remains unchanged and groups across sources',()=>{const lines=render(pair('Jordan')).split('\n');expect(lines).toHaveLength(1);expect(lines[0]).toContain('[Jordan] remote words local words');});
+test('names resembling generic labels are not relabeled',()=>{for(const name of ['speaker coach','speaker-1','SpeakerOne'])expect(render([chunk({speakerName:name})])).toContain(`[${name}] remote words`);});
+test('same source neighboring chunks still coalesce',()=>{const rows=pair();rows[1].deviceType='output';const lines=render(rows).split('\n');expect(lines).toHaveLength(1);expect(lines[0]).toEndWith('remote words local words');});
+test('ten second gap separates otherwise matching turns',()=>{const rows=pair('Jordan');rows[1].timestamp='2026-01-01T00:00:11Z';expect(render(rows).split('\n')).toHaveLength(2);});
+test('sorts by timestamp without changing chunks or stored speaker identities',()=>{const rows=pair('Jordan').reverse();const before=JSON.stringify(rows);expect(render(rows)).toContain('remote words local words');expect(JSON.stringify(rows)).toBe(before);});
+test('empty inputs and blank text produce no transcript',()=>{expect(render(null)).toBe('');expect(render([])).toBe('');expect(render([chunk({transcription:' \n  '})])).toBe('');});
+test('normalizes text whitespace and preserves unknown unlabelled speaker',()=>{const out=render([chunk({speakerName:'unknown',transcription:'  preserved \n words  '})]);expect(out).toEndWith('preserved words');expect(out).not.toContain('[');});

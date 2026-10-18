@@ -97,6 +97,61 @@ fn audio_backlog_is_stalled(
     backlog_deep_and_old && no_recent_progress
 }
 
+// This predicate is shared by the live health route and its regression eval.
+fn vision_persistence_stalled(
+    now: u64,
+    last_attempt: u64,
+    last_progress: u64,
+    uptime_secs: f64,
+    threshold: u64,
+) -> bool {
+    if uptime_secs <= 120.0 || last_attempt == 0 {
+        return false;
+    }
+    let capture_fresh = now.saturating_sub(last_attempt) < threshold;
+    // Never having made progress is a failure after warm-up, not perpetual startup.
+    let db_stale = last_progress == 0 || now.saturating_sub(last_progress) > threshold;
+    capture_fresh && db_stale
+}
+
+#[cfg(test)]
+mod persistence_startup_regression {
+    use super::vision_persistence_stalled;
+    #[test]
+    fn startup_and_freshness_boundaries_and_recovery() {
+        for (attempt, progress, uptime, expected) in [
+            (999, 0, 119.0, false),
+            (999, 0, 120.0, false),
+            (999, 0, 120.001, true),
+            (0, 0, 300.0, false),
+            (940, 0, 300.0, false),
+            (941, 0, 300.0, true),
+            (999, 940, 300.0, false),
+            (999, 939, 300.0, true),
+            (999, 999, 300.0, false),
+            (999, 1001, 300.0, false),
+        ] {
+            assert_eq!(
+                vision_persistence_stalled(1000, attempt, progress, uptime, 60),
+                expected,
+                "attempt={attempt} progress={progress} uptime={uptime}"
+            );
+        }
+        assert!(vision_persistence_stalled(1000, 999, 0, 300.0, 60));
+        assert!(!vision_persistence_stalled(1001, 1001, 1001, 301.0, 60));
+    }
+    #[test]
+    fn active_capture_with_no_success_after_warmup_is_stalled() {
+        assert!(vision_persistence_stalled(1000, 999, 0, 121.0, 60));
+    }
+    #[test]
+    fn recent_progress_and_idle_capture_are_not_write_stalls() {
+        assert!(!vision_persistence_stalled(1000, 999, 990, 121.0, 60));
+        assert!(!vision_persistence_stalled(1000, 800, 800, 121.0, 60));
+        assert!(vision_persistence_stalled(1000, 999, 800, 121.0, 60));
+    }
+}
+
 /// Describe the most likely cause of a DB-write stall from pool stats.
 /// Old message always said "pool exhaustion likely" which was wrong when the
 /// real cause was elsewhere (e.g. metrics gap on reconciliation path) and the
@@ -723,7 +778,10 @@ pub struct HealthCheckResponse {
     /// How many times the persistent-failure hook fired (engine-restart requests).
     #[serde(default)]
     pub persistent_failure_signals: u64,
-    /// True when vision capture loop is alive but DB writes have stopped (pool exhaustion).
+    /// macOS monitor focus has remained unresolved beyond the grace period.
+    #[serde(default)]
+    pub vision_focus_unresolved: bool,
+    /// Capture attempts are fresh but persistence progress is stale after warm-up.
     #[serde(default)]
     pub vision_db_write_stalled: bool,
     /// True when audio devices are active but DB writes have stopped (pool exhaustion).
@@ -1032,6 +1090,7 @@ fn degraded_response() -> HealthCheckResponse {
         write_queue_consecutive_contention: 0,
         write_pool_reopens: 0,
         persistent_failure_signals: 0,
+        vision_focus_unresolved: false,
         vision_db_write_stalled: false,
         audio_db_write_stalled: false,
         drm_content_paused: false,
@@ -1319,19 +1378,14 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
     // Detect DB write stalls: capture loop is alive (heartbeat fresh) but DB
     // writes have stopped. This indicates pool exhaustion or DB lock contention
     // — data is being captured but silently lost.
-    let vision_db_write_stalled = if !state.vision_disabled
-        && vision_capture_expected
-        && vision_snap.last_capture_attempt_ts > 0
-        && vision_snap.uptime_secs > 120.0
-    {
-        let capture_fresh =
-            now_ts.saturating_sub(vision_snap.last_capture_attempt_ts) < threshold_secs;
-        // Require at least one successful DB write before flagging a stall.
-        // last_db_write_ts == 0 means "never written yet" (pipeline warming up),
-        // not "writes stopped" — same fix as audio side.
-        let db_stale = vision_snap.last_db_write_ts > 0
-            && now_ts.saturating_sub(vision_snap.last_db_write_ts) > threshold_secs;
-        let stalled = capture_fresh && db_stale;
+    let vision_db_write_stalled = if !state.vision_disabled && vision_capture_expected {
+        let stalled = vision_persistence_stalled(
+            now_ts,
+            vision_snap.last_capture_attempt_ts,
+            vision_snap.last_db_write_ts,
+            vision_snap.uptime_secs,
+            threshold_secs,
+        );
 
         // Baseline captured on the transition into a stall so the classifier
         // sees what moved *during* it. Lifetime totals cannot answer
@@ -2008,6 +2062,16 @@ async fn health_check_inner(state: &Arc<AppState>) -> HealthCheckResponse {
         write_queue_consecutive_contention: wqh.consecutive_contention_batches(),
         write_pool_reopens: wqh.write_pool_reopens(),
         persistent_failure_signals: wqh.persistent_failure_signals(),
+        vision_focus_unresolved: cfg!(target_os = "macos")
+            && vision_capture_expected
+            && !state.vision_disabled
+            && !crate::sleep_monitor::screen_is_locked()
+            && state
+                .vision_manager
+                .load()
+                .as_ref()
+                .as_ref()
+                .is_some_and(|manager| manager.focus_resolution_degraded()),
         vision_db_write_stalled,
         audio_db_write_stalled,
         drm_content_paused: crate::drm_detector::drm_content_paused(),
@@ -2052,6 +2116,10 @@ fn add_health_reasons(response: &mut HealthCheckResponse) {
             &response.audio_status,
             "Check selected audio devices, permissions, and the transcription engine.",
         );
+    }
+    if response.vision_focus_unresolved {
+        add("vision", "focus_unresolved", "capture is running without resolved monitor focus",
+            "Inspect focus tracking and display topology. Frames remain unattributed until focus resolves.");
     }
     if response.write_queue_degraded {
         add(
@@ -2713,6 +2781,23 @@ mod tests {
         assert!(!response.unhealthy_reasons.is_empty());
     }
 
+    #[test]
+    fn unresolved_focus_degrades_health_even_with_fresh_frames() {
+        let mut response = dummy_response("healthy");
+        response.vision_focus_unresolved = true;
+        add_health_reasons(&mut response);
+        assert_eq!(response.status, "degraded");
+        assert_eq!(response.status_code, 503);
+        assert!(response
+            .unhealthy_reasons
+            .iter()
+            .any(|r| r["code"] == "focus_unresolved"));
+        let mut recovered = dummy_response("healthy");
+        add_health_reasons(&mut recovered);
+        assert_eq!(recovered.status, "healthy");
+        assert!(recovered.unhealthy_reasons.is_empty());
+    }
+
     fn dummy_response(status: &str) -> HealthCheckResponse {
         HealthCheckResponse {
             status: status.to_string(),
@@ -2753,6 +2838,7 @@ mod tests {
             write_queue_consecutive_contention: 0,
             write_pool_reopens: 0,
             persistent_failure_signals: 0,
+            vision_focus_unresolved: false,
             vision_db_write_stalled: false,
             audio_db_write_stalled: false,
             drm_content_paused: false,

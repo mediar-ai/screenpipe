@@ -131,10 +131,19 @@ fn current_record_mode_at(
 ///
 /// Checks every 30 seconds whether the current local time falls within the
 /// configured schedule rules. Updates `SCHEDULE_PAUSED` accordingly.
-pub fn start_schedule_monitor(rules: Vec<ScheduleRule>, mut shutdown: broadcast::Receiver<()>) {
+pub fn start_schedule_monitor(
+    rules: Vec<ScheduleRule>,
+    mut shutdown: broadcast::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    let windows = parse_schedule_windows(&rules);
+    // Establish the new session's policy before any capture task can run.
+    SCHEDULE_PAUSED.store(
+        !is_within_schedule_windows(&windows, &chrono::Local::now()),
+        Ordering::SeqCst,
+    );
     tokio::spawn(async move {
-        let windows = parse_schedule_windows(&rules);
         info!(
+            schedule_paused = schedule_paused(),
             "schedule monitor started with {} rules ({} valid windows)",
             rules.len(),
             windows.len()
@@ -166,7 +175,7 @@ pub fn start_schedule_monitor(rules: Vec<ScheduleRule>, mut shutdown: broadcast:
                 }
             }
         }
-    });
+    })
 }
 
 #[cfg(test)]
@@ -275,9 +284,27 @@ mod tests {
         assert!(is_within_schedule_windows(&windows, &now));
     }
 
-    #[test]
-    fn global_flag_default_unpaused() {
-        SCHEDULE_PAUSED.store(false, Ordering::SeqCst);
+    #[tokio::test]
+    async fn restart_after_scheduled_pause_applies_new_policy_before_capture() {
+        let (shutdown, _) = broadcast::channel(1);
+        // No allowed windows: even before the task is polled, capture is paused.
+        let task = start_schedule_monitor(vec![], shutdown.subscribe());
+        assert!(schedule_paused());
+        shutdown.send(()).unwrap();
+        task.await.unwrap();
+
+        // The desktop stays in the same process when the user disables the
+        // schedule and applies settings. Its new session must be unpaused.
+        reset_schedule_paused();
         assert!(!schedule_paused());
+        tokio::task::yield_now().await;
+        assert!(!schedule_paused());
+
+        // Enabling it again must reapply the restriction, not inherit the reset.
+        let task = start_schedule_monitor(vec![], shutdown.subscribe());
+        assert!(schedule_paused());
+        shutdown.send(()).unwrap();
+        task.await.unwrap();
+        reset_schedule_paused();
     }
 }

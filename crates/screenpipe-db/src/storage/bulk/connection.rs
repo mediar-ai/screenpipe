@@ -61,7 +61,7 @@ pub(crate) fn pool_options(
     })
 }
 
-async fn register(
+pub(crate) async fn register(
     conn: &mut SqliteConnection,
     storage: Arc<HybridStorage>,
     logical: bool,

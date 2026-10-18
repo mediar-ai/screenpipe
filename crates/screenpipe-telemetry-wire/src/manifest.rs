@@ -35,6 +35,8 @@ pub struct DirectUploadRecordCounts {
     pub parsed: usize,
     #[serde(default)]
     pub activities: usize,
+    #[serde(default)]
+    pub starred: usize,
     pub audio: usize,
     pub ui: usize,
     pub snapshots: usize,
@@ -119,6 +121,7 @@ mod tests {
                 frames: 1,
                 parsed: 0,
                 activities: 0,
+                starred: 0,
                 audio: 0,
                 ui: 0,
                 snapshots: 0,

@@ -87,6 +87,7 @@ pub mod recording_config;
 pub mod recording_coverage;
 pub mod recording_detail;
 mod resource_monitor;
+mod resource_summary;
 pub mod retention;
 pub mod routes;
 pub mod schedule_monitor;
@@ -98,6 +99,7 @@ pub mod structured_outputs;
 mod sync_api;
 pub mod sync_provider;
 pub mod telemetry_context;
+mod telemetry_tasks;
 pub mod ui_recorder;
 // Exposed publicly so the commercial `screenpipe-sdk` (screenpipe/sdk repo)
 // can wrap `start_ffmpeg_process` / `write_frame_to_ffmpeg` /
@@ -131,3 +133,6 @@ pub use snapshot_compaction::start_snapshot_compaction;
 pub use ui_recorder::{start_ui_recording, UiRecorderConfig, UiRecorderHandle};
 pub use video::{video_quality_to_crf, video_quality_to_jpeg_q, video_quality_to_preset};
 pub mod search_only;
+
+#[cfg(target_os = "macos")]
+pub mod macos_run_loop;

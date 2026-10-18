@@ -123,6 +123,7 @@ interface SessionAccessEvent {
   host: string;
   already_granted?: boolean;
   alreadyGranted?: boolean;
+  navigation_id?: string | null;
   navigationId?: string | null;
   /** Conversation that issued the navigation (see `owner` on the navigate
    *  event). Ownerless payloads are treated as stale/legacy and ignored. */
@@ -657,6 +658,8 @@ export function BrowserSidebar({
   useTauriEvent<SessionAccessEvent>(SESSION_ACCESS_REQUEST_EVENT, (e) => {
     const payload = e.payload;
     const requestId = payload?.requestId ?? payload?.request_id;
+    // BrowserSessionAccessRequestPayload uses Serde's snake_case field names.
+    const navigationId = payload?.navigationId ?? payload?.navigation_id;
     if (!requestId || !payload?.url || !payload?.host) return;
     // Same ownership gate as the navigate event — a background pipe's
     // cookie-consent prompt must not surface in another chat.
@@ -664,7 +667,7 @@ export function BrowserSidebar({
       return;
     if (
       isMismatchedNavigation(
-        payload.navigationId,
+        navigationId,
         currentNavigationIdRef.current,
       )
     )
@@ -675,7 +678,7 @@ export function BrowserSidebar({
       host: payload.host,
       alreadyGranted:
         payload.alreadyGranted ?? payload.already_granted ?? false,
-      navigationId: payload.navigationId!,
+      navigationId: navigationId!,
       owner: payload.owner ?? null,
     };
     // Block any already-scheduled bounds push before React commits the card;

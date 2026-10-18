@@ -27,6 +27,7 @@ impl Projection {
 pub struct StorageReadToken {
     pub revision: i64,
     revocation: Option<i64>,
+    privacy_revision: Option<i64>,
     storage: Option<Arc<HybridStorage>>,
     _lease: Option<Arc<OwnedRwLockReadGuard<()>>>,
 }
@@ -40,11 +41,29 @@ impl std::fmt::Debug for StorageReadToken {
 }
 
 impl StorageReadToken {
+    /// Check privacy independently: refreshing storage rows cannot authorize a
+    /// payload selected under a superseded privacy policy.
+    pub async fn validate_privacy(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
+        if let Some(expected) = self.privacy_revision {
+            let current: i64 =
+                sqlx::query_scalar("SELECT revocation FROM _privacy_policy WHERE id=1")
+                    .fetch_one(pool)
+                    .await?;
+            if current != expected {
+                return Err(storage_error(
+                    "privacy revision changed; retry the complete query",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Keep this guard until the prepared response is handed to its transport.
     pub async fn admit(
         &self,
         pool: &SqlitePool,
     ) -> Result<Option<OwnedMutexGuard<()>>, sqlx::Error> {
+        self.validate_privacy(pool).await?;
         let Some(storage) = &self.storage else {
             return Ok(None);
         };
@@ -53,14 +72,14 @@ impl StorageReadToken {
             return Err(sqlx::Error::PoolClosed);
         }
         if let Some(expected) = self.revocation {
-            let current: i64 =
-                sqlx::query_scalar("SELECT revision FROM _storage_revocation WHERE id=1")
+            let (current, cause): (i64, String) =
+                sqlx::query_as("SELECT revision,(SELECT cause FROM _storage_revocation_cause WHERE id=1) FROM _storage_revocation WHERE id=1")
                     .fetch_one(pool)
                     .await?;
             if current != expected {
-                return Err(storage_error(
-                    "read revision changed; retry the complete query",
-                ));
+                return Err(storage_error(format!(
+                    "read revision changed; retry the complete query (expected_revocation={expected}, current_revocation={current}, cause={cause})"
+                )));
             }
             return Ok(Some(gate));
         }
@@ -110,6 +129,7 @@ impl DatabaseManager {
         StorageReadToken {
             revision,
             revocation: None,
+            privacy_revision: None,
             storage: self.storage.clone(),
             _lease: None,
         }
@@ -123,8 +143,13 @@ impl DatabaseManager {
     /// the duration of a network upload. Final admission still rejects any
     /// deletion/privacy change committed since this single-statement read.
     pub async fn storage_export_token(&self) -> Result<StorageReadToken, sqlx::Error> {
+        if self.pool.is_closed() {
+            return Err(sqlx::Error::PoolClosed);
+        }
         let Some(storage) = &self.storage else {
-            return self.storage_read_token().await;
+            let mut token = self.storage_read_token().await?;
+            token.privacy_revision = self.release_revocation().await?;
+            return Ok(token);
         };
         if storage.closing.is_cancelled() {
             return Err(sqlx::Error::PoolClosed);
@@ -137,6 +162,7 @@ impl DatabaseManager {
         Ok(StorageReadToken {
             revision,
             revocation: Some(revocation),
+            privacy_revision: self.release_revocation().await?,
             storage: Some(Arc::clone(storage)),
             _lease: None,
         })
@@ -155,6 +181,7 @@ impl DatabaseManager {
             return Ok(StorageReadToken {
                 revision: 0,
                 revocation: None,
+                privacy_revision: None,
                 storage: None,
                 _lease: None,
             });
@@ -287,8 +314,15 @@ impl DatabaseManager {
     }
 }
 
-fn is_revision_change(error: &sqlx::Error) -> bool {
-    matches!(error, sqlx::Error::Protocol(message) if message.starts_with("frame storage: read revision changed;"))
+const REVISION_CHANGE_PREFIX: &str = "frame storage: read revision changed;";
+
+/// Recognize invalidated reads after the cause crosses an API/error wrapper.
+pub fn is_revision_change_message(message: &str) -> bool {
+    message.contains(REVISION_CHANGE_PREFIX)
+}
+
+pub fn is_revision_change(error: &sqlx::Error) -> bool {
+    matches!(error, sqlx::Error::Protocol(message) if message.starts_with(REVISION_CHANGE_PREFIX))
 }
 
 impl HybridStorage {
@@ -325,6 +359,7 @@ impl HybridStorage {
         Ok(StorageReadToken {
             revision,
             revocation,
+            privacy_revision: None,
             storage: Some(Arc::clone(self)),
             _lease: Some(lease),
         })

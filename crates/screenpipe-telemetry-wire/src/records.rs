@@ -30,6 +30,12 @@ pub struct FrameRow {
     /// Merged accessibility + OCR text (from `frames.full_text`). Already
     /// PII-sanitized on the device if PII removal is enabled.
     pub text: Option<String>,
+    /// Full captured AX nodes and properties, with device privacy settings
+    /// applied. Absent on older clients and frames without retained AX data.
+    /// Raw evidence only: consumers should load this on demand, not inline it
+    /// into ordinary screen-text search results or agent context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility_tree: Option<Value>,
 }
 
 /// One app-specific semantic projection produced from a captured frame.
@@ -67,6 +73,19 @@ pub struct ActivityEvidenceRow {
     pub meeting_id: Option<i64>,
     pub app_name: Option<String>,
     pub label: String,
+}
+
+/// Current user-marked interval. Consumers reconcile by source + starred_id
+/// and retain the highest revision; retries and older uploads are harmless.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StarredRow {
+    pub sequence: i64,
+    pub starred_id: String,
+    pub timestamp: String,
+    pub start_at: String,
+    pub end_at: String,
+    pub hd_requested: bool,
+    pub revision: i64,
 }
 
 /// One AI-interpreted Activity persisted by the desktop scheduler.
@@ -195,6 +214,12 @@ pub enum TelemetryRecord {
         #[serde(flatten)]
         parsed: ParsedRow,
     },
+    Starred {
+        device_id: String,
+        device_label: String,
+        #[serde(flatten)]
+        starred: StarredRow,
+    },
     Activity {
         device_id: String,
         device_label: String,
@@ -238,6 +263,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { device_id, .. }
             | Self::Parsed { device_id, .. }
+            | Self::Starred { device_id, .. }
             | Self::Activity { device_id, .. }
             | Self::Audio { device_id, .. }
             | Self::Ui { device_id, .. }
@@ -251,6 +277,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { device_label, .. }
             | Self::Parsed { device_label, .. }
+            | Self::Starred { device_label, .. }
             | Self::Activity { device_label, .. }
             | Self::Audio { device_label, .. }
             | Self::Ui { device_label, .. }
@@ -266,6 +293,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { frame, .. } => &frame.timestamp,
             Self::Parsed { parsed, .. } => &parsed.timestamp,
+            Self::Starred { starred, .. } => &starred.timestamp,
             Self::Activity { activity, .. } => &activity.end_at,
             Self::Audio { audio, .. } => &audio.timestamp,
             Self::Ui { ui, .. } => &ui.timestamp,
@@ -280,6 +308,7 @@ impl TelemetryRecord {
         match self {
             Self::Frame { .. } => "frame",
             Self::Parsed { .. } => "parsed",
+            Self::Starred { .. } => "starred",
             Self::Activity { .. } => "activity",
             Self::Audio { .. } => "audio",
             Self::Ui { .. } => "ui",
@@ -288,6 +317,21 @@ impl TelemetryRecord {
             Self::Feedback { .. } => "feedback",
         }
     }
+}
+
+pub fn build_starred_jsonl(device_id: &str, device_label: &str, rows: &[StarredRow]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for row in rows {
+        let record = TelemetryRecord::Starred {
+            device_id: device_id.into(),
+            device_label: device_label.into(),
+            starred: row.clone(),
+        };
+        // Starred rows contain only strings and integers, so serialization is infallible.
+        serde_json::to_writer(&mut out, &record).expect("serialize starred interval");
+        out.push(b'\n');
+    }
+    out
 }
 
 /// Serialize feedback rows separately so adding the new stream does not
@@ -518,8 +562,26 @@ pub fn parse_jsonl(body: &[u8]) -> ParsedBatch {
 mod tests {
     use super::*;
 
+    #[test]
+    fn frame_preserves_full_accessibility_tree() {
+        let mut record = serde_json::to_value(frame(1, "Search")).unwrap();
+        let tree = serde_json::json!([
+            {"role":"Window", "text":"", "depth":0, "properties":{"class_name":"Rates"}},
+            {"role":"Button", "text":"", "depth":1, "bounds":[10,20,30,40],
+             "properties":{"automation_id":"search", "is_enabled":true, "future_property":{"x":1}}}
+        ]);
+        record["accessibility_tree"] = tree.clone();
+        let decoded: FrameRow = serde_json::from_value(record).unwrap();
+        let body = build_jsonl("device", "label", &[decoded], &[], &[], &[], &[]);
+        let parsed = parse_jsonl(&body);
+        assert_eq!(parsed.skipped_lines, 0);
+        let round_trip = serde_json::to_value(&parsed.records[0]).unwrap();
+        assert_eq!(round_trip["accessibility_tree"], tree);
+    }
+
     fn frame(id: i64, text: &str) -> FrameRow {
         FrameRow {
+            accessibility_tree: None,
             frame_id: id,
             timestamp: "2026-07-22T10:00:00Z".to_string(),
             app_name: Some("Arc".to_string()),
@@ -622,6 +684,9 @@ mod tests {
         assert_eq!(line["device_id"], "dev-a");
         assert_eq!(line["device_label"], "alice-mbp");
         assert_eq!(line["frame_id"], 42);
+        assert!(line.get("accessibility_tree").is_none());
+        let legacy: FrameRow = serde_json::from_value(line.clone()).unwrap();
+        assert!(legacy.accessibility_tree.is_none());
         assert!(
             line.get("frame").is_none(),
             "row must be flattened, not nested"

@@ -56,6 +56,7 @@ export interface NotificationAction {
   deeplinkUrl?: string;
   method?: string;
   body?: Record<string, unknown>;
+  screen_detail?: Record<string, unknown>;
   toast?: string;
   open_in_chat?: boolean;
 }
@@ -223,6 +224,7 @@ export interface ExecuteActionContext {
   sourceId?: string;
   /** Fallback target for a "source" action that omits its own url. */
   sourceUrl?: string;
+  onScreenDetailError?: () => void;
 }
 
 /**
@@ -358,6 +360,34 @@ export async function executeNotificationAction(
       break;
     }
     case "meeting_join": {
+      if (action.screen_detail) {
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            localFetch("/capture/hd/start", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(action.screen_detail),
+              signal: controller.signal,
+              redirect: "error",
+            }).then((response) => {
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            }),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                controller.abort();
+                reject(new Error("HD recording timed out"));
+              }, 3000);
+            }),
+          ]);
+        } catch (error) {
+          console.warn("meeting join HD recording failed", error);
+          ctx.onScreenDetailError?.();
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       if (action.url) {
         const { open } = await import("@tauri-apps/plugin-shell");
         await open(action.url);

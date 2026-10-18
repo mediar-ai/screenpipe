@@ -84,3 +84,15 @@
 .expand { margin-top: 4px; min-height: 32px; padding: 0 4px; color: inherit; opacity: .7; font: inherit; font-size: 12px; background: transparent; border: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
 .expand:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .error { font-size: 12px; color: #b42318; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 12px; padding: 4px 0; border-bottom: 1px solid var(--line, #ddd); }
+.root .toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+.root .toolbar button[aria-pressed="true"], .root .toolbar button:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
+.root .toolbar button:disabled { opacity: .3; cursor: default; }
+.root .toolbar button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media print { .toolbar { display: none; } }
+
+.root .toolbar button svg { flex-shrink: 0; }
+
+.image { display: inline-flex; flex-direction: column; gap: 8px; max-width: 100%; margin: 16px 0; }
+.image img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line, #deded5); border-radius: 8px; }
+.image button { align-self: flex-start; font: inherit; font-size: 12px; }

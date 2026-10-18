@@ -1,7 +1,7 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 "use client";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { InlineText } from "./inline-text";
 import { WorkflowRichText } from "./rich-text";
 import styles from "./sop-document.module.css";
@@ -14,6 +14,8 @@ export function SopDocument({
   onTitleChange,
   onContentChange,
   children,
+  kind = "sop",
+  imageUrl,
 }: {
   title: string;
   subtitle?: ReactNode;
@@ -21,16 +23,20 @@ export function SopDocument({
   onTitleChange?: (title: string) => void;
   onContentChange?: (content: string) => void;
   children?: ReactNode;
+  kind?: "sop" | "skill";
+  imageUrl?: (src: string) => string | null;
 }) {
+  const importedTitle = useRef(title);
+  const heading = [title, importedTitle.current].find(value => content?.startsWith(`# ${value}\n`));
   return (
-    <article className={styles.document} aria-label="SOP document">
+    <article className={styles.document} aria-label={kind === "skill" ? "Skill document" : "SOP document"}>
       <header className={styles.heading}>
-        <p className={styles.kind}>Standard operating procedure</p>
+        <p className={styles.kind}>{kind === "skill" ? "Agent skill" : "Standard operating procedure"}</p>
         {onTitleChange ? (
           <InlineText
             className={styles.title}
-            label="SOP title"
-            maxLength={300}
+            label={kind === "skill" ? "Name" : "SOP title"}
+            maxLength={kind === "skill" ? 64 : 300}
             value={title}
             onChange={onTitleChange}
           />
@@ -41,10 +47,11 @@ export function SopDocument({
       </header>
       {content !== undefined && (
         <WorkflowRichText
-          value={content}
+          imageUrl={imageUrl}
+          value={heading ? content.slice(heading.length + 3).trimStart() : content}
           onChange={onContentChange}
-          label="SOP text"
-          maxLength={60000}
+          label={kind === "skill" ? "Instructions" : "SOP text"}
+          maxLength={kind === "skill" ? 20000 : 60000}
           fullDocument
         />
       )}

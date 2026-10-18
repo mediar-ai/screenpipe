@@ -374,6 +374,6 @@ screenpipe(Mediar, Inc.)가 개발합니다. 2024년에 설립되었으며 미�
 
 - 창립자: Louis Beaumont(@louis030195)
 - Twitter: @screenpipe
-- 이메일: louis@screenpi.pe
+- 이메일: support@screenpi.pe
 
 </details>

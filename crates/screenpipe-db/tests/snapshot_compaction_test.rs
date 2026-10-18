@@ -83,3 +83,107 @@ async fn compaction_repoints_every_selected_frame_only_and_survives_restart() {
     );
     reopened.close().await;
 }
+
+#[tokio::test]
+async fn compaction_of_redacted_snapshots_preserves_export_admission() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = DatabaseManager::new_hybrid(dir.path(), Default::default(), Default::default())
+        .await
+        .unwrap();
+    let frame = snapshot(&db, "redacted.jpg").await;
+    db.execute_raw_sql_write(&format!(
+        "UPDATE frames SET full_text_redacted_at=1,image_redacted_at=1 WHERE id={frame}"
+    ))
+    .await
+    .unwrap();
+    let export = db.storage_export_token().await.unwrap();
+    let chunk = db
+        .insert_video_chunk_with_fps("compacted.mp4", "compaction-test", 1.0)
+        .await
+        .unwrap();
+    let (compacted, captured) = tokio::join!(
+        db.compact_snapshots_queued(chunk, vec![(frame, 0)]),
+        snapshot(&db, "concurrent.jpg")
+    );
+    compacted.unwrap();
+    drop(
+        export
+            .admit(&db.pool)
+            .await
+            .expect("physical compaction revoked export"),
+    );
+    assert_eq!(
+        db.get_frame(frame).await.unwrap(),
+        Some(("compacted.mp4".into(), 0, false))
+    );
+    assert_eq!(
+        db.get_frame(captured).await.unwrap(),
+        Some(("concurrent.jpg".into(), 0, true))
+    );
+    drop(export);
+    db.execute_raw_sql_write(&format!(
+        "UPDATE frames SET image_redacted_at=1 WHERE id={captured}"
+    ))
+    .await
+    .unwrap();
+    let export = db.storage_export_token().await.unwrap();
+    // Clearing a reference without replacement media is not compaction.
+    db.clear_snapshot_paths_queued(vec![captured])
+        .await
+        .unwrap();
+    let error = export.admit(&db.pool).await.unwrap_err().to_string();
+    assert!(
+        error.contains("cause=hybrid_read_revoke_media_frames"),
+        "{error}"
+    );
+    drop(export);
+
+    let export = db.storage_export_token().await.unwrap();
+    // An image can be redacted twice in one timestamp second. Even an
+    // unchanged watermark must revoke the previously prepared image bytes.
+    db.execute_raw_sql_write(&format!(
+        "UPDATE frames SET image_redacted_at=1 WHERE id={frame}"
+    ))
+    .await
+    .unwrap();
+    assert!(export.admit(&db.pool).await.is_err());
+    drop(export);
+
+    // A combined relocation + same-second redaction must not take the
+    // physical-only exception, even when the watermark value is identical.
+    db.execute_raw_sql_write(&format!(
+        "UPDATE frames SET snapshot_path='again.jpg' WHERE id={frame}"
+    ))
+    .await
+    .unwrap();
+    let chunk = db
+        .insert_video_chunk_with_fps("mixed.mp4", "compaction-test", 1.0)
+        .await
+        .unwrap();
+    let export = db.storage_export_token().await.unwrap();
+    db.execute_raw_sql_write(&format!("UPDATE frames SET video_chunk_id={chunk},offset_index=0,snapshot_path=NULL,image_redacted_at=1 WHERE id={frame}"))
+        .await.unwrap();
+    let error = export.admit(&db.pool).await.unwrap_err().to_string();
+    assert!(
+        error.contains("cause=hybrid_read_revoke_redaction_frames"),
+        "{error}"
+    );
+    drop(export);
+    db.close().await;
+    let db = DatabaseManager::new(
+        dir.path().join("db.sqlite").to_str().unwrap(),
+        Default::default(),
+    )
+    .await
+    .unwrap();
+    let payloads = db
+        .frame_payloads(&[frame, captured], screenpipe_db::storage::Projection::All)
+        .await
+        .unwrap();
+    assert_eq!(payloads[&frame].full_text.as_deref(), Some("retained text"));
+    assert_eq!(
+        payloads[&captured].full_text.as_deref(),
+        Some("retained text")
+    );
+    db.close().await;
+}

@@ -62,7 +62,7 @@ const DEFAULT_REPO: &str = "screenpipe/privacy-filter";
 // headroom for first-call cold-start + larger payloads.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const TINFOIL_IMAGE_NAME: &str = "tinfoil_image";
-const TINFOIL_IMAGE_VERSION: u32 = 1;
+pub(crate) const TINFOIL_IMAGE_VERSION: u32 = 1;
 /// Same rationale as the text adapter — see
 /// [`crate::adapters::tinfoil`] for the full incident note. Keep this
 /// in lockstep with that constant so both modalities pick up enclave

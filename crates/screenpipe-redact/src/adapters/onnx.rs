@@ -57,7 +57,7 @@ use crate::{RedactError, RedactedSpan, RedactionOutput, Redactor, SpanLabel};
 // substring to report `pipeline+onnx` (the previous name,
 // `v45_phase5_pruned`, silently broke that match).
 const ONNX_REDACTOR_NAME: &str = "v50_distilled6l_onnx";
-const ONNX_REDACTOR_VERSION: u32 = 7;
+pub(crate) const ONNX_REDACTOR_VERSION: u32 = 7;
 
 /// Configuration for an ONNX text redactor.
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ pub struct OnnxConfig {
     /// Override the model filename (default: prefer `model_quantized.onnx`
     /// if present, else `model.onnx`).
     pub model_file: Option<String>,
-    /// Maximum sequence length. Inputs longer than this are truncated.
+    /// Model context length. Longer inputs use overlapping windows.
     /// Default 256 — matches the v45 training config.
     pub max_seq_len: usize,
 }
@@ -307,6 +307,9 @@ impl OnnxRedactor {
 #[cfg(not(feature = "onnx-cpu"))]
 #[async_trait]
 impl Redactor for OnnxRedactor {
+    fn provides_model_detection(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         ONNX_REDACTOR_NAME
     }
@@ -691,9 +694,7 @@ mod runtime {
             let content_offsets = &offsets[1..n - 1];
             let content_len = content_ids.len();
 
-            let win = max_len.saturating_sub(2).max(1); // room for bos + eos
-            let overlap = (win / 4).min(48); // cover PII straddling a window edge
-            let stride = win.saturating_sub(overlap).max(1);
+            let (win, stride) = window_shape(max_len);
 
             let mut spans = Vec::new();
             let mut start = 0usize;
@@ -723,8 +724,91 @@ mod runtime {
         }
     }
 
+    struct RequiredOnnx {
+        model: std::sync::Arc<OnnxRedactor>,
+        text: String,
+        encoding: Option<tokenizers::Encoding>,
+        start: usize,
+        spans: Vec<RedactedSpan>,
+    }
+
+    #[async_trait]
+    impl crate::RequiredRedaction for RequiredOnnx {
+        async fn step(&mut self) -> Result<Option<RedactionOutput>, RedactError> {
+            if self.encoding.is_none() {
+                self.encoding = Some(
+                    self.model
+                        .tokenizer
+                        .encode(self.text.as_str(), true)
+                        .map_err(|e| RedactError::Runtime(format!("tokenize: {e}")))?,
+                );
+            }
+            let enc = self.encoding.as_ref().unwrap();
+            let ids = enc.get_ids();
+            let offsets = enc.get_offsets();
+            let max_len = self.model.cfg.max_seq_len.max(3);
+            let complete = if ids.len() <= max_len {
+                let labels = self.model.run_window(ids, enc.get_attention_mask())?;
+                self.spans = bio_decode(&self.text, &labels, offsets, &self.model.id2label);
+                true
+            } else {
+                let content_len = ids.len() - 2;
+                let (win, stride) = window_shape(max_len);
+                let end = (self.start + win).min(content_len);
+                let mut window = Vec::with_capacity(end - self.start + 2);
+                let mut positions = Vec::with_capacity(end - self.start + 2);
+                window.push(ids[0]);
+                positions.push((0, 0));
+                window.extend_from_slice(&ids[self.start + 1..end + 1]);
+                positions.extend_from_slice(&offsets[self.start + 1..end + 1]);
+                window.push(ids[ids.len() - 1]);
+                positions.push((0, 0));
+                let labels = self.model.run_window(&window, &vec![1; window.len()])?;
+                self.spans.extend(bio_decode(
+                    &self.text,
+                    &labels,
+                    &positions,
+                    &self.model.id2label,
+                ));
+                self.start += stride;
+                end == content_len
+            };
+            if !complete {
+                return Ok(None);
+            }
+            merge_spans(&mut self.spans, &self.text);
+            Ok(Some(RedactionOutput {
+                redacted: render_redacted(&self.text, &self.spans),
+                input: std::mem::take(&mut self.text),
+                spans: std::mem::take(&mut self.spans),
+            }))
+        }
+    }
+
+    // Preserve the existing model-context and overlap contract in both paths.
+    fn window_shape(max_len: usize) -> (usize, usize) {
+        let win = max_len.saturating_sub(2).max(1);
+        let overlap = (win / 4).min(48);
+        (win, win.saturating_sub(overlap).max(1))
+    }
+
     #[async_trait]
     impl Redactor for OnnxRedactor {
+        fn required_session(
+            self: std::sync::Arc<Self>,
+            text: String,
+        ) -> Box<dyn crate::RequiredRedaction> {
+            Box::new(RequiredOnnx {
+                model: self,
+                text,
+                encoding: None,
+                start: 0,
+                spans: vec![],
+            })
+        }
+        fn provides_model_detection(&self) -> bool {
+            true
+        }
         fn name(&self) -> &str {
             ONNX_REDACTOR_NAME
         }

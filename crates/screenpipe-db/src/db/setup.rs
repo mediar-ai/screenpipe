@@ -421,6 +421,8 @@ impl DatabaseManager {
             },
         );
         let db_manager = DatabaseManager {
+            release_owner: None,
+            release_read_pools: Default::default(),
             storage,
             upload_source_id: tokio::sync::OnceCell::new(),
             pool: read_pool,
@@ -549,7 +551,13 @@ impl DatabaseManager {
                 let upgraded =
                     crate::storage::schema::upgrade_recording(&mut conn, storage.has_bulk())
                         .await?;
-                crate::storage::read_schema::upgrade(&mut conn, storage).await?;
+                // Keep this independent of versioned recording migrations:
+                // installed hybrid databases may already have migration v6.
+                let cleanup_indexes_changed =
+                    crate::storage::schema::ensure_cleanup_indexes(&mut conn, storage.has_bulk())
+                        .await?;
+                let read_hooks_changed =
+                    crate::storage::read_schema::upgrade(&mut conn, storage).await?;
                 let resident_hooks_changed = crate::storage::schema::ensure_resident_table_hooks(
                     &mut conn,
                     storage.has_bulk(),
@@ -557,7 +565,11 @@ impl DatabaseManager {
                 .await?;
                 storage.verify_catalog(&db_manager.pool).await?;
                 drop(conn);
-                if upgraded || resident_hooks_changed {
+                if upgraded
+                    || cleanup_indexes_changed
+                    || read_hooks_changed
+                    || resident_hooks_changed
+                {
                     // Connections opened before the trigger migration need a
                     // schema read before their first DML preparation. Refresh
                     // every existing writer while startup still owns admission.
@@ -628,6 +640,10 @@ impl DatabaseManager {
     /// SQLITE_IOERR (code 522) until the whole process restarts — the exact
     /// failure that kept recording down for hours on 2026-07-02.
     pub async fn close(&self) {
+        if self.release_owner.is_some() {
+            self.pool.close().await;
+            return;
+        }
         self.close_token.cancel();
         if let Some(storage) = &self.storage {
             let _gate = storage.gate.lock().await;
@@ -649,7 +665,14 @@ impl DatabaseManager {
         // read pool open indefinitely, so health/redaction work could continue
         // pinning the poisoned WAL-index while DB-wedge recovery was trying to
         // rebuild it.
-        tokio::join!(self.write_pool.close(), self.pool.close(), drain_payloads);
+        let protected = std::mem::take(&mut *self.release_read_pools.lock().await);
+        let close_protected = futures::future::join_all(protected.iter().map(|pool| pool.close()));
+        tokio::join!(
+            self.write_pool.close(),
+            self.pool.close(),
+            drain_payloads,
+            close_protected
+        );
         if let Some(lease) = self.manager_lease.as_ref() {
             lease.release();
         }

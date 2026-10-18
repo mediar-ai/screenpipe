@@ -25,7 +25,7 @@ describe('difficulty-router heuristic', () => {
       'write a python function and analyze its time complexity',
     ]) expect(scoreDifficulty(t).tier).toBe('hard');
   });
-  it('keeps ordinary programming tasks on Luna', () => {
+  it('keeps ordinary programming tasks on Haiku', () => {
     expect(scoreDifficulty('write a SQL query with a join').tier).toBe('normal');
   });
   it.each(ROUTINE_PROMPTS.map((text) => [text.slice(0, 65), text]))('does not escalate routine intent: %s', async (_label, text) => {
@@ -53,7 +53,7 @@ describe('routeTier kill switch (no Workers AI needed)', () => {
     expect(await routeTier([{ role: 'user', content: 'hi' }], { ROUTER_MODE: 'heuristic' })).toBe('trivial');
     expect(await routeTier([{ role: 'user', content: 'debug this segfault and explain the root cause' }], { ROUTER_MODE: 'heuristic' })).toBe('hard');
   });
-  it('embedding mode fails safely to Luna when env.AI throws', async () => {
+  it('embedding mode fails safely to Haiku when env.AI throws', async () => {
     const env = { ROUTER_MODE: 'embedding', AI: { run: async () => { throw new Error('no AI'); } } };
     expect(await routeTier([{ role: 'user', content: 'implement a SQL query' }], env)).toBe('normal');
     expect(await routeTier([{ role: 'user', content: 'debug this stack trace and explain the root cause' }], env)).toBe('normal');
@@ -67,7 +67,7 @@ describe('routeTier kill switch (no Workers AI needed)', () => {
     expect(await routeTier([{ role: 'user', content: 'debug this segfault, explain the root cause' }], env)).toBe('normal'); // all centroids tied
     expect(called).toBeGreaterThan(0);
   });
-  it('embedding mode times out to Luna when env.AI hangs', async () => {
+  it('embedding mode times out to Haiku when env.AI hangs', async () => {
     const env = { ROUTER_MODE: 'embedding', AI: { run: () => new Promise(() => {}) } }; // never resolves
     const t0 = performance.now();
     const tier = await routeTier([{ role: 'user', content: 'debug this stack trace and explain the root cause' }], env);
@@ -148,10 +148,10 @@ describe('config sanity', () => {
   it('TIER_HEAD covers all tiers', () => {
     expect(Object.keys(TIER_HEAD).sort()).toEqual(['hard', 'normal', 'trivial']);
   });
-  it('keeps Auto on GPT-5.6 and reserves Sol for hard prompts', () => {
+  it('keeps Auto on Haiku 5.5 and reserves Sol for hard prompts', () => {
     expect(TIER_HEAD).toEqual({
-      trivial: 'gpt-6-luna',
-      normal: 'gpt-6-luna',
+      trivial: 'claude-haiku-5-5',
+      normal: 'claude-haiku-5-5',
       hard: 'gpt-5.6-sol',
     });
   });

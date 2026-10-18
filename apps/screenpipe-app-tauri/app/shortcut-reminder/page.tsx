@@ -29,6 +29,7 @@ import {
 import { useStarredSessions } from "@/components/starred-sessions/use-starred-sessions";
 import { useOverlayData } from "./use-overlay-data";
 import { useMeetingOverlay } from "./use-meeting-overlay";
+import { TranscriptHistory } from "./transcript-history";
 import { AudioEqualizer } from "./audio-equalizer";
 import { formatShortcut, type ShortcutPlatform } from "./format-shortcut";
 import { DragStage } from "./drag-stage";
@@ -76,7 +77,7 @@ const COLLAPSED_SIZE = { width: 22, height: 16 };
 const EXPANDED_SIZE = { width: 192, height: 62 };
 const SETTINGS_MENU_SIZE = { width: 164, height: 96 };
 const INCIDENT_SIZE = { width: 160, height: 40 };
-const MEETING_SIZE = { width: 280, height: 80 };
+const MEETING_SIZE = { width: 320, height: 160 };
 
 export default function ShortcutReminderPage() {
 
@@ -519,11 +520,6 @@ export default function ShortcutReminderPage() {
   // Use sentence case for both the pill and its accessible name.
   const failureHeadlineSentence =
     failureHeadline.charAt(0).toUpperCase() + failureHeadline.slice(1);
-  const latestTranscript = meetingOverlay.items.at(-1);
-  const latestSpeaker = latestTranscript
-    ? latestTranscript.speakerName ||
-      (latestTranscript.deviceType === "input" ? "me" : "speaker")
-    : null;
 
   // While a drag is in flight the window covers every monitor, so the stage is
   // the whole surface. It outranks the health and meeting states rather than
@@ -703,7 +699,7 @@ export default function ShortcutReminderPage() {
           style={{
             background: "rgba(0, 0, 0, 0.92)",
             display: "grid",
-            gridTemplateRows: "1fr 1px 1fr",
+            gridTemplateRows: `${32 * overlayScale}px 1px minmax(0, 1fr)`,
           }}
         >
           <div className="flex items-center min-w-0" style={{ padding: `0 ${padX}px`, gap: `${gap * 2}px` }}>
@@ -763,14 +759,13 @@ export default function ShortcutReminderPage() {
             </button>
           </div>
           <div className="bg-white/15" />
-          <div className="flex items-center min-w-0" style={{ padding: `0 ${padX}px`, gap: `${gap * 2}px` }}>
-            <span className="font-mono text-white/40 shrink-0" style={{ fontSize: `${fontPx}px` }}>
-              {meetingOverlay.stopError ? ui("Stop failed") : latestSpeaker || ui("Live transcript")}
-            </span>
-            <span className="font-mono text-white/80 truncate" style={{ fontSize: `${fontPx}px` }}>
-              {meetingOverlay.stopError || latestTranscript?.text || ui("Listening for speech…")}
-            </span>
-          </div>
+          {meetingOverlay.stopError || meetingOverlay.items.length === 0 ? (
+            <div className="font-mono text-white/80" style={{ padding: padX, fontSize: fontPx }}>
+              {meetingOverlay.stopError || ui("Listening for speech…")}
+            </div>
+          ) : (
+            <TranscriptHistory key={liveMeetingId} items={meetingOverlay.items} scale={overlayScale} />
+          )}
         </div>
       </div>
     );

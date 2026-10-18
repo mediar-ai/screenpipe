@@ -2,12 +2,10 @@
 // https://screenpipe.com
 
 //! A deliberate launch selects a build before either single-instance path runs.
-//! The private socket authenticates the connecting process, never a supplied PID.
+//! A selected replacement terminates the verified previous process before starting.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
-const PROTOCOL: u32 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Identity {
@@ -51,21 +49,6 @@ fn select(current: &Identity, candidate: &Identity) -> Selection {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Request {
-    protocol: u32,
-    replace: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Response {
-    protocol: u32,
-    identity: Identity,
-    outcome: String,
-    error: Option<String>,
-}
-
 fn report_failure(root: &std::path::Path, stage: &str, error: &str) {
     crate::update_diagnostics::append(
         root,
@@ -77,7 +60,7 @@ fn report_failure(root: &std::path::Path, stage: &str, error: &str) {
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub(crate) use macos::{initialize, install, owns_launch, pending, reopen};
+pub(crate) use macos::{initialize, install, owns_launch, pending, process_stamp, reopen};
 
 #[cfg(test)]
 mod tests {

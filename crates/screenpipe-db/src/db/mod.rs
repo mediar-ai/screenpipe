@@ -296,6 +296,8 @@ impl Drop for ImmediateTx {
 }
 
 pub struct DatabaseManager {
+    pub(crate) release_read_pools: Arc<tokio::sync::Mutex<Vec<SqlitePool>>>,
+    pub(crate) release_owner: Option<Arc<DatabaseManager>>,
     pub(crate) storage: Option<Arc<crate::storage::HybridStorage>>,
     upload_source_id: tokio::sync::OnceCell<String>,
     /// Read-only pool. Used for all SELECT queries.
@@ -466,6 +468,8 @@ mod meetings;
 mod memories;
 #[cfg(test)]
 mod planner_stats_tests;
+pub mod privacy_exports;
+pub mod privacy_release;
 mod starred;
 pub use starred::StarredSession;
 mod outputs;

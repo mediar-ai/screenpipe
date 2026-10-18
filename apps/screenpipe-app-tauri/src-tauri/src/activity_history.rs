@@ -194,6 +194,7 @@ impl QualityAudit {
 #[derive(Default)]
 pub struct ActivityHistoryState {
     run_lock: Arc<Mutex<()>>,
+    pub(crate) export_lock: Arc<Mutex<()>>,
     active_idempotency_keys: Arc<StdMutex<HashSet<String>>>,
 }
 
@@ -433,7 +434,40 @@ pub(crate) fn entries_ending_after(
     Ok(entries)
 }
 
-fn write_all(app: &AppHandle, history: &PersistedActivityHistory) -> Result<(), String> {
+pub(crate) fn export_row(entry: ActivityHistoryEntry) -> screenpipe_telemetry_wire::ActivityRow {
+    screenpipe_telemetry_wire::ActivityRow {
+        activity_id: entry.id,
+        activity_kind: entry.kind,
+        meeting_id: entry.meeting_id,
+        timestamp: entry.end_at.clone(),
+        start_at: entry.start_at,
+        end_at: entry.end_at,
+        title: entry.title,
+        summary: entry.summary,
+        evidence: entry
+            .evidence
+            .into_iter()
+            .map(|e| screenpipe_telemetry_wire::ActivityEvidenceRow {
+                kind: e.kind,
+                at: e.at,
+                frame_id: e.frame_id,
+                meeting_id: e.meeting_id,
+                app_name: e.app_name,
+                label: e.label,
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn export_rows(
+    app: &AppHandle,
+) -> Result<Vec<screenpipe_telemetry_wire::ActivityRow>, String> {
+    Ok(read_all(app)?.entries.into_iter().map(export_row).collect())
+}
+
+async fn write_all(app: &AppHandle, history: &PersistedActivityHistory) -> Result<(), String> {
+    let state = app.state::<ActivityHistoryState>();
+    let _export = state.export_lock.lock().await;
     let store = store::get_store(app, None).map_err(|error| error.to_string())?;
     store.set(
         STORE_KEY,
@@ -1625,7 +1659,7 @@ async fn generate_inner(
         });
     }
     stored.coverage = merge_coverage(stored.coverage);
-    write_all(app, &stored)?;
+    write_all(app, &stored).await?;
     if source == "manual" {
         let settings = SettingsStore::get(app)?.ok_or("Settings are not available")?;
         set_next_run(

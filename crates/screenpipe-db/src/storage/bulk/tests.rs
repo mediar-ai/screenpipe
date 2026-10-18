@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::DatabaseManager;
+use sqlx::Row;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Condvar,
@@ -30,6 +31,304 @@ impl Drop for Pause {
     fn drop(&mut self) {
         self.release();
     }
+}
+
+#[tokio::test]
+async fn resident_tombstone_cleanup_is_indexed_batched_and_upgraded_on_reopen() {
+    use std::sync::atomic::AtomicU64;
+
+    unsafe extern "C" fn count_steps(context: *mut std::ffi::c_void) -> i32 {
+        let steps = unsafe { &*context.cast::<AtomicU64>() };
+        steps.fetch_add(1000, Ordering::Relaxed);
+        0
+    }
+
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("db.sqlite");
+    let mut options = crate::storage::MigrationOptions::default();
+    options.budget.record_bytes = 1024 * 1024;
+    let db = DatabaseManager::new_hybrid(root.path(), Default::default(), options)
+        .await
+        .unwrap();
+    db.execute_raw_sql_write(
+        "WITH RECURSIVE n(id) AS (VALUES(1) UNION ALL SELECT id+1 FROM n WHERE id<1000000)
+         INSERT INTO _bulk_element_rows(id,frame_id,source,role,text,_archive_generation)
+         SELECT id,1,'accessibility','AXText','retained',1 FROM n;
+         UPDATE _bulk_element_rows SET text=hex(zeroblob(1048576)) WHERE id=1000000;
+         ANALYZE;
+         DELETE FROM sqlite_stat1;
+         ANALYZE sqlite_schema",
+    )
+    .await
+    .unwrap();
+
+    let mut baseline_tx = db.begin_immediate_with_retry().await.unwrap();
+    sqlx::query("DROP INDEX _bulk_element_resident_tombstones")
+        .execute(&mut **baseline_tx.conn())
+        .await
+        .unwrap();
+    let baseline_plan: Vec<String> = sqlx::query(
+        "EXPLAIN QUERY PLAN DELETE FROM _bulk_element_rows
+         WHERE _archive_deleted=1 AND _archive_file IS NULL",
+    )
+    .fetch_all(&mut **baseline_tx.conn())
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| row.try_get(3).unwrap())
+    .collect();
+    baseline_tx.commit().await.unwrap();
+    assert!(baseline_plan
+        .iter()
+        .any(|line| line == "SCAN _bulk_element_rows"));
+    let baseline_steps = Box::new(AtomicU64::new(0));
+    let mut baseline_tx = db.begin_immediate_with_retry().await.unwrap();
+    {
+        let mut handle = baseline_tx.conn().lock_handle().await.unwrap();
+        unsafe {
+            libsqlite3_sys::sqlite3_progress_handler(
+                handle.as_raw_handle().as_ptr(),
+                1000,
+                Some(count_steps),
+                (&*baseline_steps as *const AtomicU64).cast_mut().cast(),
+            );
+        }
+    }
+    let baseline_started = std::time::Instant::now();
+    sqlx::query(
+        "DELETE FROM _bulk_element_rows
+         WHERE _archive_deleted=1 AND _archive_file IS NULL",
+    )
+    .execute(&mut **baseline_tx.conn())
+    .await
+    .unwrap();
+    let baseline_elapsed = baseline_started.elapsed();
+    let baseline_steps = baseline_steps.load(Ordering::Relaxed);
+    {
+        let mut handle = baseline_tx.conn().lock_handle().await.unwrap();
+        unsafe {
+            libsqlite3_sys::sqlite3_progress_handler(
+                handle.as_raw_handle().as_ptr(),
+                0,
+                None,
+                std::ptr::null_mut(),
+            );
+        }
+    }
+    baseline_tx.rollback().await.unwrap();
+    assert!(
+        baseline_steps >= 2_000_000,
+        "baseline unexpectedly avoided its full scan: {baseline_steps}"
+    );
+    db.close().await;
+
+    // Startup must add the index even though this installed database already
+    // has the current versioned recording migration, and repeated reopen is
+    // idempotent.
+    let db = Arc::new(
+        DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap(),
+    );
+    assert!(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='_bulk_element_resident_tombstones')"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap());
+    let missing_stats_plan: Vec<String> = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN QUERY PLAN {}",
+        elements::cleanup_sql()
+    )))
+    .fetch_all(&db.pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| row.try_get(3).unwrap())
+    .collect();
+    assert!(missing_stats_plan.iter().all(|line| {
+        !line.contains("SCAN _bulk_element_rows") || line.contains(elements::TOMBSTONE_INDEX)
+    }));
+    db.execute_raw_sql_write(&format!(
+        "ANALYZE;
+         UPDATE sqlite_stat1 SET stat='30 30' WHERE tbl='_bulk_element_rows';
+         UPDATE sqlite_stat1 SET stat='1000000000 1' WHERE idx='{}';
+         ANALYZE sqlite_schema;
+         INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','retained');
+         INSERT INTO _bulk_files(id,table_name,path,checksum,state,rows)
+           VALUES(1,'elements','preserved.parquet','test','published',1);
+         INSERT INTO _bulk_element_rows(id,frame_id,source,role,text,_archive_generation,_archive_deleted,_archive_file)
+           VALUES(1000001,1,'accessibility','AXText','archived tombstone',1,1,1);
+         WITH RECURSIVE n(id) AS (VALUES(1000002) UNION ALL SELECT id+1 FROM n WHERE id<{})
+         INSERT INTO _bulk_element_rows(id,frame_id,source,role,text,_archive_generation,_archive_deleted)
+           SELECT id,1,'accessibility','AXText','resident tombstone',1,1 FROM n",
+        elements::TOMBSTONE_INDEX,
+        1_000_001 + FILE_ROWS as i64 + 1
+    )).await.unwrap();
+
+    let fixed_plan: Vec<String> = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN QUERY PLAN {}",
+        elements::cleanup_sql()
+    )))
+    .fetch_all(&db.pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| row.try_get(3).unwrap())
+    .collect();
+    assert!(fixed_plan.iter().all(|line| {
+        !line.contains("SCAN _bulk_element_rows") || line.contains(elements::TOMBSTONE_INDEX)
+    }));
+    assert!(fixed_plan
+        .iter()
+        .filter(|line| line.contains("_bulk_element_rows"))
+        .all(|line| line.contains(elements::TOMBSTONE_INDEX)));
+
+    let storage = db.storage.as_ref().unwrap().clone();
+    assert!(storage.descriptor.budget.record_bytes < 2_097_152);
+    let index_path = storage.root.join(&storage.descriptor.index);
+    let pool = pool_options(Some(storage.clone()), false)
+        .max_connections(1)
+        .connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&index_path))
+        .await
+        .unwrap();
+    let writer = screenpipe_sqlite_coordinator::SqliteWritePool::new(
+        pool.clone(),
+        screenpipe_sqlite_coordinator::sqlite_write_lock(&index_path),
+    );
+    let steps = Box::new(AtomicU64::new(0));
+    {
+        let mut conn = pool.acquire().await.unwrap();
+        let mut handle = conn.lock_handle().await.unwrap();
+        unsafe {
+            libsqlite3_sys::sqlite3_progress_handler(
+                handle.as_raw_handle().as_ptr(),
+                1000,
+                Some(count_steps),
+                (&*steps as *const AtomicU64).cast_mut().cast(),
+            );
+        }
+    }
+    let fixed_backlog_started = std::time::Instant::now();
+    let (cleanup, captured) = tokio::join!(
+        elements::reclaim(&storage, &pool, &writer),
+        db.insert_snapshot_frame(
+            "display",
+            chrono::Utc::now(),
+            "",
+            Some("test"),
+            None,
+            None,
+            true,
+            Some("test"),
+            Some("durable capture"),
+            Some("accessibility"),
+            None,
+            None,
+            None,
+        )
+    );
+    cleanup.unwrap();
+    let fixed_backlog_elapsed = fixed_backlog_started.elapsed();
+    let captured = captured.unwrap();
+    let fixed_steps = steps.load(Ordering::Relaxed);
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM _bulk_element_rows WHERE _archive_deleted=1 AND _archive_file IS NULL").fetch_one(&pool).await.unwrap(), 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM _bulk_element_rows WHERE id=1000001 AND _archive_file=1"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    // The archive row is only a predicate fixture. Remove its fake catalog
+    // metadata before startup validation, while leaving the resident backlog.
+    db.execute_raw_sql_write(
+        "DELETE FROM _bulk_element_rows WHERE id=1000001; DELETE FROM _bulk_files WHERE id=1",
+    )
+    .await
+    .unwrap();
+    pool.close().await;
+    drop(writer);
+    drop(storage);
+    db.close().await;
+
+    let reopened = Arc::new(
+        DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap(),
+    );
+    let payload = reopened
+        .frame_payloads(&[captured], crate::storage::Projection::All)
+        .await
+        .unwrap()
+        .remove(&captured)
+        .unwrap();
+    assert_eq!(
+        payload.accessibility_text.as_deref(),
+        Some("durable capture")
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM frames WHERE id=?")
+            .bind(captured)
+            .fetch_one(&reopened.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let storage = reopened.storage.as_ref().unwrap().clone();
+    let index_path = storage.root.join(&storage.descriptor.index);
+    let pool = pool_options(Some(storage.clone()), false)
+        .max_connections(1)
+        .connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&index_path))
+        .await
+        .unwrap();
+    let writer = screenpipe_sqlite_coordinator::SqliteWritePool::new(
+        pool.clone(),
+        screenpipe_sqlite_coordinator::sqlite_write_lock(&index_path),
+    );
+    elements::reclaim(&storage, &pool, &writer).await.unwrap();
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM _bulk_element_rows WHERE _archive_deleted=1 AND _archive_file IS NULL").fetch_one(&pool).await.unwrap(), 0);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM _bulk_element_rows WHERE _archive_deleted=0"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1_000_000
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT length(text) FROM _bulk_element_rows WHERE id=1000000"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2_097_152
+    );
+    let fixed_zero_steps = Box::new(AtomicU64::new(0));
+    {
+        let mut conn = pool.acquire().await.unwrap();
+        let mut handle = conn.lock_handle().await.unwrap();
+        unsafe {
+            libsqlite3_sys::sqlite3_progress_handler(
+                handle.as_raw_handle().as_ptr(),
+                1000,
+                Some(count_steps),
+                (&*fixed_zero_steps as *const AtomicU64).cast_mut().cast(),
+            );
+        }
+    }
+    let fixed_zero_started = std::time::Instant::now();
+    elements::reclaim(&storage, &pool, &writer).await.unwrap();
+    let fixed_zero_elapsed = fixed_zero_started.elapsed();
+    let fixed_zero_steps = fixed_zero_steps.load(Ordering::Relaxed);
+    assert!(fixed_zero_steps < baseline_steps / 10);
+    eprintln!("resident cleanup: baseline_plan={baseline_plan:?}; baseline_steps~={baseline_steps}; baseline_elapsed={baseline_elapsed:?}; missing_stats_plan={missing_stats_plan:?}; fixed_plan={fixed_plan:?}; fixed_backlog_steps~={fixed_steps}; fixed_backlog_elapsed={fixed_backlog_elapsed:?}; fixed_zero_steps~={fixed_zero_steps}; fixed_zero_elapsed={fixed_zero_elapsed:?}");
+    pool.close().await;
+    reopened.close().await;
 }
 
 #[tokio::test]
@@ -634,4 +933,69 @@ async fn shutdown_releases_sql_workers_waiting_for_decoder_admission() {
         .unwrap()
         .unwrap();
     assert!(!storage.sql_readers_active());
+}
+
+#[tokio::test]
+async fn resident_tombstone_cleanup_is_indexed_batched_and_upgraded_on_reopen_allows_pinned_readers(
+) {
+    // Ordinary startup may share a WAL with an existing read snapshot. Index
+    // installation is safe there; an offline FULL checkpoint is not a startup
+    // prerequisite, including when the index is already installed.
+    for already_installed in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let db = DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap();
+        if !already_installed {
+            db.execute_raw_sql_write(&format!("DROP INDEX {}", elements::TOMBSTONE_INDEX))
+                .await
+                .unwrap();
+        }
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','first durable frame')")
+            .await.unwrap();
+        let mut reader = db.pool.begin().await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM frames")
+                .fetch_one(&mut *reader)
+                .await
+                .unwrap(),
+            1
+        );
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-16','second durable frame')")
+            .await.unwrap();
+        let result = {
+            let writer = db.coordinated_writer();
+            let permit = writer.lock().await.unwrap();
+            let mut conn = permit.pool().acquire().await.unwrap();
+            let original_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+            // A zero test-only busy timeout observes the pinned-reader result
+            // immediately; the fixture retains the reader until after the call.
+            sqlx::query("PRAGMA busy_timeout=0")
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+            let result = elements::ensure_cleanup_index(&mut conn).await;
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "PRAGMA busy_timeout={original_timeout}"
+            )))
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+            result
+        };
+        reader.rollback().await.unwrap();
+        assert!(result.is_ok(),
+            "normal startup index installation must not require an offline FULL checkpoint while readers pin the WAL; already_installed={already_installed}, result={result:?}; retain construction checkpoints only in offline/bootstrap callers");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM frames")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap(),
+            2
+        );
+        db.close().await;
+    }
 }

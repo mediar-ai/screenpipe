@@ -351,6 +351,10 @@ async fn rewrite(
         format!("_archive_deleted=1 OR ({})", TABLE.sealable())
     };
     let freed:i64=sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COALESCE(SUM({}),0) FROM _bulk_element_rows WHERE id BETWEEN ? AND ? AND ({selection})",TABLE.all_bytes("")))).bind(first).bind(last).fetch_one(&mut *tx).await?;
+    // Moving the same logical rows into Parquet does not edit their content.
+    sqlx::query("UPDATE storage_metadata SET maintenance=1 WHERE singleton=1")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "DELETE FROM _bulk_element_rows WHERE id BETWEEN ? AND ? AND ({selection})"
     )))
@@ -358,6 +362,9 @@ async fn rewrite(
     .bind(last)
     .execute(&mut *tx)
     .await?;
+    sqlx::query("UPDATE storage_metadata SET maintenance=0 WHERE singleton=1")
+        .execute(&mut *tx)
+        .await?;
     if let Some((_, _, old)) = range {
         sqlx::query("DELETE FROM _bulk_element_ranges WHERE file_id=?")
             .bind(old)
@@ -445,11 +452,13 @@ pub(crate) async fn reclaim(
         rewrite(storage, pool, writer, range.0, Some(range)).await?;
     }
     let permit = writer.lock().await?;
-    sqlx::query(
-        "DELETE FROM _bulk_element_rows WHERE _archive_deleted=1 AND _archive_file IS NULL",
-    )
-    .execute(permit.pool())
-    .await?;
+    // Force the narrow partial index: installed databases can have stale
+    // sqlite_stat1 rows that otherwise make SQLite rescan all resident history.
+    // One established file-sized batch bounds writer occupancy; later
+    // maintenance turns durably drain the remainder.
+    sqlx::query(sqlx::AssertSqlSafe(super::cleanup_sql()))
+        .execute(permit.pool())
+        .await?;
     sqlx::query(
         "UPDATE _bulk_files SET state='retired' WHERE table_name='elements' AND state='encoding'",
     )

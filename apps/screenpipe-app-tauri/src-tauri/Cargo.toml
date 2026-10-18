@@ -7,7 +7,7 @@ members = ["wer-dump-helper", "windows/persistence-supervisor", "release-router-
 
 [package]
 name = "screenpipe-app"
-version = "2.7.106"
+version = "2.7.116"
 description = "24/7 memory for your desktop. 100% local."
 authors = ["you"]
 license = ""
@@ -259,6 +259,7 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Dwm",
     "Win32_System_Com",
     "Win32_System_ErrorReporting",
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_System_RemoteDesktop",
@@ -341,6 +342,8 @@ jemalloc = ["tikv-jemallocator"]
 
 
 [dev-dependencies]
+# Feedback recovery tests create SQLite triggers on every supported platform.
+rusqlite = { version = "=0.39.0", features = ["bundled"] }
 tokio = { version = "1.36.0", features = ["test-util"] }
 wiremock = "0.6"
 serial_test = "3"

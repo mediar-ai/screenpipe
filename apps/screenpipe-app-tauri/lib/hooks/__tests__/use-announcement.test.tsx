@@ -132,16 +132,16 @@ describe("useAnnouncement", () => {
     });
   });
 
-  it("refreshes flags on mount and when an already-open app regains focus", async () => {
+  it("refreshes flags on mount and reuses fresh cached flags on focus", async () => {
     const { unmount } = renderHook(() => useAnnouncement());
     await flushAnnouncementEffects();
 
     expect(reloadFlagsMock).toHaveBeenCalledTimes(1);
     act(() => window.dispatchEvent(new Event("focus")));
-    expect(reloadFlagsMock).toHaveBeenCalledTimes(2);
+    expect(reloadFlagsMock).toHaveBeenCalledTimes(1);
     unmount();
     act(() => window.dispatchEvent(new Event("focus")));
-    expect(reloadFlagsMock).toHaveBeenCalledTimes(2);
+    expect(reloadFlagsMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not load remote prompts after analytics opt-out", async () => {

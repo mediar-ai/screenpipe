@@ -27,7 +27,7 @@ use tracing::{info, warn};
 
 pub(crate) const AI_TOOL_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
-const AI_TOOL_AUTO_CONNECT_TARGETS: [&str; 11] = [
+const AI_TOOL_AUTO_CONNECT_TARGETS: [&str; 15] = [
     "claude",
     "claude-code",
     "codex",
@@ -38,6 +38,10 @@ const AI_TOOL_AUTO_CONNECT_TARGETS: [&str; 11] = [
     "runner",
     "windsurf",
     "vscode",
+    "opencode",
+    "antigravity",
+    "cline",
+    "kiro",
     "grokbot",
 ];
 
@@ -149,7 +153,10 @@ fn background_bun_path() -> Option<PathBuf> {
     crate::pi::find_bun_executable().map(PathBuf::from)
 }
 
-async fn wait_for_background_api_key(api_auth_enabled: bool) -> Option<String> {
+async fn wait_for_background_api_key(
+    api_auth_enabled: bool,
+    resolved_api_key: impl Fn() -> Option<String>,
+) -> Option<String> {
     if !api_auth_enabled {
         return None;
     }
@@ -161,7 +168,7 @@ async fn wait_for_background_api_key(api_auth_enabled: bool) -> Option<String> {
     // clock deadline: slow keychain prompts or first-run database recovery must
     // not permanently miss setup merely because onboarding completed meanwhile.
     loop {
-        if let Some(key) = crate::store::resolved_api_auth_key() {
+        if let Some(key) = resolved_api_key() {
             return Some(key);
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -171,11 +178,9 @@ async fn wait_for_background_api_key(api_auth_enabled: bool) -> Option<String> {
 /// Repair detected AI tools at startup, then watch for later installs. Successful
 /// targets are cached for this session; an explicit Settings disconnect still
 /// wins. Filesystem work stays off the async/UI threads.
-pub fn connect_detected_ai_tools_in_background(
-    _app: tauri::AppHandle,
-    api_auth_enabled: bool,
-    api_port: u16,
-) {
+pub fn connect_detected_ai_tools_in_background(config: &screenpipe_engine::RecordingConfig) {
+    let api_auth_enabled = config.api_auth;
+    let api_port = config.port;
     let Some(home) = background_ai_tools_home() else {
         info!("AI tool background setup skipped: no home directory");
         return;
@@ -187,7 +192,8 @@ pub fn connect_detected_ai_tools_in_background(
     // Grok Bot requires explicit credential access from Connections.
     // Keep ordinary local MCP/skill configuration automatic.
     tauri::async_runtime::spawn(async move {
-        let api_key = wait_for_background_api_key(api_auth_enabled).await;
+        let api_key =
+            wait_for_background_api_key(api_auth_enabled, crate::store::resolved_api_auth_key).await;
         connect_detected_ai_tools_in(
             home,
             bun_path,
@@ -195,6 +201,7 @@ pub fn connect_detected_ai_tools_in_background(
             format!("http://localhost:{api_port}"),
             ai_tool_auto_connect_opt_out_dir(),
             AI_TOOL_CHECK_INTERVAL,
+            crate::enterprise_policy::ai_tool_setup_policy,
         )
         .await;
     });
@@ -207,11 +214,26 @@ async fn connect_detected_ai_tools_in(
     api_url: String,
     opt_out_dir: PathBuf,
     check_interval: Duration,
+    auto_connect_policy: impl Fn() -> crate::enterprise_policy::AiToolSetupPolicy + Send + 'static,
 ) {
     let mut reconciler = screenpipe_engine::cli::agent::DesktopAgentReconciler::default();
     let mut previous_report = None;
     let mut attempt = 0;
+    let mut policy_revision = None;
     loop {
+        let policy = auto_connect_policy();
+        if policy_revision != Some(policy.revision) {
+            reconciler = Default::default();
+            previous_report = None;
+            attempt = 0;
+            policy_revision = Some(policy.revision);
+        }
+        // Keep the watcher alive while disabled so the next policy refresh can
+        // enable setup, including on deployments with no webview.
+        if !policy.allowed {
+            tokio::time::sleep(check_interval).await;
+            continue;
+        }
         attempt = (attempt + 1).min(3);
         let home = home.clone();
         let bun_path = bun_path.clone();
@@ -224,6 +246,11 @@ async fn connect_detected_ai_tools_in(
         // returns, no older launch repair can still reconnect that target.
         let result = {
             let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+            let latest_policy = auto_connect_policy();
+            if !latest_policy.allowed || latest_policy.revision != policy.revision {
+                // Retry with a coherent policy/cache after any lock-wait change.
+                continue;
+            }
             tokio::task::spawn_blocking(move || {
                 let opted_out = ai_tool_auto_connect_opt_outs_in(&opt_out_dir);
                 let report =
@@ -1742,6 +1769,7 @@ mod tests {
             "http://localhost:3137".into(),
             opt_out_dir.clone(),
             Duration::from_millis(20),
+            || crate::enterprise_policy::AiToolSetupPolicy { allowed: true, revision: 0 },
         ));
         let outcome = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1784,6 +1812,102 @@ mod tests {
         task.abort();
         let _ = task.await;
         outcome.expect("background poll did not connect later installs");
+    }
+
+    #[tokio::test]
+    async fn ai_tool_setup_waits_for_effective_lan_auth_key() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let settings = screenpipe_config::RecordingSettings {
+            api_auth: false,
+            listen_on_lan: true,
+            ..Default::default()
+        };
+        let config = screenpipe_engine::RecordingConfig::from_settings(
+            &settings,
+            PathBuf::from("unused-fixture-path"),
+            None,
+        );
+        let attempts = AtomicUsize::new(0);
+        let key = tokio::time::timeout(
+            Duration::from_secs(3),
+            wait_for_background_api_key(config.api_auth, || {
+                (attempts.fetch_add(1, Ordering::SeqCst) > 0).then(|| "sp-fixture".to_string())
+            }),
+        )
+        .await
+        .expect("installer must resume after the server resolves its key");
+        assert_eq!(key.as_deref(), Some("sp-fixture"));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            wait_for_background_api_key(false, || panic!("unauthenticated local API needs no key")).await,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn ai_tool_policy_pauses_and_resumes_background_setup() {
+        use std::sync::Arc;
+        let fixture = tempfile::tempdir().unwrap();
+        let home = fixture.path().join("home");
+        std::fs::create_dir_all(home.join(".cursor")).unwrap();
+        let enabled = Arc::new(crate::enterprise_policy::AiToolPolicy::new(false, true));
+        let policy = enabled.clone();
+        let task = tokio::spawn(connect_detected_ai_tools_in(
+            home.clone(),
+            home.join("bun"),
+            Some("sp-fixture".into()),
+            "http://localhost:3137".into(),
+            fixture.path().join("opt-outs"),
+            Duration::from_millis(20),
+            move || policy.snapshot(),
+        ));
+        let outcome = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if home.join(".cursor/mcp.json").exists() || home.join(".cursor/skills").exists() {
+                return Err("disabled policy wrote a configuration".to_string());
+            }
+            enabled.update(enabled.begin_refresh(), true);
+            while !home.join(".cursor/skills/screenpipe-api/SKILL.md").is_file()
+                || !home.join(".cursor/mcp.json").is_file()
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            {
+                let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+                enabled.update(enabled.begin_refresh(), false);
+                std::fs::remove_file(home.join(".cursor/mcp.json")).map_err(|e| e.to_string())?;
+                enabled.update(enabled.begin_refresh(), true);
+            }
+            while !home.join(".cursor/mcp.json").is_file() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            enabled.update(enabled.begin_refresh(), false);
+            // Drain an in-flight pass before introducing the next tool.
+            {
+                let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            std::fs::create_dir_all(home.join(".runner")).map_err(|e| e.to_string())?;
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if home.join(".runner/mcp.json").exists() || !home.join(".cursor/mcp.json").is_file() {
+                return Err("disabled policy must preserve existing connections without adding new ones".to_string());
+            }
+            // A successful target may be changed while the org disables setup.
+            // Re-enabling must reconcile it again, not retain a stale success.
+            std::fs::remove_file(home.join(".cursor/mcp.json")).map_err(|e| e.to_string())?;
+            enabled.update(enabled.begin_refresh(), true);
+            while !home.join(".runner/mcp.json").is_file()
+                || !home.join(".cursor/mcp.json").is_file()
+            {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            Ok::<(), String>(())
+        })
+        .await;
+        let _guard = AI_TOOL_AUTO_CONNECT_LOCK.lock().await;
+        task.abort();
+        let _ = task.await;
+        outcome.expect("AI-tool policy did not resume setup").unwrap();
     }
 
     #[tokio::test]
@@ -1841,6 +1965,16 @@ mod tests {
         assert!(ai_tool_auto_connect_opt_outs_in(&root).contains("vscode"));
         set_ai_tool_auto_connect_opt_out_in(&root, "vscode", false).unwrap();
         assert!(!ai_tool_auto_connect_opt_outs_in(&root).contains("vscode"));
+        set_ai_tool_auto_connect_opt_out_in(&root, "opencode", true).unwrap();
+        assert!(ai_tool_auto_connect_opt_outs_in(&root).contains("opencode"));
+        set_ai_tool_auto_connect_opt_out_in(&root, "opencode", false).unwrap();
+        assert!(!ai_tool_auto_connect_opt_outs_in(&root).contains("opencode"));
+        for id in ["antigravity", "cline", "kiro"] {
+            set_ai_tool_auto_connect_opt_out_in(&root, id, true).unwrap();
+            assert!(ai_tool_auto_connect_opt_outs_in(&root).contains(id));
+            set_ai_tool_auto_connect_opt_out_in(&root, id, false).unwrap();
+            assert!(!ai_tool_auto_connect_opt_outs_in(&root).contains(id));
+        }
         assert!(set_ai_tool_auto_connect_opt_out_in(&root, "../escape", true).is_err());
         let _ = std::fs::remove_dir_all(root);
     }

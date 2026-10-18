@@ -541,7 +541,8 @@ export function createFixtureWorkflowsPlatform(analysis: WorkflowAnalysis = fixt
         const prior = s.sourceIndex === null ? null : workflow.stages[s.sourceIndex];
         return { ...(prior ?? { activeMinutes: 0, waitingMinutes: 0, apps: [], confidence: 0, observedOccurrences: 0, observedDays: 0, evidence: [] }),
           timing: isUnchangedStage(s, prior ?? undefined) ? prior?.timing : null,
-          name: s.name.trim(), description: s.description.trim(), userEdited: true,
+          name: s.name.trim(), description: s.description.trim(), userEdited: prior?.userEdited || !isUnchangedStage(s, prior ?? undefined),
+          imageLayout: s.imageLayout,
           procedure: s.procedure.map(p => ({ ...(p.sourceIndex === null ? { quote: "", timestamp: "", app: "" } : prior?.procedure?.[p.sourceIndex] ?? { quote: "", timestamp: "", app: "" }), kind: p.kind, text: p.text.trim(), userEdited: true })),
         };
       });

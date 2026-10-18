@@ -5,7 +5,6 @@ import { exportGuideHtml } from "./guide-images";
 import { SourceSopScreenshot } from "./source-sop-screenshot";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
-  ArrowLeft,
   ArrowDown,
   ArrowUp,
   BookOpen,
@@ -14,6 +13,7 @@ import {
   ExternalLink,
   ImageOff,
   Loader2,
+  List,
   MoreHorizontal,
   Plus,
   Trash2,
@@ -22,6 +22,7 @@ import {
 import type { WorkflowMap } from "./model";
 import type { WorkflowsPlatform } from "./platform";
 import {
+  guideMarkdown,
   guideWithBlockIds,
   guideScreenshot,
   guideStepIncludesImage,
@@ -33,6 +34,7 @@ import {
 import { WorkflowRichText } from "./rich-text";
 import { InlineText } from "./inline-text";
 import { DocumentBlockEditor, type DocumentBlock } from "./document-block-editor";
+import { DocumentActions, DocumentToolbar, type LibraryShareDocument } from "./document-actions";
 import { SopDocument } from "./sop-document";
 import { GuideAssistant } from "./guide-assistant";
 import { GuideSourceReview } from "./guide-source-review";
@@ -48,10 +50,14 @@ export function WorkflowGuide({
   backLabel = "Back to workflow",
   sourceMissing = false,
   loadScreenshot,
+  onShareDocument,
+  downloadDocument,
 }: {
   workflow: WorkflowMap;
   platform: NonNullable<WorkflowsPlatform["guides"]>;
   close: () => void;
+  onShareDocument?: (document: LibraryShareDocument) => void;
+  downloadDocument?: (content: string, filename: string) => Promise<boolean>;
   backLabel?: string;
   sourceMissing?: boolean;
   loadScreenshot?: WorkflowsPlatform["loadWorkflowScreenshot"];
@@ -73,7 +79,8 @@ export function WorkflowGuide({
   const [saved, setSaved] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const root = useRef<HTMLDivElement>(null);
-  const [images, setImages] = useState(false);
+  const [images, setImages] = useState(true);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [openingWeb, setOpeningWeb] = useState(false);
   const webDialog = useRef<HTMLDialogElement>(null);
@@ -227,17 +234,7 @@ export function WorkflowGuide({
       <span role="status" className={styles.srOnly}>
         {announcement}
       </span>
-      <header className={styles.toolbar}>
-        <button
-          onClick={() => {
-            close();
-          }}
-        >
-          <ArrowLeft size={16} />
-          {backLabel}
-        </button>
-        <div>
-          <span role="status" className={styles.saveStatus} title={saved}>
+      <DocumentToolbar backLabel={backLabel} onBack={close} status={<span role="status" className={styles.saveStatus} title={saved}>
             {saved.startsWith("Could not") ? (
               saved
             ) : (
@@ -260,7 +257,7 @@ export function WorkflowGuide({
                 </span>
               </>
             )}
-          </span>
+          </span>}>
           {draft && saved.startsWith("Could not") && (
             <button
               onClick={() =>
@@ -272,6 +269,8 @@ export function WorkflowGuide({
           )}
           {draft && (
             <>
+              <button type="button" className={styles.actionButton} aria-label={ui("Contents")} title={ui("Contents")} aria-expanded={outlineOpen} onClick={() => setOutlineOpen(!outlineOpen)}><List size={16} aria-hidden="true" /></button>
+              <DocumentActions document={{ kind: "sop", title: draft.title, markdown: guideMarkdown(draft) }} onShare={platform.openWeb ? () => { setWebError(""); webDialog.current?.showModal(); } : onShareDocument} download={downloadDocument} />
               {platform.video && <GuideVideoPanel container={videoContainer} onOpenChange={setVideoOpen} ref={videoHandle} guide={draft} workflow={workflow} platform={platform.video} loadScreenshot={platform.loadScreenshot} loadSourceScreenshot={platform.loadSourceScreenshot} save={persist} onVideoMode={setVideoMode} onLayoutChange={videoLayout => update({ ...latest.current!, videoLayout })} assistantBusy={videoBusy} onCreate={platform.video.edit ? () => {
                 if (videoRequested.current) return;
                 videoRequested.current = true;
@@ -293,7 +292,6 @@ export function WorkflowGuide({
                   }}
                 >
                   <ExternalLink size={16} aria-hidden="true" />
-                  {ui("Open on web")}
                 </button>
               )}
               <button
@@ -301,18 +299,16 @@ export function WorkflowGuide({
                 aria-label={ui("Export SOP")}
                 title={ui("Export SOP")}
                 onClick={() => {
-                  setImages(false);
+                  setImages(true);
                   setExportError("");
                   dialog.current?.showModal();
                 }}
               >
                 <Download size={16} aria-hidden="true" />
-                {ui("Export")}
               </button>
             </>
           )}
-        </div>
-      </header>
+      </DocumentToolbar>
       <div ref={setVideoContainer} />
       {!busy && !error && (
         <GuideAssistant
@@ -363,9 +359,9 @@ export function WorkflowGuide({
           </button>
         </div>
         <p>
-          Save this SOP’s text to your Screenpipe account to edit and share it.
-          Recordings and screenshots stay on this device. Existing web edits are
-          preserved.
+          Save this SOP and its included images to your Screenpipe account.
+          Remove any image from the SOP before continuing if you don’t want to share it.
+          Your draft stays private until you publish it on the web. Existing web edits are preserved.
         </p>
         {webError && <p role="alert">{webError}</p>}
         <div className={styles.dialogActions}>
@@ -383,7 +379,7 @@ export function WorkflowGuide({
               setOpeningWeb(true);
               setWebError("");
               try {
-                await platform.openWeb?.(draft);
+                await platform.openWeb?.(draft, workflow);
                 webDialog.current?.close();
               } catch (e) {
                 setWebError(
@@ -409,8 +405,8 @@ export function WorkflowGuide({
           {error && <button onClick={() => void openGuide()}>Try again</button>}
         </SopDocument>
       ) : (
-        <div className={styles.layout} hidden={videoOpen}>
-          <aside className={styles.outline}>
+        <div className={`${styles.layout} ${outlineOpen ? styles.withOutline : ""}`} hidden={videoOpen}>
+          <aside className={styles.outline} hidden={!outlineOpen}>
             <p className={styles.eyebrow}>In this guide</p>
             <a onClick={jump} href="#guide-prerequisites">
               Before you start
@@ -596,7 +592,7 @@ export function WorkflowGuide({
                           }}
                         />
                       ) : !image && !stale && guideStepIncludesImage(step) && !step.imageReview && sourceStage !== null && workflow.stages[sourceStage] ? (
-                        <SourceSopScreenshot stage={workflow.stages[sourceStage!]} load={platform.loadSourceScreenshot} title={step.title} />
+                        <SourceSopScreenshot onRemove={() => changeStep(i, { includeImage: false, imageExcluded: true })} stage={workflow.stages[sourceStage!]} load={platform.loadSourceScreenshot} title={step.title} />
                       ) : !image ? (
                         <p className={styles.muted}>
                           {stale
@@ -683,7 +679,7 @@ export function WorkflowGuide({
             disabled={Boolean(stale)}
             onChange={(e) => setImages(e.target.checked)}
           />
-          Include screenshots I have reviewed
+          Include images
         </label>
         <small>
           Screenshots can contain customer information. Only the selected guide

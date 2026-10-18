@@ -126,20 +126,35 @@ export function isLoopbackRequest(req: { socket: { remoteAddress?: string } }): 
 }
 
 /**
- * Authorization decision. Loopback is always allowed; non-loopback requires
+ * Authorization decision. Literal loopback hosts with no foreign Origin are allowed; other requests require
  * a matching bearer token when one is configured. If no api key is set
  * (loopback-only deployment), non-loopback shouldn't even be reachable —
  * but we still 401 it as belt-and-suspenders.
  */
 export function isAuthorized(
-  req: { socket: { remoteAddress?: string }; headers: { authorization?: string } },
+  req: { socket: { remoteAddress?: string }; headers: { authorization?: string; host?: string; origin?: string } },
   apiKey: string | undefined
 ): boolean {
-  if (isLoopbackRequest(req)) return true;
+  // The socket alone is insufficient: a browser can resolve an attacker-owned
+  // hostname to loopback, or call localhost with a foreign Origin.
+  if (isLoopbackRequest(req) && isTrustedLocalHost(req.headers.host)
+      && (req.headers.origin === undefined || isTrustedLocalOrigin(req.headers.origin))) return true;
   if (!apiKey) return false;
   const expected = `Bearer ${apiKey}`;
   const got = req.headers.authorization ?? "";
   return constantTimeEq(got, expected);
+}
+
+function isTrustedLocalHost(host: string | undefined): boolean {
+  if (!host) return false;
+  // Match the raw authority, not URL-normalized input (userinfo, paths and
+  // numeric aliases must not acquire localhost privileges).
+  return /^(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?$/i.test(host);
+}
+
+function isTrustedLocalOrigin(origin: string): boolean {
+  const match = /^https?:\/\/([^/?#]+)$/.exec(origin);
+  return match !== null && isTrustedLocalHost(match[1]);
 }
 
 /** Constant-time string compare to keep timing attacks off the table. */

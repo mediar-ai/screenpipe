@@ -32,6 +32,9 @@ import {
   isRunnerMcpInstalled,
   isWindsurfMcpInstalled,
   isVscodeMcpInstalled,
+  isOpencodeMcpInstalled,
+  isLocalJsonMcpInstalled,
+  isPerplexityDetected,
 } from "@/lib/ai-tools-mcp";
 import { areExternalAgentSkillsInstalled } from "@/lib/external-agent-skills";
 import {
@@ -42,6 +45,7 @@ import {
 
 import { isGrokBotConnected } from "@/lib/grokbot-connection";
 import { useGT } from "gt-react";
+import { PerplexitySetup } from "./perplexity-setup";
 
 
 const DISPLAY_NAMES: Record<ConnectAllToolId, string> = {
@@ -115,6 +119,12 @@ async function isToolConnected(id: ConnectAllToolId): Promise<boolean> {
       return isWindsurfMcpInstalled();
     case "vscode":
       return isVscodeMcpInstalled();
+    case "opencode":
+      return isOpencodeMcpInstalled();
+    case "antigravity":
+    case "cline":
+    case "kiro":
+      return isLocalJsonMcpInstalled(id);
   }
 }
 
@@ -137,8 +147,13 @@ function ToolIcon({ id }: { id: ConnectAllToolId }) {
       return <img src="/images/openclaw.png" alt="" className={`${img} rounded`} />;
     case "hermes":
       return <img src="/images/hermes.png" alt="" className={`${img} rounded`} />;
+    case "opencode":
+      return <img src="/images/opencode.svg" alt="" className={`${img} dark:invert`} />;
     case "vscode":
       return <img src="/images/vscode.svg" alt="" className={img} />;
+    case "antigravity":
+    case "cline":
+    case "kiro":
     case "grokbot":
     case "runner":
       return <Bot className={img} />;
@@ -151,6 +166,7 @@ function ToolIcon({ id }: { id: ConnectAllToolId }) {
 export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
 
   const ui = useGT();
+  const [perplexityDetected, setPerplexityDetected] = useState(false);
   const [detected, setDetected] = useState<ConnectAllToolId[]>([]);
   const [connected, setConnected] = useState<Partial<Record<ConnectAllToolId, boolean>>>({});
   const [busy, setBusy] = useState<Partial<Record<ConnectAllToolId, ToolBusy>>>({});
@@ -162,7 +178,8 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
 
   const refresh = useCallback(async () => {
     try {
-      const tools = await detectAiTools();
+      const [tools, perplexity] = await Promise.all([detectAiTools(), Promise.resolve().then(() => isPerplexityDetected(platform())).catch(() => false)]);
+      setPerplexityDetected(perplexity);
       setDetected(tools);
       await Promise.all(tools.map(async (id) => {
         const value = await isToolConnected(id).catch(() => false);
@@ -289,9 +306,13 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
   };
 
   // Machines with zero AI tools never see this card.
-  if (detected.length === 0) return null;
+  if (detected.length === 0 && !perplexityDetected) return null;
 
-  const summary = noneConnected
+  const summary = rows.length === 0
+    ? "Perplexity found. Finish setup in the app."
+    : perplexityDetected
+    ? `${connectedCount} of ${rows.length} automatic connections set up`
+    : noneConnected
     ? `${rows.length} found. Connect ${rows.length === 1 ? "it" : "them"} in one click.`
     : allConnected
     ? `All ${rows.length} connected`
@@ -332,7 +353,7 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
             ) : (
               <Plus className="h-3.5 w-3.5" />
             )}
-            {bulkRunning ? ui("Connecting...") : ui("Connect all")}
+            {bulkRunning ? ui("Connecting...") : perplexityDetected ? ui("Connect automatically") : ui("Connect all")}
           </Button>
         ) : (
           <Button
@@ -464,6 +485,13 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
           {/* Bulk-action placement rule: one bulk action per place. When
               nothing is connected the header's "+ Connect all" is the only
               bulk control — no footer duplicate. */}
+          {(["antigravity", "cline", "kiro"] as const).some((id) => connected[id]) && (
+            <p className="py-3 text-xs text-muted-foreground">
+              Restart newly connected apps and approve screenpipe when prompted. Try: “Summarize today by client and draft my timesheet.”
+            </p>
+          )}
+          {perplexityDetected && <PerplexitySetup />}
+
           {hasAnyConnection && (
             <div className="flex items-center justify-between pt-2.5">
               <span className="text-[11px] text-muted-foreground/70">
@@ -476,7 +504,7 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
                   disabled={bulkRunning}
                   className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors disabled:opacity-50"
                 >
-                  {confirmingDisconnect ? ui("Click again to confirm") : ui("Disconnect all…")}
+                  {confirmingDisconnect ? ui("Click again to confirm") : perplexityDetected ? ui("Disconnect automatic apps…") : ui("Disconnect all…")}
                 </button>
                 {!allConnected && (
                   <Button
@@ -488,7 +516,7 @@ export function AiToolsCard({ onChanged }: { onChanged?: () => void }) {
                     className="h-7 gap-1 text-xs normal-case font-sans tracking-normal"
                   >
                     <Plus className="h-3 w-3" />
-                    Connect all
+                    {perplexityDetected ? "Connect automatically" : "Connect all"}
                   </Button>
                 )}
               </span>

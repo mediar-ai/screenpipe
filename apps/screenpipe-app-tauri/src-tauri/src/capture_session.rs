@@ -44,6 +44,7 @@ pub struct CaptureSession {
     shutdown_tx: broadcast::Sender<()>,
     disk_pressure_data_dir: PathBuf,
     vision_task: Option<tokio::task::JoinHandle<()>>,
+    schedule_task: Option<tokio::task::JoinHandle<()>>,
     ui_recorder_handle: Option<screenpipe_engine::UiRecorderHandle>,
     audio_manager: Arc<screenpipe_audio::audio_manager::AudioManager>,
     audio_disabled: bool,
@@ -73,6 +74,22 @@ impl CaptureSession {
 
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
         reconfigure_audio_manager(server, config).await?;
+
+        // A capture restart keeps this process alive. Disabling the schedule
+        // must clear the previous session's pause before starting capture.
+        screenpipe_engine::schedule_monitor::reset_schedule_paused();
+        let schedule_task = config.schedule_enabled.then(|| {
+            screenpipe_engine::schedule_monitor::start_schedule_monitor(
+                config.schedule_rules.clone(),
+                shutdown_tx.subscribe(),
+            )
+        });
+        info!(
+            schedule_enabled = config.schedule_enabled,
+            schedule_rules = config.schedule_rules.len(),
+            schedule_paused = screenpipe_engine::schedule_monitor::schedule_paused(),
+            "capture session schedule initialized"
+        );
 
         // --- Capture trigger sender (set by VisionManager, consumed by UI recorder) ---
         let mut capture_trigger_tx: Option<screenpipe_engine::event_driven_capture::TriggerSender> =
@@ -296,15 +313,6 @@ impl CaptureSession {
             config.user_name.clone(),
         );
 
-        // --- Schedule monitor ---
-        if config.schedule_enabled {
-            screenpipe_engine::schedule_monitor::start_schedule_monitor(
-                config.schedule_rules.clone(),
-                shutdown_tx.subscribe(),
-            );
-            info!("work-hours schedule monitor started");
-        }
-
         // --- Snapshot compaction ---
         if config.disable_snapshot_compaction {
             info!("snapshot compaction disabled by recording settings");
@@ -318,12 +326,14 @@ impl CaptureSession {
             );
         }
 
+        screenpipe_engine::meeting_watcher::set_capture_stopped(false);
         info!("Capture session started successfully");
 
         Ok(Self {
             shutdown_tx,
             disk_pressure_data_dir: server.data_path.clone(),
             vision_task,
+            schedule_task,
             ui_recorder_handle,
             audio_manager: server.audio_manager.clone(),
             audio_disabled: config.disable_audio,
@@ -357,6 +367,7 @@ impl CaptureSession {
     /// Quit-to-search must report failures before claiming capture is stopped.
     pub async fn stop_checked(mut self) -> Result<(), String> {
         info!("Stopping capture session");
+        screenpipe_engine::meeting_watcher::set_capture_stopped(true);
         let mut failures = Vec::new();
 
         // Signal UI recorder to stop
@@ -366,6 +377,14 @@ impl CaptureSession {
 
         // Broadcast shutdown to VisionManager, meeting watcher, schedule monitor, compaction
         let _ = self.shutdown_tx.send(());
+
+        // Join before allowing a replacement session to initialize the shared
+        // schedule flag; an old monitor must never re-pause the new session.
+        if let Some(schedule_task) = self.schedule_task.take() {
+            if let Err(error) = schedule_task.await {
+                failures.push(format!("schedule_stop: {error}"));
+            }
+        }
 
         // Stop audio recording (but don't shutdown — keep the Arc valid for queries)
         if !self.audio_disabled {

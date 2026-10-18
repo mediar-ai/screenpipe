@@ -85,7 +85,7 @@ pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-pub(super) fn process_stamp(pid: i32) -> Result<(u32, u64)> {
+pub(crate) fn process_stamp(pid: i32) -> Result<(u32, u64)> {
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let len = unsafe {
         libc::proc_pidinfo(
@@ -163,34 +163,15 @@ pub(super) fn verify_process(pid: i32, requirement: &str) -> Result<()> {
     {
         return Ok(());
     }
-    verify_replaced_process(pid, None)
+    verify_replaced_process(pid)
 }
 
-fn verify_replaced_process(pid: i32, audit: Option<&[u32; 8]>) -> Result<()> {
+fn verify_replaced_process(pid: i32) -> Result<()> {
     let (identifier, certificate) = SIGNER
         .get()
         .context("verified app signing certificate unavailable")?;
-    super::kernel_signature::verify(pid, audit, identifier, certificate)
+    super::kernel_signature::verify(pid, identifier, certificate)
         .context("authenticate original running signature after bundle replacement")
-}
-
-pub(super) fn verify_audit_token(token: &[u32; 8], requirement: &str) -> Result<i32> {
-    // audit_token_t fields: auid, euid, egid, ruid, rgid, pid, asid, pidversion.
-    let pid = token[5] as i32;
-    if token[1] != unsafe { libc::geteuid() } || pid <= 0 {
-        bail!("different local user or invalid peer process");
-    }
-    let bytes: Vec<u8> = token.iter().flat_map(|word| word.to_ne_bytes()).collect();
-    let data = CFData::from_buffer(&bytes);
-    let mut attrs = GuestAttributes::new();
-    attrs.set_audit_token(data.as_concrete_TypeRef());
-    let code = SecCode::copy_guest_with_attribues(None, &attrs, Flags::NONE)
-        .context("resolve authenticated peer process")?;
-    let requirement: SecRequirement = requirement.parse()?;
-    if code.check_validity(Flags::NONE, &requirement).is_err() {
-        verify_replaced_process(pid, Some(token))?;
-    }
-    Ok(pid)
 }
 
 pub(super) fn own_requirement() -> Result<String> {
@@ -252,7 +233,7 @@ pub(super) fn running(pid: i32, requirement: &str) -> Result<Identity> {
     let (identifier, version) = match metadata {
         Ok((identifier, signed_hash, version)) if hash == signed_hash => (identifier, version),
         _ => {
-            verify_replaced_process(pid, None)?;
+            verify_replaced_process(pid)?;
             let identifier = SIGNER.get().context("missing verified signer")?.0.clone();
             let version = registered_process_version(pid, &identifier)?;
             (identifier, version)

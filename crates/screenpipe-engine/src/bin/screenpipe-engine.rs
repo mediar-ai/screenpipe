@@ -292,21 +292,35 @@ fn restart_after_database_fault() -> anyhow::Result<()> {
     }
 }
 
-#[tokio::main]
-#[tracing::instrument]
-async fn main() -> anyhow::Result<()> {
-    // ACP re-enters the same signed binary in private subprocess modes. Handle
-    // those before clap sees the private arguments or the recorder initializes.
-    if let Some(exit_code) = screenpipe_core::agents::acp::run_hidden_mode_without_observer().await
-    {
-        std::process::exit(exit_code);
-    }
-
-    // dhat heap profiler — must be the first thing in main.
-    // Writes dhat-heap.json on drop (Ctrl+C / graceful exit).
+fn main() -> anyhow::Result<()> {
     #[cfg(feature = "heap-prof")]
     let _profiler = dhat::Profiler::new_heap();
 
+    let runtime = tokio::runtime::Runtime::new()?;
+    // Private ACP modes must run before public CLI parsing or AppKit startup.
+    if let Some(exit_code) =
+        runtime.block_on(screenpipe_core::agents::acp::run_hidden_mode_without_observer())
+    {
+        std::process::exit(exit_code);
+    }
+    let matches = Cli::command().get_matches();
+    let record_arg_sources = RecordArgSources::from_cli_matches(&matches);
+    let cli = Cli::from_arg_matches(&matches)?;
+    #[cfg(target_os = "macos")]
+    let native_capture = matches!(
+        cli.command,
+        Command::Record(_) | Command::Vision { .. } | Command::Doctor
+    );
+    let command = move || runtime.block_on(run(cli, record_arg_sources));
+    #[cfg(target_os = "macos")]
+    if native_capture {
+        return screenpipe_engine::macos_run_loop::run(command)?;
+    }
+    command()
+}
+
+#[tracing::instrument(skip_all)]
+async fn run(cli: Cli, record_arg_sources: RecordArgSources) -> anyhow::Result<()> {
     #[cfg(windows)]
     if let Ok(parent) = env::var("SCREENPIPE_DB_RESTART_PARENT") {
         env::remove_var("SCREENPIPE_DB_RESTART_PARENT");
@@ -323,10 +337,6 @@ async fn main() -> anyhow::Result<()> {
     screenpipe_engine::fd_limit::set_fd_limit();
 
     debug!("starting screenpipe server");
-    let matches = Cli::command().get_matches();
-    let record_arg_sources = RecordArgSources::from_cli_matches(&matches);
-    let cli = Cli::from_arg_matches(&matches)?;
-
     // Dispatch subcommands — non-recording commands return early
     let record_args = match cli.command {
         Command::Status {
@@ -1097,6 +1107,19 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     };
+    db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+        identity: format!(
+            "pii-release-v1:{}:{}:{:?}:{:?}:{}",
+            screenpipe_redact::release_model_identity(),
+            config.pii_backend,
+            config.pii_redaction_labels,
+            config.pii_redaction_columns,
+            config.pii_redaction_pseudonyms
+        ),
+        text: config.async_pii_redaction,
+        images: config.async_image_pii_redaction,
+    })
+    .await?;
     let database_failure = Arc::new(tokio::sync::Notify::new());
     let notify_failure = database_failure.clone();
     db.set_persistent_failure_hook(Arc::new(move || notify_failure.notify_one()));
@@ -2421,6 +2444,7 @@ async fn main() -> anyhow::Result<()> {
                 detector,
                 cfg,
             )
+            .with_release_storage(Arc::clone(&db))
             .with_database_error_hook(redact_database_error_hook.clone())
             .spawn();
         }

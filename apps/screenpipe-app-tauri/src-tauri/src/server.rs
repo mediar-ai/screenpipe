@@ -399,45 +399,28 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
-    // main.rs marks a responsive Screenpipe control endpoint before this task
-    // starts. Preserve that healthy instance; reclaim only an unrelated or
-    // unresponsive owner left on the control port.
-    crate::port_conflict::reclaim_owner(
+    match crate::port_conflict::bind_control_port(
         port,
         crate::port_conflict::healthy_control_server_present(),
+        crate::config::app_data_dir(),
+        || axum::Server::try_bind(&addr),
     )
-    .await;
-
-    // Retry binding with backoff — avoids panic when a previous instance hasn't
-    // released the port yet (e.g. fast restart, TIME_WAIT on Linux).
-    let mut last_err = None;
-    for attempt in 0..5u64 {
-        if attempt > 0 {
-            tracing::warn!("port {} in use, retry {}/5...", port, attempt);
-            tokio::time::sleep(std::time::Duration::from_secs(attempt)).await;
-        }
-        match axum::Server::try_bind(&addr) {
-            Ok(builder) => {
-                info!("Server listening on {}", addr);
-                if let Err(e) = builder.serve(app.into_make_service()).await {
-                    error!("server error on {}: {}", addr, e);
-                }
-                return;
-            }
-            Err(e) => {
-                last_err = Some(e);
+    .await
+    {
+        Ok(builder) => {
+            info!("Server listening on {}", addr);
+            if let Err(e) = builder.serve(app.into_make_service()).await {
+                error!("server error on {}: {}", addr, e);
             }
         }
-    }
-    error!(
-        "failed to bind to {} after 5 attempts: {}",
-        addr,
-        last_err.map(|e| e.to_string()).unwrap_or_default()
-    );
-    if crate::port_conflict::healthy_control_server_present() {
-        crate::port_conflict::show_healthy_screenpipe(&app_handle, port);
-    } else {
-        crate::port_conflict::show_reclaim_failed(&app_handle, port);
+        Err(error) => {
+            error!("failed to bind to {addr}: {error:#}");
+            if crate::port_conflict::healthy_control_server_present() {
+                crate::port_conflict::show_healthy_screenpipe(&app_handle, port);
+            } else {
+                crate::port_conflict::show_control_start_failed(&app_handle, port, &error);
+            }
+        }
     }
 }
 

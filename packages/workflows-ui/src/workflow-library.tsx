@@ -2,12 +2,17 @@
 // https://screenpipe.com
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BookOpen, ChevronRight, Search, Sparkles } from "lucide-react";
+import { BookOpen, ChevronRight, Search, Sparkles } from "lucide-react";
 import { guideKey, type WorkflowGuide as Guide } from "./guide";
 import type { WorkflowMap, WorkflowSkillDraft } from "./model";
 import type { WorkflowsPlatform } from "./platform";
 import { WorkflowGuide } from "./workflow-guide";
 import styles from "./workflow-library.module.css";
+import { SopDocument } from "./sop-document";
+import { WorkflowRichText as SkillInstructionsEditor } from "./rich-text";
+import { InlineText } from "./inline-text";
+import { DocumentActions, DocumentToolbar, type LibraryShareDocument } from "./document-actions";
+import { skillMarkdown } from "./skill-document";
 
 type Draft = { workflowKey: string; draft: WorkflowSkillDraft };
 type Installed = { name: string; description: string; path: string };
@@ -26,7 +31,7 @@ export function detachedGuideWorkflow(guide: Guide): WorkflowMap {
   };
 }
 
-export function WorkflowLibrary({ platform, workflows }: { platform: WorkflowsPlatform; workflows: WorkflowMap[] }) {
+export function WorkflowLibrary({ platform, workflows, onShareDocument }: { platform: WorkflowsPlatform; workflows: WorkflowMap[]; onShareDocument?: (document: LibraryShareDocument) => void }) {
   const [tab, setTab] = useState<"sops" | "skills">(() => new URLSearchParams(window.location.search).get("libraryTab") === "skills" ? "skills" : "sops");
   const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(window.location.search).get("libraryItem"));
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -73,10 +78,10 @@ export function WorkflowLibrary({ platform, workflows }: { platform: WorkflowsPl
   if (tab === "sops" && guide && platform.guides) {
     // Load by the saved key, including when the source is no longer in the catalog.
     const adapter = source ? platform.guides : { ...platform.guides, edit: undefined, video: undefined };
-    return <><WorkflowGuide key={guide.workflowKey} workflow={source ?? detachedGuideWorkflow(guide)} platform={adapter} sourceMissing={!source} close={close} backLabel="Back to Library" /></>;
+    return <><WorkflowGuide key={guide.workflowKey} workflow={source ?? detachedGuideWorkflow(guide)} platform={adapter} sourceMissing={!source} onShareDocument={onShareDocument} downloadDocument={platform.library?.downloadDocument} close={close} backLabel="Back to Library" /></>;
   }
   const draft = drafts.find(item => item.workflowKey === selected);
-  if (tab === "skills" && draft && platform.library) return <LibrarySkill key={draft.workflowKey} entry={draft} platform={platform} close={close} />;
+  if (tab === "skills" && draft && platform.library) return <LibrarySkill key={draft.workflowKey} entry={draft} platform={platform} onShareDocument={onShareDocument} close={close} />;
   const filter = (title: string, summary: string) => `${title} ${summary}`.toLowerCase().includes(query.toLowerCase());
   const visibleGuides = guides.filter(g => filter(g.title, g.summary));
   const visibleDrafts = drafts.filter(d => filter(d.draft.name, d.draft.description));
@@ -99,38 +104,78 @@ export function WorkflowLibrary({ platform, workflows }: { platform: WorkflowsPl
   </section>;
 }
 
-function LibrarySkill({ entry, platform, close }: { entry: Draft; platform: WorkflowsPlatform; close: () => void }) {
-  const [draft, setDraft] = useState(entry.draft);
-  const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const writeVersion = useRef(0);
-  async function save(install = false) {
-    setBusy(true); setStatus("");
+function LibrarySkill({ entry, platform, close, onShareDocument }: { entry: Draft; platform: WorkflowsPlatform; close: () => void; onShareDocument?: (document: LibraryShareDocument) => void }) {
+  const recoveryKey = `screenpipe:skill-draft:${entry.workflowKey}`;
+  const [draft, setDraft] = useState(() => {
     try {
-      await platform.library!.saveSkillDraft(entry.workflowKey, draft); setDirty(false);
-      if (install && platform.saveWorkflowSkill) {
-        const receipt = await platform.saveWorkflowSkill(draft);
-        setStatus([...receipt.destinations.map(d => `Installed in ${d}.`), ...receipt.warnings].join(" ") || "No installation completed.");
-      } else setStatus("Saved in Library");
-    } catch (cause) { setStatus(message(cause)); }
+      const saved = JSON.parse(sessionStorage.getItem(recoveryKey) || "null");
+      if (saved && typeof saved.name === "string" && typeof saved.description === "string" && typeof saved.instructions === "string") return { ...entry.draft, ...saved } as WorkflowSkillDraft;
+    } catch { /* Disk draft remains authoritative when recovery is unavailable. */ }
+    return entry.draft;
+  });
+  const [status, setStatus] = useState("All changes saved");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(draft !== entry.draft);
+  const latest = useRef(draft);
+  const version = useRef(draft !== entry.draft ? 1 : 0);
+  const savedVersion = useRef(0);
+  const writes = useRef(Promise.resolve());
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const mounted = useRef(true);
+  async function flush() {
+    clearTimeout(timer.current);
+    const target = latest.current, revision = version.current;
+    const write = writes.current.catch(() => {}).then(async () => {
+      if (revision <= savedVersion.current) return;
+      await platform.library!.saveSkillDraft(entry.workflowKey, target);
+      savedVersion.current = revision;
+      if (revision === version.current) {
+        try { sessionStorage.removeItem(recoveryKey); } catch { /* Saved on disk. */ }
+        if (mounted.current) { setDirty(false); setStatus("All changes saved"); setError(""); }
+      }
+    });
+    writes.current = write;
+    try { await write; }
+    catch (cause) {
+      if (mounted.current && revision === version.current) { setStatus("Not saved"); setError(message(cause)); }
+      throw cause;
+    }
+  }
+  useEffect(() => {
+    mounted.current = true;
+    if (version.current) void flush().catch(() => {});
+    return () => { mounted.current = false; clearTimeout(timer.current); void flush().catch(() => {}); };
+  }, []);
+  function change(next: WorkflowSkillDraft) {
+    latest.current = next; version.current++; setDraft(next); setDirty(true); setStatus("Saving…"); setError("");
+    try { sessionStorage.setItem(recoveryKey, JSON.stringify(next)); } catch { /* Show save errors if disk persistence fails. */ }
+    clearTimeout(timer.current); timer.current = setTimeout(() => void flush().catch(() => {}), 350);
+  }
+  async function install() {
+    setBusy(true); setError("");
+    const target = latest.current;
+    try {
+      await flush();
+      const receipt = await platform.saveWorkflowSkill!(target);
+      setStatus([...receipt.destinations.map(d => `Installed in ${d}.`), ...receipt.warnings].join(" ") || "No installation completed.");
+    } catch (cause) { setError(message(cause)); }
     finally { setBusy(false); }
   }
-  function change(next: WorkflowSkillDraft) {
-    setDraft(next); setDirty(true); setStatus("Saving…");
-    const version = ++writeVersion.current;
-    void platform.library!.saveSkillDraft(entry.workflowKey, next).then(() => {
-      if (version === writeVersion.current) { setDirty(false); setStatus("Saved in Library"); }
-    }).catch(cause => { if (version === writeVersion.current) setStatus(message(cause)); });
-  }
-  return <section className={styles.library}>
-    <button className={styles.back} disabled={busy} onClick={close}><ArrowLeft size={16} />Back to Library</button>
-    <h1>{draft.name || "Untitled skill"}</h1>
-    <div className={styles.editor}>
-      <label>Name<input value={draft.name} maxLength={64} onChange={e => change({ ...draft, name: e.target.value })} /></label>
-      <label>When to use<textarea value={draft.description} maxLength={500} onChange={e => change({ ...draft, description: e.target.value })} /></label>
-      <label>Instructions<textarea className={styles.instructions} value={draft.instructions} maxLength={20000} onChange={e => change({ ...draft, instructions: e.target.value })} /></label>
+  return <section className={styles.skillPage}>
+    <DocumentToolbar backLabel="Back to Library" onBack={() => { void flush().then(close).catch(() => {}); }} status={<span role="status" className={styles.saveStatus}>{status}</span>}>
+      {error && <button onClick={() => void flush().catch(() => {})}>Retry save</button>}
+      <DocumentActions document={{ kind: "skill", title: draft.name, markdown: skillMarkdown(draft) }} onShare={onShareDocument} download={platform.library?.downloadDocument}>
+        {platform.saveWorkflowSkill && <button disabled={busy || !draft.name.trim() || !draft.instructions.trim() || !draft.description.trim()} onClick={() => void install()}>{busy ? "Installing…" : platform.skillInstallMode === "preview" ? "Preview installation" : "Install in my agents"}</button>}
+      </DocumentActions>
+    </DocumentToolbar>
+    {error && <p role="alert" className={styles.saveError}>{error} Your draft is kept in this tab.</p>}
+    <div className={styles.skillLayout}>
+      <SopDocument kind="skill" title={draft.name} onTitleChange={name => change({ ...latest.current, name })}>
+        <div className={styles.description}><span>When to use</span><InlineText label="When to use" value={draft.description} maxLength={500} onChange={description => change({ ...latest.current, description })} /></div>
+        <SkillInstructionsEditor label="Instructions" fullDocument maxLength={20000} value={draft.instructions} onChange={instructions => change({ ...latest.current, instructions })} />
+      </SopDocument>
+      <aside className={styles.source}><p>Source workflow</p><strong>{draft.sourceWorkflow || "Saved skill"}</strong><p>{dirty ? "Unsaved changes" : "Saved on this device"}</p></aside>
     </div>
-    <div className={styles.actions}><button disabled={busy || !dirty} onClick={() => void save()}>Save changes</button>{platform.saveWorkflowSkill && <button disabled={busy || !draft.name.trim() || !draft.instructions.trim() || !draft.description.trim()} onClick={() => void save(true)}>{platform.skillInstallMode === "preview" ? "Preview installation" : "Install in my agents"}</button>}<span role="status">{busy ? "Saving…" : status}</span></div>
   </section>;
 }

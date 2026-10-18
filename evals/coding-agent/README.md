@@ -1,5 +1,103 @@
 # Coding-agent regression evals
 
+`app-audio-drop-control-dispatch` executes the actual AudioStream destructor
+with synthetic streams and no capture hardware. Three Drop outcomes distinguish
+the broken parent from the reference while two checks preserve live-stream and
+explicit-stop behavior. Run `bun test evals/coding-agent/calibrate-audio-drop.test.js`
+for seven calibration controls, including equivalent ordering, disconnected
+correct code, missing dispatch and missing disconnect state. The historical
+workspace uses its pinned Rust toolchain and locked native dependencies; ONNX
+Runtime must be available through the normal dependency setup. Setup failures
+are infrastructure errors, not intended baseline failures. Fixtures appear only
+at grading. Native worker completion, deferred device teardown timing, capture
+admission, durable recording, execution isolation and model trials are outside
+this case.
+
+`app-telemetry-full-ax-wire` compiles the complete telemetry records module and
+runs its public batch encoder and decoder with synthetic input. Twelve outcomes
+cover retained accessibility trees, empty nodes, nested and unknown properties,
+Unicode and long values, while preserving legacy frames, identity, mixed audio,
+record order and tolerant malformed-line handling. The parent loses four tree
+outcomes and preserves eight; the historical fix and current source pass twelve.
+Run `bun test evals/coding-agent/calibrate-telemetry-ax.test.js` for fifteen
+calibration controls, including equivalent representations, disconnected fixes,
+truncation, lost nodes, lost audio, malformed-line counts and setup errors.
+Hidden fixtures appear only at grading and need no future build-cache links.
+This narrow wire case does not execute native capture, database hydration,
+PII removal, upload consent, persistent gateway storage or actual model trials.
+
+`app-recording-status-authority` mounts the actual recording popover with
+synthetic device, settings and callback inputs. Fourteen outcomes distinguish
+empty or stale status from capture authority, preserve global/device actions,
+and require status retry without capture mutation. The parent fails four and
+preserves ten; the historical fix and current component pass fourteen.
+Run `bun test evals/coding-agent/calibrate-recording-status-authority.test.js`
+for equivalent, unused-fix, retry, routing, rollback and setup-error controls.
+Fixtures and dependency links appear only at grading. This does not execute
+Home wiring, native recording, enforced isolation or model trials.
+
+`ai-gateway-vertex-stream-fallback` executes the public streaming provider with
+synthetic authentication and transport. Twelve outcomes cover reasoning-only
+finish, terminal marker, EOF, split Unicode, CRLF and empty deltas, while
+preserving ordinary answers, reasoning events, tools, usage and refusals.
+Run `bun test evals/coding-agent/calibrate-vertex-stream-fallback.test.js` for ten
+controls, including equivalent guards, disconnected correct code, duplicate
+fallback, overwritten answers, lost reasoning and missing-source setup errors.
+Hidden fixtures appear only at grading; no dependency links are needed.
+This does not test live models, multiple-choice streams, full HTTP gateway
+admission, billing, desktop rendering, execution isolation or model trials.
+
+`app-browser-native-consent-navigation` mounts the actual browser sidebar,
+event hook and ownership helpers with synthetic native and persistence ports.
+Twelve outcomes cover native and compatible event formats, default/user tabs,
+explicit allow/decline, pending-state effects and stale/foreign refusals.
+The parent fails four native-event outcomes and preserves eight; the historical
+fix and current component pass twelve. Run
+`bun test evals/coding-agent/calibrate-browser-consent.test.js` for calibration.
+Hidden fixtures and dependency links appear only at grading. This does not test
+native cookie extraction, webview geometry, execution isolation or model trials.
+The associated shared-runner fix classifies failed Vitest source transforms as
+setup errors only with a non-failure test summary and compiler diagnostics;
+executed assertion failures retain their behavioral classification.
+
+`app-historical-analytics-false-persistence` mounts the historical settings hook
+with synthetic native storage. Fourteen outcomes cover explicit false, zero and
+empty strings, accepted updates across remount, missing/null defaults, ordinary
+values, empty collections and a custom data directory. The exact parent loses
+ten outcomes and preserves four; the complete historical fix passes fourteen.
+Run `bun test evals/coding-agent/calibrate-settings-falsy.test.js` for controls.
+Fixtures and third-party dependency links appear only at grading. The legacy
+scalar fields/default rules are historical, not current-schema requirements.
+Current provider opt-out, opt-in and managed-policy boundaries were checked
+separately. This does not prove native disk durability, real process restart,
+execution isolation or model improvement.
+
+`app-meeting-speaker-source` executes the actual transcript renderer and full
+meeting Markdown builder with synthetic chunks. Twelve outcomes distinguish
+per-stream generic labels while preserving explicit names, grouping, the gap
+boundary, sorting, whitespace, empty speech, notes and stored identities.
+The parent fails five outcomes and preserves seven; the historical fix and
+current source pass twelve. Run
+`bun test evals/coding-agent/calibrate-meeting-speaker-source.test.js` for twelve
+controls, including equivalent code, unused correct code, no-op package scripts,
+wrong source labels, lost grouping and missing-source classification.
+The fixture appears only at grading and needs no dependency links. This does
+not test the live announcement, panel UI, native clipboard, diarization,
+execution isolation or model performance.
+
+`app-acp-declined-warmup` mounts the actual automatic ACP warmup hook with
+synthetic native command replies. Fifteen outcomes cover cancelled, failed and
+pending starts across new chats/remounts, successful handshakes, independent
+presets/agents, feature/provider/start guards, request inputs and late cleanup.
+The parent fails four intended outcomes and preserves eleven; the historical
+fix and current hook pass all fifteen. Run
+`bun test evals/coding-agent/calibrate-acp-warmup.test.js` for twelve controls,
+including an equivalent Map implementation, unused correct code, no-op package
+scripts, blanket suppression, lost guards and missing-source setup errors.
+Fixtures and dependency links appear only at grading. This does not execute
+native sign-in UI, manual retry/send paths, cross-webview persistence, enforced
+agent isolation or model trials.
+
 `ai-gateway-outbound-chat-compatibility` executes the actual provider through its
 completion and streaming methods with synthetic SDK and telemetry ports. Nine
 outcomes cover response-only field removal, orphan and valid tool history,
@@ -1902,3 +2000,36 @@ unresponsive startup stop collection as setup errors. Calibrate with
 ### Vertex upstream JSON failures
 
 The Vertex upstream JSON case executes public JSON and streaming completion methods with synthetic OAuth and completion transport. Empty or malformed successful bodies must produce status 502 while valid content, reasoning fallback, client refusal and streaming remain intact. It does not prove gateway retry behavior, live provider reliability or agent isolation.
+
+`app-pipe-watch-switch-preservation` mounts the real conversation-switch hook and session store. It distinguishes equal-count stale pipe-watch text from normal panel ownership, preserves longer stored transcripts, and checks incoming chat identity. This is separate from saved terminal pipe transcripts and overlapping-load races. Run `bun test evals/coding-agent/calibrate-pipe-watch-switch.test.js` for calibration. Native delivery and disk durability are outside its scope.
+
+### HTTP MCP browser authority
+
+`app-mcp-browser-boundary` exercises the actual HTTP server and MCP transport
+with synthetic loopback requests. Foreign Host/Origin inputs must not initialize,
+list tools through, or delete a session without matching bearer credentials.
+Literal local clients, explicit bearer authorization, session accounting, health,
+preflight and route refusal remain usable. The parent fails five security
+outcomes and preserves four; the source-only historical reference passes nine.
+Run `bun test evals/coding-agent/calibrate-mcp-browser-boundary.test.js` for
+broken/correct, alternative implementation, partial-fix, disconnected-caller,
+blanket-denial, no-op-script and missing-source controls. Hidden fixtures and
+third-party dependencies appear only when grading starts. This is synthetic
+HTTP evidence, not a real browser/DNS exploit test, remote network validation,
+all header-parser ambiguities, model performance or enforced host isolation.
+
+## Unique shared audio inventory
+
+`app-shared-inventory-duplicate-devices` executes the actual audio inventory cache
+with synthetic enumeration. Seven outcomes cover first-seen deduplication by
+exact name and direction, cache hits and topology refresh, case/whitespace and
+direction distinctions, empty/single inventories, TTL/error retry, concurrent
+readers and changes during enumeration. The broken parent fails two duplicate
+inventory outcomes and preserves five neighbors; the reference passes seven.
+
+Run `bun test evals/coding-agent/calibrate-audio-inventory.test.js` for nine
+calibration controls, including an equivalent vector implementation, name-only
+merging, sorting, raw-result bypass, cache bypass, unused correct code and lost
+topology events. Each native command retains the 180-second bound. Hidden
+fixtures appear only at grading; this case uses no build-cache links. These are
+synthetic cache tests, not hardware, HTTP, capture/pause, migration or model trials.

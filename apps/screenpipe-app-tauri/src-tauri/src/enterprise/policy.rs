@@ -42,10 +42,86 @@ static IMMUTABLE_DEPLOYMENT_TRAY_HIDDEN: Lazy<bool> =
 static PERSISTED_TRAY_HIDDEN: Lazy<bool> = Lazy::new(user_enterprise_config_hides_tray);
 static ENFORCE_AUTO_START: Lazy<AtomicBool> =
     Lazy::new(|| AtomicBool::new(read_persisted_enforce_auto_start()));
+// Missing policy preserves automatic setup, including managed hidden installs.
+static AUTO_CONNECT_AI_TOOLS: Lazy<AiToolPolicy> = Lazy::new(|| {
+    AiToolPolicy::new(
+        read_auto_connect_ai_tools_at(&user_enterprise_config_path()),
+        !cfg!(feature = "enterprise-build"),
+    )
+});
+
+/// A coherent installer snapshot. Revision preserves changes that happen
+/// between scans, including disable/re-enable back to the same value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AiToolSetupPolicy {
+    pub allowed: bool,
+    pub revision: u64,
+}
+
+pub(crate) struct AiToolPolicy {
+    state: Mutex<AiToolPolicyState>,
+}
+
+struct AiToolPolicyState {
+    enabled: bool,
+    initial_refresh_complete: bool,
+    revision: u64,
+    next_request: u64,
+    last_applied_request: u64,
+}
+
+impl AiToolPolicy {
+    pub(crate) fn new(enabled: bool, initial_refresh_complete: bool) -> Self {
+        Self {
+            state: Mutex::new(AiToolPolicyState {
+                enabled,
+                initial_refresh_complete,
+                revision: 0,
+                next_request: 0,
+                last_applied_request: 0,
+            }),
+        }
+    }
+
+    pub(crate) fn snapshot(&self) -> AiToolSetupPolicy {
+        let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        AiToolSetupPolicy {
+            allowed: state.initial_refresh_complete && state.enabled,
+            revision: state.revision,
+        }
+    }
+
+    pub(crate) fn begin_refresh(&self) -> u64 {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        state.next_request += 1;
+        state.next_request
+    }
+
+    /// An older in-flight response cannot reverse a more recent successful
+    /// fetch. Failed newer requests do not discard an older valid response.
+    pub(crate) fn update(&self, request: u64, enabled: bool) -> bool {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if request < state.last_applied_request {
+            return false;
+        }
+        state.last_applied_request = request;
+        if state.enabled != enabled {
+            state.revision += 1;
+            state.enabled = enabled;
+        }
+        state.initial_refresh_complete = true;
+        true
+    }
+
+    fn finish_initial_refresh(&self) {
+        self.state.lock().unwrap_or_else(|error| error.into_inner())
+            .initial_refresh_complete = true;
+    }
+}
 static POLICY_UPDATE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-/// Per-stream sync policy. Established streams preserve their historical
-/// defaults, while richer semantic streams require an explicit opt-in. The
+/// Per-stream sync policy. Text/event streams and parsed app data default on;
+/// Activities, feedback, and screenshot pixels require explicit opt-in. The
 /// frontend pulls the admin's choices from `GET /api/enterprise/policy`
 /// (`syncStreams` field) on
 /// the 5-min poll and pushes them in via `set_sync_streams`. The sync state
@@ -123,6 +199,7 @@ pub struct SyncStreams {
     pub frames: bool,
     pub parsed: bool,
     pub activities: bool,
+    pub starred: bool,
     pub audio: bool,
     pub ui_events: bool,
     pub memories: bool,
@@ -135,8 +212,9 @@ impl Default for SyncStreams {
     fn default() -> Self {
         Self {
             frames: true,
-            parsed: false,
+            parsed: true,
             activities: false,
+            starred: true,
             audio: true,
             ui_events: true,
             memories: true,
@@ -290,6 +368,86 @@ fn persist_enforce_auto_start(enabled: bool) {
         Ok(false) => {}
         Err(error) => tracing::warn!("enterprise: failed to update startup policy cache: {error}"),
     }
+}
+
+/// The control plane serializes select values as strings; accept JSON booleans
+/// too. Missing/null uses the enabled default; malformed values defer setup.
+pub(crate) fn auto_connect_ai_tools_value(value: Option<&serde_json::Value>) -> bool {
+    match value {
+        None | Some(serde_json::Value::Null) => true,
+        Some(serde_json::Value::Bool(enabled)) => *enabled,
+        Some(serde_json::Value::String(value)) => value == "true",
+        _ => false,
+    }
+}
+
+fn read_auto_connect_ai_tools_at(path: &Path) -> bool {
+    let raw = match std::fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+        Err(error) => {
+            tracing::warn!("enterprise: AI-tool policy cache unreadable; deferring setup: {error}");
+            return false;
+        }
+    };
+    match serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw) {
+        Ok(json) => auto_connect_ai_tools_value(json.get("auto_connect_ai_tools")),
+        Err(error) => {
+            tracing::warn!("enterprise: AI-tool policy cache invalid; deferring setup: {error}");
+            false
+        }
+    }
+}
+
+fn persist_auto_connect_ai_tools_at(path: &Path, enabled: bool) -> Result<bool, String> {
+    crate::enterprise_config_file::update(path, |object| {
+        object.insert(
+            "auto_connect_ai_tools".to_string(),
+            serde_json::Value::Bool(enabled),
+        );
+        Ok(())
+    })
+}
+
+/// Independent of UI visibility. Read on each background AI-tool scan so live
+/// policy changes take effect without launching a webview or restarting.
+pub(crate) fn ai_tool_setup_policy() -> AiToolSetupPolicy {
+    AUTO_CONNECT_AI_TOOLS.snapshot()
+}
+
+/// A fresh Enterprise install must observe its first policy response before
+/// auto-installing anything. On an unavailable response, use the cached decision
+/// (or the enabled default when no cache exists) until the next refresh.
+pub(crate) fn finish_initial_ai_tool_policy_refresh() {
+    AUTO_CONNECT_AI_TOOLS.finish_initial_refresh();
+}
+
+/// The authenticated native policy fetch owns this setting, independently of
+/// recording, enrollment, UI lifetime, and slow recorder reconfiguration.
+pub(crate) fn begin_ai_tool_policy_refresh() -> impl FnOnce(bool) + Send {
+    let request = AUTO_CONNECT_AI_TOOLS.begin_refresh();
+    move |enabled| {
+        if let Err(error) = apply_ai_tool_policy_at(
+            &AUTO_CONNECT_AI_TOOLS, request, enabled, &user_enterprise_config_path(),
+        ) {
+            tracing::warn!("enterprise: failed to cache AI-tool policy: {error}");
+        }
+    }
+}
+
+fn apply_ai_tool_policy_at(
+    policy: &AiToolPolicy,
+    request: u64,
+    enabled: bool,
+    path: &Path,
+) -> Result<bool, String> {
+    let _update_guard = POLICY_UPDATE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !policy.update(request, enabled) {
+        return Ok(false);
+    }
+    persist_auto_connect_ai_tools_at(path, enabled)
 }
 
 fn enterprise_config_hides_app_ui(path: &std::path::Path) -> bool {
@@ -496,10 +654,11 @@ pub fn set_sync_streams(
         .read()
         .map(|guard| guard.activities)
         .unwrap_or(false);
-    let next = SyncStreams {
+    let mut next = SyncStreams {
         frames,
         parsed,
         activities,
+        starred: SyncStreams::default().starred,
         audio,
         ui_events,
         memories,
@@ -508,6 +667,7 @@ pub fn set_sync_streams(
         frame_images,
     };
     if let Ok(mut guard) = SYNC_STREAMS.write() {
+        next.starred = guard.starred;
         if *guard != next {
             tracing::info!(
                 "enterprise: sync streams updated frames={} parsed={} activities={} audio={} ui={} memories={} snapshots={} feedback={} frame_images={}",
@@ -534,6 +694,13 @@ pub fn set_activity_sync_enabled(activities: bool) {
             tracing::info!("enterprise: activity sync stream updated activities={activities}");
             guard.activities = activities;
         }
+    }
+}
+
+#[cfg(any(test, feature = "enterprise-build"))]
+pub fn set_starred_sync_enabled(starred: bool) {
+    if let Ok(mut guard) = SYNC_STREAMS.write() {
+        guard.starred = starred;
     }
 }
 
@@ -601,7 +768,7 @@ pub fn is_tray_hidden() -> bool {
     )
 }
 
-/// Serializes any test that mutates `SYNC_STREAMS`. Cargo runs tests in
+/// Serializes tests that read or mutate `SYNC_STREAMS`. Cargo runs tests in
 /// parallel within a binary by default, and the static here is shared with the
 /// `enterprise_sync::run_one_sync` test mod — two tests racing on a global
 /// will flake. Acquire this guard for the full duration of the test, including
@@ -616,6 +783,116 @@ pub(crate) fn sync_streams_test_lock() -> std::sync::MutexGuard<'static, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ai_tool_policy_waits_for_first_refresh_and_preserves_offline_decisions() {
+        let enabled_default = AiToolPolicy::new(true, false);
+        assert!(
+            !enabled_default.snapshot().allowed,
+            "do not race the first server disable"
+        );
+        enabled_default.update(enabled_default.begin_refresh(), false);
+        assert!(!enabled_default.snapshot().allowed);
+        enabled_default.update(enabled_default.begin_refresh(), true);
+        assert!(enabled_default.snapshot().allowed);
+
+        for cached in [true, false] {
+            let offline = AiToolPolicy::new(cached, false);
+            assert!(!offline.snapshot().allowed);
+            offline.finish_initial_refresh();
+            assert_eq!(offline.snapshot().allowed, cached);
+        }
+        assert!(
+            AiToolPolicy::new(true, true).snapshot().allowed,
+            "consumer setup is immediate"
+        );
+    }
+
+    #[test]
+    fn ai_tool_policy_tracks_brief_transitions_and_rejects_stale_responses() {
+        let policy = AiToolPolicy::new(true, true);
+        let before = policy.snapshot();
+        let old = policy.begin_refresh();
+        let new = policy.begin_refresh();
+        assert!(policy.update(new, false));
+        assert!(!policy.update(old, true));
+        assert!(!policy.snapshot().allowed);
+        assert!(policy.update(policy.begin_refresh(), true));
+        assert!(policy.snapshot().allowed);
+        assert_ne!(policy.snapshot().revision, before.revision);
+        let unchanged = policy.snapshot();
+        assert!(policy.update(policy.begin_refresh(), true));
+        assert_eq!(policy.snapshot(), unchanged);
+        let valid = policy.begin_refresh();
+        let _failed = policy.begin_refresh();
+        assert!(
+            policy.update(valid, false),
+            "failed newer fetch must not lose valid policy"
+        );
+    }
+
+    #[test]
+    fn ai_tool_policy_stale_response_cannot_overwrite_cached_disable() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("enterprise.json");
+        let policy = AiToolPolicy::new(true, false);
+        let old = policy.begin_refresh();
+        let new = policy.begin_refresh();
+        assert!(apply_ai_tool_policy_at(&policy, new, false, &path).unwrap());
+        let disabled_cache = std::fs::read(&path).unwrap();
+        assert!(!apply_ai_tool_policy_at(&policy, old, true, &path).unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(), disabled_cache);
+        assert!(!policy.snapshot().allowed);
+        assert!(!read_auto_connect_ai_tools_at(&path));
+
+        // A failed cache write still enforces the current server disable.
+        policy.update(policy.begin_refresh(), true);
+        assert!(
+            apply_ai_tool_policy_at(&policy, policy.begin_refresh(), false, dir.path()).is_err()
+        );
+        assert!(!policy.snapshot().allowed);
+    }
+
+    #[test]
+    fn ai_tool_policy_cache_errors_defer_setup_without_overwriting_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("enterprise.json");
+        for raw in ["{broken", "null", "[]", "true"] {
+            std::fs::write(&path, raw).unwrap();
+            assert!(!read_auto_connect_ai_tools_at(&path));
+            assert!(persist_auto_connect_ai_tools_at(&path, false).is_err());
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), raw);
+        }
+        assert!(
+            !read_auto_connect_ai_tools_at(dir.path()),
+            "unreadable is not missing"
+        );
+        for value in [
+            serde_json::json!(0),
+            serde_json::json!({}),
+            serde_json::json!("invalid"),
+        ] {
+            assert!(!auto_connect_ai_tools_value(Some(&value)));
+        }
+    }
+
+    #[test]
+    fn ai_tool_policy_cache_preserves_false_and_unrelated_deployment_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("enterprise.json");
+        assert!(read_auto_connect_ai_tools_at(&path));
+        std::fs::write(&path, r#"{"hide_app":true,"license_key":"fixture"}"#).unwrap();
+        assert!(read_auto_connect_ai_tools_at(&path));
+        assert!(persist_auto_connect_ai_tools_at(&path, false).unwrap());
+        assert!(!read_auto_connect_ai_tools_at(&path));
+        assert!(!persist_auto_connect_ai_tools_at(&path, false).unwrap());
+        let cached: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(cached["hide_app"], true);
+        assert_eq!(cached["license_key"], "fixture");
+        assert!(persist_auto_connect_ai_tools_at(&path, true).unwrap());
+        assert!(read_auto_connect_ai_tools_at(&path));
+    }
 
     #[test]
     fn truthy_accepts_common_deployment_values() {
@@ -753,12 +1030,10 @@ mod tests {
     }
 
     #[test]
-    fn sync_streams_default_keeps_parsed_data_off() {
-        // Existing streams preserve deployed behavior; the new structured
-        // data class requires an explicit admin choice.
+    fn sync_streams_default_enables_parsed_data() {
         let s = SyncStreams::default();
         assert!(s.frames);
-        assert!(!s.parsed);
+        assert!(s.parsed);
         assert!(!s.activities);
         assert!(s.audio);
         assert!(s.ui_events);
@@ -800,6 +1075,8 @@ mod tests {
             "off".to_string(),
             "off".to_string(),
         );
+        assert!(!current_sync_streams().parsed);
+        *SYNC_STREAMS.write().unwrap() = SyncStreams::default();
     }
 }
 

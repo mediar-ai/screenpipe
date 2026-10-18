@@ -8,6 +8,8 @@
 use super::*;
 use crate::enterprise_policy::{FeedbackSyncMode, SyncStreams};
 
+pub(super) const INDEPENDENT_IMAGES: &str = "independent-v1";
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum BackfillStream {
@@ -19,18 +21,21 @@ pub(super) enum BackfillStream {
     Feedback,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct BackfillRequest {
-    id: String,
+    pub(super) id: String,
     license_id: String,
     device_id: String,
-    start_at: chrono::DateTime<chrono::Utc>,
-    end_at: chrono::DateTime<chrono::Utc>,
+    pub(super) start_at: chrono::DateTime<chrono::Utc>,
+    pub(super) end_at: chrono::DateTime<chrono::Utc>,
     streams: Vec<BackfillStream>,
     #[serde(default)]
     pub(super) images_only: bool,
     #[serde(default)]
     pub(super) source_id: Option<String>,
+    // Server policy snapshot admits image work, never authorizes pixel reads.
+    #[serde(default)]
+    pub(super) recover_images: Option<bool>,
 }
 
 impl BackfillRequest {
@@ -70,6 +75,7 @@ impl BackfillRequest {
             parsed: false,
             memories: false,
             activities: false,
+            starred: false,
             snapshots: false,
             feedback: FeedbackSyncMode::Off,
             ..policy
@@ -155,12 +161,23 @@ impl BackfillRequest {
                 ));
             }
         }
+        if let Some(replay) = &cursor.boundary.backfill_image_replay {
+            if replay.cursor.boundary.backfill_image_replay.is_some() {
+                return Err(EnterpriseSyncError::Configuration(
+                    "invalid nested image checkpoint".into(),
+                ));
+            }
+            let mut images = self.clone();
+            images.streams = vec![BackfillStream::Frames];
+            images.validate_cursor(&replay.cursor)?;
+        }
         Ok(())
     }
 
     fn initial_cursor(&self) -> Cursor {
         let start = Some(self.start_at.to_rfc3339());
         Cursor {
+            privacy: Default::default(),
             source_id: None,
             last_frame_ts: start.clone(),
             last_audio_ts: start.clone(),
@@ -181,12 +198,93 @@ struct Pending {
     request: Option<BackfillRequest>,
 }
 
-/// Outcomes acknowledged by storage, checkpointed with the telemetry page.
+/// Outcomes acknowledged by storage, checkpointed with the image cursor.
 /// Missing pixels are never counted as uploaded screenshots.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(super) struct ImageProgress {
     pub uploaded: u64,
     pub unavailable: u64,
+}
+
+/// Accepted image work remains part of the same request until acknowledged,
+/// even when policy revokes pixels or telemetry has reached the end of the range.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct ImageReplay {
+    cursor: Cursor,
+    pub(super) complete: bool,
+}
+
+impl ImageReplay {
+    pub(super) fn new(telemetry: &Cursor) -> Self {
+        let mut cursor = telemetry.clone();
+        cursor.boundary.backfill_image_replay = None;
+        cursor.boundary.backfill_telemetry_complete = false;
+        Self {
+            cursor,
+            complete: false,
+        }
+    }
+}
+
+/// One telemetry page and one independent image page. Image failures must not
+/// roll back acknowledged AX or prevent the next telemetry page on a later tick.
+pub(super) async fn run_replay_page(
+    cfg: &EnterpriseSyncConfig,
+    cursor: &mut Cursor,
+    local: &dyn LocalApiClient,
+    http: &reqwest::Client,
+    request: &BackfillRequest,
+) -> Result<SyncTickReport, EnterpriseSyncError> {
+    if request.images_only {
+        let page = run_one_sync_inner(cfg, cursor, local, http, false, Some(request)).await?;
+        if !page.may_have_more() {
+            local.finish_release_replay(&request.id).await?;
+        }
+        return Ok(page);
+    }
+    let mut page = SyncTickReport::default();
+    if !cursor.boundary.backfill_telemetry_complete {
+        page = run_one_sync_inner(cfg, cursor, local, http, false, Some(request)).await?;
+        cursor.boundary.backfill_telemetry_complete = !page.may_have_more();
+        cursor.save(&cfg.cursor_path)?;
+    }
+    if let Some(replay) = cursor
+        .boundary
+        .backfill_image_replay
+        .as_mut()
+        .filter(|r| !r.complete)
+    {
+        let mut images = request.clone();
+        images.images_only = true;
+        images.streams = vec![BackfillStream::Frames];
+        images.source_id = Some(
+            replay
+                .cursor
+                .source_id
+                .clone()
+                .unwrap_or_else(|| cfg.device_id.clone()),
+        );
+        let result =
+            run_one_sync_inner(cfg, &mut replay.cursor, local, http, false, Some(&images)).await;
+        if let Ok(images_page) = &result {
+            replay.complete = !images_page.may_have_more();
+        }
+        cursor.boundary.backfill_images = replay.cursor.boundary.backfill_images.clone();
+        // Persist the unchanged image boundary on failure alongside acknowledged
+        // telemetry, so restart never loses accepted image work.
+        cursor.save(&cfg.cursor_path)?;
+        result?;
+    }
+    page.scanned_full_page = !cursor.boundary.backfill_telemetry_complete
+        || cursor
+            .boundary
+            .backfill_image_replay
+            .as_ref()
+            .is_some_and(|r| !r.complete);
+    if !page.may_have_more() {
+        local.finish_release_replay(&request.id).await?;
+    }
+    Ok(page)
 }
 
 pub(super) async fn upload_page_images(
@@ -313,6 +411,7 @@ async fn report(
             "id": request.id, "status": status, "uploaded_records": cursor.boundary.backfill_records.unwrap_or(0),
             "screenshots": cursor.boundary.backfill_images,
             "images_only": request.images_only,
+            "telemetry_complete": if request.images_only { None } else { Some(cursor.boundary.backfill_telemetry_complete) },
             "last_error": failure.map(|error| match error { EnterpriseSyncError::BackfillImages(code) => *code, _ => "retrying" }),
             "cursors": { "frames": cursor.last_frame_ts, "audio": cursor.last_audio_ts, "ui_events": cursor.last_ui_ts,
                 "parsed": cursor.last_parsed_ts, "memories": cursor.last_memory_ts, "feedback": cursor.last_feedback_ts }
@@ -382,8 +481,9 @@ mod tests {
         ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
             self.reads.fetch_add(1, Ordering::SeqCst);
             let ts = "2026-01-01T01:00:00+00:00";
-            // 501 rows at one timestamp exercise the durable tie offset.
-            let rows = (1..=501).map(|id| FrameRow {
+            // A full page plus one row at one timestamp exercise the durable tie offset.
+            let rows = (1..=super::FRAME_PAGE_LIMIT as i64 + 1).map(|id| FrameRow {
+                accessibility_tree: Some(serde_json::json!([{"role":"Button","text":"", "properties":{"automation_id":"search"}}])),
                 frame_id: id,
                 timestamp: ts.into(),
                 app_name: None,
@@ -450,6 +550,17 @@ mod tests {
     #[tokio::test]
     async fn backfill_resumes_timestamp_ties_after_lost_ack_without_touching_live_cursor() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "off".into(),
+            "off".into(),
+        );
         let server = MockServer::start().await;
         let dir = tempfile::TempDir::new().unwrap();
         let cfg = cfg(&dir, &server);
@@ -503,12 +614,21 @@ mod tests {
             .into_iter()
             .filter(|r| r.url.path() == "/api/enterprise/ingest")
             .collect();
+        for upload in &uploads {
+            for line in String::from_utf8_lossy(&upload.body).lines() {
+                let record: serde_json::Value = serde_json::from_str(line).unwrap();
+                assert_eq!(
+                    record["accessibility_tree"][0]["properties"]["automation_id"],
+                    "search"
+                );
+            }
+        }
         assert_eq!(
             uploads
                 .iter()
                 .map(|r| String::from_utf8_lossy(&r.body).lines().count())
                 .sum::<usize>(),
-            501
+            super::FRAME_PAGE_LIMIT as usize + 1
         );
         assert_eq!(
             std::fs::read(&cfg.cursor_path).unwrap(),
@@ -519,12 +639,16 @@ mod tests {
             "enterprise_backfill_{}_{}.json",
             req.license_id, req.id
         )));
-        assert_eq!(checkpoint.boundary.backfill_records, Some(501));
+        assert_eq!(
+            checkpoint.boundary.backfill_records,
+            Some(super::FRAME_PAGE_LIMIT as u64 + 1)
+        );
     }
 
     #[tokio::test]
     async fn backfill_failed_optional_read_does_not_complete_or_upload() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
         let server = MockServer::start().await;
         let dir = tempfile::TempDir::new().unwrap();
         let cfg = cfg(&dir, &server);
@@ -552,6 +676,17 @@ mod tests {
     #[tokio::test]
     async fn backfill_direct_retries_keep_batch_identity_without_advancing_cursor() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "off".into(),
+            "off".into(),
+        );
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/ticket"))
@@ -600,12 +735,343 @@ mod tests {
             .collect();
         assert_eq!(manifests[0]["batch_id"], manifests[1]["batch_id"]);
         assert_eq!(manifests[2]["batch_id"], manifests[3]["batch_id"]);
-        assert_eq!(manifests[0]["record_counts"]["frames"], 500);
+        assert_eq!(
+            manifests[0]["record_counts"]["frames"],
+            super::FRAME_PAGE_LIMIT as u64
+        );
+    }
+
+    struct PixelGate {
+        history: Local,
+        refused: std::sync::atomic::AtomicBool,
+        pixel_reads: AtomicUsize,
+        oversized_ax: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl LocalApiClient for PixelGate {
+        async fn fetch_frames_since(
+            &self,
+            since: Option<&str>,
+            offset: u32,
+            limit: u32,
+        ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+            let mut frames = self
+                .history
+                .fetch_frames_since(since, offset, limit)
+                .await?;
+            if self.oversized_ax && offset == 0 {
+                if let Some(frame) = frames.first_mut() {
+                    frame.accessibility_tree.as_mut().unwrap()[0]["properties"]["value"] =
+                        serde_json::json!("界".repeat(2_100_000));
+                }
+            }
+            Ok(frames)
+        }
+        async fn fetch_frame_jpeg(&self, _: i64) -> Result<Option<Vec<u8>>, EnterpriseSyncError> {
+            self.pixel_reads.fetch_add(1, Ordering::SeqCst);
+            if self.refused.load(Ordering::SeqCst) {
+                Err(EnterpriseSyncError::BackfillImages(
+                    "screenshot_local_settings_disabled",
+                ))
+            } else {
+                Ok(None)
+            }
+        }
+        async fn fetch_audio_since(
+            &self,
+            _: Option<&str>,
+            _: u32,
+            _: u32,
+        ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+            panic!("unselected audio")
+        }
     }
 
     #[tokio::test]
-    async fn direct_backfill_images_ack_before_telemetry_and_cursor_survive_retry() {
+    async fn ax_finishes_through_pixel_refusal_and_policy_revocation_then_images_resume() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "all".into(),
+        );
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/enterprise/backfill-requests"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(pending()))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/enterprise/backfill-requests"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"accepted": true})),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/enterprise/ingest"))
+            .respond_with({
+                let target = format!("{}/ax-blob", server.uri());
+                move |r: &wiremock::Request| {
+                    let value: serde_json::Value =
+                        serde_json::from_slice(&r.body).unwrap_or_default();
+                    if value["action"] == "ticket" {
+                        ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                            "ok": true, "method": "PUT", "upload_url": target, "headers": {}
+                        }))
+                    } else {
+                        ResponseTemplate::new(200)
+                    }
+                }
+            })
+            .expect(4)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/enterprise/frame-uploads"))
+            .respond_with(|r: &wiremock::Request| {
+                let value: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
+                let ids: Vec<_> = value["frames"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|f| f["frame_id"].clone())
+                    .collect();
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"stored": [], "unavailable": ids}))
+            })
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/ax-blob"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::TempDir::new().unwrap();
+        let cfg = cfg(&dir, &server);
+        let req = request();
+        let checkpoint = dir.path().join(format!(
+            "enterprise_backfill_{}_{}.json",
+            req.license_id, req.id
+        ));
+        let local = PixelGate {
+            history: Local {
+                reads: AtomicUsize::new(0),
+                fail_ui: false,
+            },
+            refused: std::sync::atomic::AtomicBool::new(true),
+            pixel_reads: AtomicUsize::new(0),
+            oversized_ax: true,
+        };
+        let (_, shutdown) = tokio::sync::watch::channel(false);
+        let http = enterprise_http_client();
+        assert!(fulfill_requests(&cfg, &local, &http, &shutdown)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("screenshot_local_settings_disabled"));
+        let first = Cursor::load(&checkpoint);
+        assert_eq!(
+            first.boundary.backfill_records,
+            Some(super::FRAME_PAGE_LIMIT as u64)
+        );
+        assert_eq!(
+            first
+                .boundary
+                .backfill_image_replay
+                .as_ref()
+                .unwrap()
+                .cursor
+                .boundary
+                .frames,
+            0
+        );
+        // Native policy is revoked between pages. Allowed AX still reaches its
+        // final tied row; no forbidden pixel fetch or upload is attempted.
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        assert!(fulfill_requests(&cfg, &local, &http, &shutdown)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("screenshot_policy_disabled"));
+        assert_eq!(local.pixel_reads.load(Ordering::SeqCst), 1);
+        let done = Cursor::load(&checkpoint);
+        assert!(done.boundary.backfill_telemetry_complete);
+        assert_eq!(
+            done.boundary.backfill_records,
+            Some(super::FRAME_PAGE_LIMIT as u64 + 1)
+        );
+        assert!(!done.boundary.backfill_image_replay.unwrap().complete);
+        let requests = server.received_requests().await.unwrap();
+        assert!(requests
+            .iter()
+            .all(|r| r.url.path() != "/api/enterprise/frame-uploads"));
+        let report: serde_json::Value =
+            serde_json::from_slice(&requests.last().unwrap().body).unwrap();
+        assert_eq!(report["telemetry_complete"], true);
+        assert_eq!(report["status"], "running");
+        assert_eq!(report["last_error"], "screenshot_policy_disabled");
+        // Each call reloads disk state. Re-enable only the test fixture policy;
+        // image recovery uses its old boundary and sends no duplicate AX.
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "all".into(),
+        );
+        local.refused.store(false, Ordering::SeqCst);
+        for _ in 0..2 {
+            fulfill_requests(&cfg, &local, &http, &shutdown)
+                .await
+                .unwrap();
+        }
+        let done = Cursor::load(&checkpoint);
+        assert!(done.boundary.backfill_image_replay.unwrap().complete);
+        assert_eq!(
+            done.boundary.backfill_images.unwrap().unavailable,
+            super::FRAME_PAGE_LIMIT as u64 + 1
+        );
+        assert!(!cfg.cursor_path.exists(), "live cursor is untouched");
+        let requests = server.received_requests().await.unwrap();
+        let last: serde_json::Value =
+            serde_json::from_slice(&requests.last().unwrap().body).unwrap();
+        assert_eq!(last["status"], "completed");
+        assert_eq!(last["last_error"], serde_json::Value::Null);
+        let rows: Vec<serde_json::Value> = requests
+            .iter()
+            .filter(|r| r.url.path() == "/api/enterprise/ingest" || r.url.path() == "/ax-blob")
+            .flat_map(|r| {
+                std::str::from_utf8(&r.body)
+                    .unwrap()
+                    .lines()
+                    .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            })
+            .filter(|row| row["kind"] == "frame")
+            .collect();
+        let large = rows
+            .iter()
+            .find_map(|row| row["accessibility_tree"][0]["properties"]["value"].as_str())
+            .unwrap();
+        assert_eq!(
+            large.len(),
+            6_300_000,
+            "full UTF-8 AX bytes survive ticketed replay"
+        );
+        assert!(requests
+            .iter()
+            .filter(|r| r.url.path() == "/api/enterprise/ingest")
+            .all(|r| r
+                .headers
+                .get("x-screenpipe-backfill-images")
+                .is_some_and(|v| v == INDEPENDENT_IMAGES)));
+        assert!(requests
+            .iter()
+            .filter(|r| r.url.path() == "/ax-blob")
+            .all(|r| !r.headers.contains_key("x-license-key")));
+        assert_eq!(rows.len(), super::FRAME_PAGE_LIMIT as usize + 1);
+        assert!(rows
+            .iter()
+            .all(|row| row.to_string().contains("automation_id")));
+    }
+
+    #[tokio::test]
+    async fn screenshots_off_replays_ax_without_accepting_or_reading_pixels() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/enterprise/ingest"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(4)
+            .mount(&server)
+            .await;
+        let dir = tempfile::TempDir::new().unwrap();
+        let cfg = cfg(&dir, &server);
+        let req = request();
+        let local = PixelGate {
+            history: Local {
+                reads: AtomicUsize::new(0),
+                fail_ui: false,
+            },
+            refused: std::sync::atomic::AtomicBool::new(true),
+            pixel_reads: AtomicUsize::new(0),
+            oversized_ax: false,
+        };
+        let mut cursor = req.initial_cursor();
+        let http = enterprise_http_client();
+        assert!(run_replay_page(&cfg, &mut cursor, &local, &http, &req)
+            .await
+            .unwrap()
+            .may_have_more());
+        cursor = Cursor::load(&cfg.cursor_path);
+        assert!(!run_replay_page(&cfg, &mut cursor, &local, &http, &req)
+            .await
+            .unwrap()
+            .may_have_more());
+        assert!(cursor.boundary.backfill_telemetry_complete);
+        assert!(cursor.boundary.backfill_image_replay.is_none());
+        assert_eq!(local.pixel_reads.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            cursor.boundary.backfill_records,
+            Some(super::FRAME_PAGE_LIMIT as u64 + 1)
+        );
+        // A current server can require image recovery while the native policy
+        // snapshot is off. Accept the work durably, but never read pixels.
+        let mut cloud_all = req.clone();
+        cloud_all.recover_images = Some(true);
+        let mut cfg = cfg.clone();
+        cfg.cursor_path = dir.path().join("cloud-all.json");
+        let mut cursor = cloud_all.initial_cursor();
+        for _ in 0..2 {
+            assert!(
+                run_replay_page(&cfg, &mut cursor, &local, &http, &cloud_all)
+                    .await
+                    .unwrap_err()
+                    .to_string()
+                    .contains("screenshot_policy_disabled")
+            );
+            cursor = Cursor::load(&cfg.cursor_path);
+        }
+        assert!(cursor.boundary.backfill_telemetry_complete);
+        assert!(!cursor.boundary.backfill_image_replay.unwrap().complete);
+        assert_eq!(local.pixel_reads.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn direct_backfill_telemetry_and_images_have_independent_retry_checkpoints() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
         crate::enterprise_policy::set_sync_streams(
             true,
             false,
@@ -669,35 +1135,47 @@ mod tests {
         let mut cursor = request.initial_cursor();
         let initial = cursor.last_frame_ts.clone();
         let http = enterprise_http_client();
-        let error = run_one_sync_inner(&cfg, &mut cursor, &local, &http, false, Some(&request))
+        // Telemetry failure retains both initial boundaries. Image work was
+        // accepted durably, but no image reads or uploads have happened yet.
+        assert!(run_replay_page(&cfg, &mut cursor, &local, &http, &request)
+            .await
+            .is_err());
+        assert_eq!(cursor.last_frame_ts, initial);
+        assert_eq!(image_attempts.load(Ordering::SeqCst), 0);
+        cursor = Cursor::load(&cfg.cursor_path);
+        assert!(cursor.boundary.backfill_image_replay.is_some());
+        // A failed image ACK must not roll back successful telemetry.
+        let error = run_replay_page(&cfg, &mut cursor, &local, &http, &request)
             .await
             .unwrap_err();
         assert!(error.to_string().contains("screenshot_status_write_failed"));
-        assert_eq!(cursor.last_frame_ts, initial);
-        assert!(!cfg.cursor_path.exists());
-        assert_eq!(completes.load(Ordering::SeqCst), 0);
-        // Next image pass succeeds but telemetry fails: still no checkpoint.
-        assert!(
-            run_one_sync_inner(&cfg, &mut cursor, &local, &http, false, Some(&request))
-                .await
-                .is_err()
-        );
-        assert_eq!(cursor.last_frame_ts, initial);
-        assert_eq!(cursor.boundary.backfill_records, None);
-        assert!(!cfg.cursor_path.exists());
-        run_one_sync_inner(&cfg, &mut cursor, &local, &http, false, Some(&request))
-            .await
-            .unwrap();
-        assert_eq!(cursor.boundary.backfill_records, Some(500));
-        let mut restarted = Cursor::load(&cfg.cursor_path);
         assert_eq!(
-            restarted
+            cursor.boundary.backfill_records,
+            Some(super::FRAME_PAGE_LIMIT as u64)
+        );
+        assert_eq!(
+            cursor
                 .boundary
-                .backfill_images
+                .backfill_image_replay
                 .as_ref()
                 .unwrap()
-                .uploaded,
-            0
+                .cursor
+                .last_frame_ts,
+            initial
+        );
+        // Restart from disk, upload the last tied AX row, retry the first image
+        // page, then finish only the pending image tail without telemetry replay.
+        let mut restarted = Cursor::load(&cfg.cursor_path);
+        assert!(
+            run_replay_page(&cfg, &mut restarted, &local, &http, &request)
+                .await
+                .unwrap()
+                .may_have_more()
+        );
+        assert!(restarted.boundary.backfill_telemetry_complete);
+        assert_eq!(
+            restarted.boundary.backfill_records,
+            Some(super::FRAME_PAGE_LIMIT as u64 + 1)
         );
         assert_eq!(
             restarted
@@ -706,13 +1184,20 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .unavailable,
-            500
+            super::FRAME_PAGE_LIMIT as u64
         );
-        run_one_sync_inner(&cfg, &mut restarted, &local, &http, false, Some(&request))
-            .await
-            .unwrap();
-        assert_eq!(restarted.boundary.backfill_records, Some(501));
-        assert_eq!(restarted.boundary.backfill_images.unwrap().unavailable, 501);
+        restarted = Cursor::load(&cfg.cursor_path);
+        assert!(
+            !run_replay_page(&cfg, &mut restarted, &local, &http, &request)
+                .await
+                .unwrap()
+                .may_have_more()
+        );
+        assert_eq!(
+            restarted.boundary.backfill_images.unwrap().unavailable,
+            super::FRAME_PAGE_LIMIT as u64 + 1
+        );
+        assert_eq!(completes.load(Ordering::SeqCst), 3);
         let requests = server.received_requests().await.unwrap();
         assert!(!requests
             .iter()
@@ -723,22 +1208,12 @@ mod tests {
             .map(|r| serde_json::from_slice(&r.body).unwrap())
             .collect();
         assert_eq!(completions[0], completions[1]);
-        // Restore defaults for the shared policy fixture.
-        crate::enterprise_policy::set_sync_streams(
-            true,
-            false,
-            true,
-            true,
-            true,
-            true,
-            "off".into(),
-            "cited".into(),
-        );
     }
 
     #[tokio::test]
     async fn all_image_history_exceeds_queue_limits_and_resumes_after_restart() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
         crate::enterprise_policy::set_sync_streams(
             true,
             false,
@@ -768,6 +1243,7 @@ mod tests {
                     .skip(offset as usize)
                     .take(limit as usize)
                     .map(|id| FrameRow {
+                        accessibility_tree: None,
                         frame_id: id,
                         timestamp: "2026-01-01T01:00:00+00:00".into(),
                         app_name: None,
@@ -820,14 +1296,13 @@ mod tests {
             .unwrap();
         let history = History(jpeg.into_inner());
         let mut cursor = request.initial_cursor();
-        for _ in 0..6 {
-            run_one_sync_inner(
+        for _ in 0..2501_u32.div_ceil(super::FRAME_PAGE_LIMIT) {
+            run_replay_page(
                 &cfg,
                 &mut cursor,
                 &history,
                 &enterprise_http_client(),
-                false,
-                Some(&request),
+                &request,
             )
             .await
             .unwrap();
@@ -845,21 +1320,12 @@ mod tests {
             .unwrap()
             .iter()
             .all(|r| r.url.path() != "/api/enterprise/frame-requests"));
-        crate::enterprise_policy::set_sync_streams(
-            true,
-            false,
-            true,
-            true,
-            true,
-            true,
-            "off".into(),
-            "cited".into(),
-        );
     }
 
     #[tokio::test]
     async fn image_continuation_uses_its_own_checkpoint_and_never_replays_telemetry() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
         crate::enterprise_policy::set_sync_streams(
             true,
             false,
@@ -930,7 +1396,7 @@ mod tests {
         ));
         assert_eq!(
             Cursor::load(&image_checkpoint).boundary.backfill_records,
-            Some(500)
+            Some(super::FRAME_PAGE_LIMIT as u64)
         );
         fulfill_requests(&cfg, &local, &http, &shutdown)
             .await
@@ -941,7 +1407,7 @@ mod tests {
                 .backfill_images
                 .unwrap()
                 .unavailable,
-            501
+            (super::FRAME_PAGE_LIMIT as u64 + 1)
         );
         assert_eq!(
             std::fs::read_to_string(&cfg.cursor_path).unwrap(),
@@ -970,7 +1436,7 @@ mod tests {
         assert_eq!(last["status"], "completed");
         assert_eq!(
             last["screenshots"],
-            serde_json::json!({"uploaded": 0, "unavailable": 501})
+            serde_json::json!({"uploaded": 0, "unavailable": (super::FRAME_PAGE_LIMIT as u64 + 1)})
         );
         let mut wrong_source = request();
         wrong_source.images_only = true;
@@ -1010,16 +1476,6 @@ mod tests {
         .to_string()
         .contains("screenshot_storage_mode_blocked"));
         assert_eq!(local.reads.load(Ordering::SeqCst), reads);
-        crate::enterprise_policy::set_sync_streams(
-            true,
-            false,
-            true,
-            true,
-            true,
-            true,
-            "off".into(),
-            "cited".into(),
-        );
     }
 
     #[tokio::test]
@@ -1055,6 +1511,7 @@ mod tests {
     #[tokio::test]
     async fn backfill_stable_identity_preserves_range_and_rejects_database_switch() {
         let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = super::super::tests::RestoreDefaultSyncStreams;
         let server = MockServer::start().await;
         let dir = tempfile::TempDir::new().unwrap();
         let mut cfg = cfg(&dir, &server);
@@ -1095,7 +1552,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(page.frames, 500);
+        assert_eq!(page.frames, super::FRAME_PAGE_LIMIT as usize);
         assert_eq!(cursor.source_id.as_deref(), Some(source));
         assert!(cursor
             .last_frame_ts
@@ -1193,8 +1650,7 @@ pub(super) async fn fulfill_requests(
             }
         };
         report(cfg, http, &url, &request, &cursor, "running", None).await?;
-        match run_one_sync_inner(&replay_cfg, &mut cursor, local, http, false, Some(&request)).await
-        {
+        match run_replay_page(&replay_cfg, &mut cursor, local, http, &request).await {
             Ok(page) => {
                 let complete = !page.may_have_more();
                 // Persist even an empty result; lost completion ACKs then retry
@@ -1212,7 +1668,11 @@ pub(super) async fn fulfill_requests(
                 .await?;
                 // JPEG pages are heavier than telemetry pages. Yield to live
                 // sync after one acknowledged image page, retaining its cursor.
-                if complete || cursor.boundary.backfill_images.is_some() {
+                if complete
+                    || page.pending_read
+                    || request.images_only
+                    || cursor.boundary.backfill_image_replay.is_some()
+                {
                     break;
                 }
             }

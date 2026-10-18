@@ -146,7 +146,7 @@ describe('current Claude request compatibility', () => {
 		expect(sentHeaders?.get('cf-aig-metadata')).toBe('{"lane":"explicit"}');
 	});
 
-	for (const model of ['claude-opus-5', 'claude-sonnet-5']) {
+	for (const model of ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-5-5']) {
 		it(`omits temperature for ${model}`, async () => {
 			const { provider, calls } = makeProvider();
 			await provider.createCompletion(body(

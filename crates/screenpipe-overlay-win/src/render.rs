@@ -23,9 +23,9 @@ use windows::Win32::Graphics::Direct2D::Common::{
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory, ID2D1RenderTarget, ID2D1SolidColorBrush,
-    D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-    D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_ELLIPSE, D2D1_FACTORY_TYPE_SINGLE_THREADED,
-    D2D1_ROUNDED_RECT,
+    D2D1_ANTIALIAS_MODE_ALIASED, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_ELLIPSE,
+    D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat, DWRITE_FACTORY_TYPE_SHARED,
@@ -841,9 +841,24 @@ impl Renderer {
         let capacity = ((r.bottom() - 6.0 * s - body_top) / line_h)
             .floor()
             .max(0.0) as usize;
-        let start = state.transcript.len().saturating_sub(capacity);
+        let end = state
+            .transcript
+            .len()
+            .saturating_sub(state.transcript_scroll_from_latest);
+        let start = end.saturating_sub(capacity);
         let text_w = r.w - pad * 2.0;
-        for (i, item) in state.transcript[start..].iter().enumerate() {
+        unsafe {
+            rt.PushAxisAlignedClip(
+                &d2d_rect(Rect::new(
+                    r.x + pad,
+                    body_top,
+                    text_w,
+                    r.bottom() - body_top - 6.0 * s,
+                )),
+                D2D1_ANTIALIAS_MODE_ALIASED,
+            )
+        };
+        for (i, item) in state.transcript[start..end].iter().enumerate() {
             let y = body_top + i as f32 * line_h;
             self.mono_text(
                 rt,
@@ -869,6 +884,7 @@ impl Renderer {
                 white(0.88),
             );
         }
+        unsafe { rt.PopAxisAlignedClip() };
 
         let brush = self.brush(rt, white(0.42));
         unsafe { rt.DrawRectangle(&d2d_rect(r.inset(0.5, 0.5)), &brush, 1.0, None) };

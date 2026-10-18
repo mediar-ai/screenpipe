@@ -297,6 +297,7 @@ mod imp {
                 .into_iter()
                 .filter_map(|item| match item {
                     LocalSearchItem::OCR(row) => Some(FrameRow {
+                        accessibility_tree: None,
                         frame_id: row.frame_id,
                         timestamp: row.timestamp.to_rfc3339(),
                         app_name: nonempty(row.app_name),

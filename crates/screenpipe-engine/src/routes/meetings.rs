@@ -907,6 +907,15 @@ pub(crate) async fn start_meeting_handler(
     State(state): State<Arc<AppState>>,
     axum::Json(body): axum::Json<StartMeetingRequest>,
 ) -> Result<JsonResponse<MeetingRecord>, (StatusCode, JsonResponse<Value>)> {
+    if crate::meeting_watcher::capture_stopped() {
+        return Err((
+            StatusCode::CONFLICT,
+            JsonResponse(json!({
+                "error": "recording_stopped",
+                "message": "Recording is stopped. Start recording to start a meeting.",
+            })),
+        ));
+    }
     let app = body.app.as_deref().unwrap_or("manual");
     let resumed_existing = body.id.is_some();
 

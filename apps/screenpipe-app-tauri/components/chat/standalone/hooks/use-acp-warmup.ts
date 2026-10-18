@@ -7,6 +7,11 @@ import { commands } from "@/lib/utils/tauri";
 import type { AIPreset, PiInfo } from "@/lib/utils/tauri";
 import type { ResolvedPiProviderConfig } from "@/components/chat/standalone/hooks/use-pi-session-lifecycle";
 
+// A new conversation (or remounted chat view) is not consent to reopen a
+// declined sign-in. Keep unsuccessful automatic starts quiet for this webview;
+// sending a message or using the sign-in retry still starts the agent normally.
+const pendingOrFailedWarmups = new Set<string>();
+
 /**
  * Connect an ACP agent when it is selected, not when the first message is sent.
  *
@@ -80,10 +85,13 @@ export function useAcpWarmup({
 
     const key = `${sessionId}:${presetId}:${agentId}`;
     if (attemptedRef.current === key) return;
+    const agentKey = JSON.stringify([presetId, agentId]);
+    if (pendingOrFailedWarmups.has(agentKey)) return;
     attemptedRef.current = key;
 
     const preset = activePreset;
     if (!preset) return;
+    pendingOrFailedWarmups.add(agentKey);
 
     let cancelled = false;
     piStartInFlightRef.current = true;
@@ -100,6 +108,9 @@ export function useAcpWarmup({
           userToken ?? null,
           providerConfig,
         );
+        if (result.status === "ok" && result.data.running) {
+          pendingOrFailedWarmups.delete(agentKey);
+        }
         if (cancelled) return;
         if (result.status === "ok" && result.data.running) {
           setPiInfo(result.data);

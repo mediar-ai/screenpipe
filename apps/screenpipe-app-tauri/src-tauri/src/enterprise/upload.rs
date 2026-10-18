@@ -329,7 +329,7 @@ impl DirectUploadConfig {
 /// `host:port` entries; whitespace and empty entries ignored. This
 /// repurposes the env-var channel the (dropped) encryption root keys used —
 /// customers already deploy MDM env vars to enterprise fleets.
-fn pinned_hosts_from_env() -> Vec<String> {
+pub(super) fn pinned_hosts_from_env() -> Vec<String> {
     std::env::var("SCREENPIPE_ENTERPRISE_UPLOAD_PINNED_HOSTS")
         .ok()
         .map(|raw| {
@@ -436,7 +436,7 @@ pub async fn upload_direct_write_only_batch(
     cursors: DirectUploadCursors,
 ) -> Result<DirectUploadManifest, EnterpriseSyncError> {
     let manifest = write_only_direct_upload_manifest(cfg, &plaintext, counts, cursors)?;
-    run_ticketed_upload(http, cfg, direct, &manifest, &plaintext, false).await?;
+    run_ticketed_upload(http, cfg, direct, &manifest, &plaintext, false, false).await?;
     Ok(manifest)
 }
 
@@ -448,9 +448,19 @@ pub async fn upload_direct_readable_batch(
     counts: DirectUploadRecordCounts,
     cursors: DirectUploadCursors,
     backfill: bool,
+    independent_images: bool,
 ) -> Result<DirectUploadManifest, EnterpriseSyncError> {
     let manifest = readable_direct_upload_manifest(cfg, &plaintext, counts, cursors)?;
-    run_ticketed_upload(http, cfg, direct, &manifest, &plaintext, backfill).await?;
+    run_ticketed_upload(
+        http,
+        cfg,
+        direct,
+        &manifest,
+        &plaintext,
+        backfill,
+        independent_images,
+    )
+    .await?;
     Ok(manifest)
 }
 
@@ -466,6 +476,7 @@ async fn run_ticketed_upload(
     manifest: &DirectUploadManifest,
     body: &[u8],
     backfill: bool,
+    independent_images: bool,
 ) -> Result<(), EnterpriseSyncError> {
     let mut control_headers = HeaderMap::new();
     control_headers.insert(
@@ -479,6 +490,12 @@ async fn run_ticketed_upload(
     // requests only; the customer-storage PUT retains its signed headers.
     if backfill {
         control_headers.insert("x-screenpipe-backfill", "1".parse().unwrap());
+        if independent_images {
+            control_headers.insert(
+                "x-screenpipe-backfill-images",
+                super::backfill::INDEPENDENT_IMAGES.parse().unwrap(),
+            );
+        }
     }
 
     let pipeline_cfg = TicketedConfig::new(direct.ticket_url.clone(), direct.complete_url.clone())
@@ -702,6 +719,7 @@ mod tests {
                 frames: 1,
                 parsed: 0,
                 activities: 0,
+                starred: 0,
                 audio: 0,
                 ui: 0,
                 snapshots: 0,

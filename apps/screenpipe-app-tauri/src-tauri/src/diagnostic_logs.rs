@@ -236,6 +236,61 @@ async fn build_bundle(files: &[LogFile]) -> String {
 mod tests {
     use super::*;
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn required_pii_failure_survives_rotation_and_support_redaction() {
+        use std::sync::Arc;
+        let root = tempfile::tempdir().unwrap();
+        let logs = root.path().join("logs");
+        std::fs::create_dir(&logs).unwrap();
+        let current = logs.join("screenpipe.2026-10-15.log");
+        let file = std::fs::File::create(&current).unwrap();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(file))
+            .finish();
+        let guard = tracing::subscriber::set_default(subscriber);
+        let db = Arc::new(
+            screenpipe_db::DatabaseManager::new(
+                root.path().join("db.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+        );
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "support-test".into(),
+            text: true,
+            images: false,
+        })
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-15','private-person@example.com')").await.unwrap();
+        db.stage_activity_exports(&[serde_json::json!({"activity_id":"support-activity","end_at":"2026-10-15T10:00:00Z","title":"private-person@example.com"})],"2026-10-15T00:00:00Z").await.unwrap();
+        let worker = screenpipe_redact::worker::Worker::new_with_writer(
+            db.pool.clone(),
+            db.coordinated_writer(),
+            Arc::new(screenpipe_redact::Pipeline::regex_only()),
+            Default::default(),
+        )
+        .with_frame_storage(db.clone());
+        assert_eq!(worker.process_release_batch(16).await.unwrap(), 0);
+        db.close().await;
+        drop(guard);
+        std::fs::rename(&current, logs.join("screenpipe.2026-10-15.1.log")).unwrap();
+        std::fs::write(
+            &current,
+            "INFO recorder restarted contact=private-person@example.com\n",
+        )
+        .unwrap();
+        let report = collect_redacted_from_dirs(&[logs]).await.unwrap();
+        assert!(report.contains("required PII model is unavailable"));
+        assert!(report.contains("retry scheduled"));
+        assert!(report.contains("kind=frames"));
+        assert!(report.contains("kind=exports"));
+        assert!(report.contains("recorder restarted"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
     #[tokio::test]
     async fn enterprise_access_timeout_survives_support_collection_and_rotation() {
         let dir = tempfile::tempdir().unwrap();
@@ -274,14 +329,84 @@ mod tests {
         crate::enterprise::sync::tests::check_retained_diagnostic(dir.path()).await;
     }
 
+    #[tokio::test]
+    async fn storage_revocation_cause_survives_support_rotation_and_redaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = screenpipe_db::DatabaseManager::new_hybrid(
+            dir.path(),
+            Default::default(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','private-person@example.com')").await.unwrap();
+        let export = db.storage_export_token().await.unwrap();
+        db.execute_raw_sql_write("DELETE FROM frames WHERE id=1")
+            .await
+            .unwrap();
+        let error = export.admit(&db.pool).await.unwrap_err();
+        let current = dir.path().join("screenpipe-app.2026-10-16.log");
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(
+                std::fs::File::create(&current).unwrap(),
+            ))
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(%error, "storage read failed; query remains pending");
+            tracing::info!("contact=private-person@example.com");
+        });
+        drop(export);
+        db.close().await;
+        tokio::fs::rename(&current, dir.path().join("screenpipe-app.2026-10-16.1.log"))
+            .await
+            .unwrap();
+        tokio::fs::write(&current, "INFO recorder restarted\n")
+            .await
+            .unwrap();
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("frame storage: read revision changed"));
+        assert!(report.contains("cause=hybrid_read_revoke_delete_frames"));
+        assert!(report.contains("expected_revocation="));
+        assert!(report.contains("current_revocation="));
+        assert!(report.contains("query remains pending"));
+        assert!(report.contains("recorder restarted"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
+    #[tokio::test]
+    async fn installer_failure_reaches_redacted_support_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        tokio::fs::write(
+            dir.path().join(crate::update_diagnostics::LOG_NAME),
+            concat!(
+                "installer_elevation_failed: result=1223 scope=all recovery=original_app_relaunch_succeeded contact=private-person@example.com\n",
+                "installer_migration_failed: operation=copy_enterprise_config windows_result=5 scope=current recovery=original_app_relaunch_result_0 contact=private-person@example.com\n",
+            ),
+        )
+        .await
+        .unwrap();
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("installer_elevation_failed: result=1223"));
+        assert!(report.contains("recovery=original_app_relaunch_succeeded"));
+        assert!(report.contains("installer_migration_failed: operation=copy_enterprise_config windows_result=5"));
+        assert!(report.contains("recovery=original_app_relaunch_result_0"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
     #[cfg(feature = "enterprise-build")]
     #[tokio::test(flavor = "current_thread")]
     async fn sync_retry_failure_reaches_support_after_collection_and_redaction() {
         let dir = tempfile::tempdir().unwrap();
         let report = crate::enterprise::sync::tests::check_sync_retry_failure(dir.path()).await;
         assert!(report.contains("enterprise upload storage prepare export failed"));
+        assert!(report.contains("enterprise upload storage filter export failed"));
         assert!(report.contains("frame storage: payload read deadline exceeded"));
-        assert!(report.contains("frame storage: read revision changed"));
+        assert!(report.contains("database disk image is malformed"));
         assert!(report.contains("pending work retained, retrying in 300s"));
         assert!(!report.contains("backing off 3600s"));
     }

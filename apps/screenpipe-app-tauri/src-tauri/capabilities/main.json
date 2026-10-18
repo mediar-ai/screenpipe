@@ -325,6 +325,9 @@
         },
         {
           "path": "/Applications/Cursor.app"
+        },
+        {
+          "path": "/Applications/Perplexity.app"
         }
       ]
     },

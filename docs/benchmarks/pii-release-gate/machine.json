@@ -1,0 +1,30 @@
+{
+  "machine": "Apple M5 Max",
+  "cpu_cores": 18,
+  "ram_gib": 128,
+  "os": "macOS 26.6.2",
+  "backend": "ONNX CPU",
+  "models": [
+    "v50_distilled6l/model_quantized.onnx",
+    "rfdetr_v38.onnx"
+  ],
+  "profile": "repository release: opt-level=s, LTO, codegen-units=1",
+  "binary_sha256": "7be3c350a98279ea8a9dc439f4966f97cce9cd17a274d67c4267425a39e201e7",
+  "source_base": "4891123c43f0d0e23605499f249dd023b65a9265",
+  "stage1_binary_sha256": "40c43b2573343a4996b602c2df9b3167b2815bfc82552ec311675bb61e54cd2f",
+  "stage2_binary_sha256": "8259b39a902451e5e6856cc30d3428573780bc45bc6f85ce403ad2f210594eab",
+  "source_note": "Stage1 measured scale and four text cases. Stage2 corrected image fixture timestamps and final image counters, then measured image/mixed/large fields and text repeats. Stage3 adds malformed-timestamp error handling and the identity-length sensitivity test. Main timings precede that error-path-only production fix; valid benchmark data paths are unchanged. Final correctness suites revalidate the fix. No optimization overrides. The final harness derives its profile label from cfg(debug_assertions) instead of a literal; this metadata-only correction reports the same release label as the measured binary.",
+  "scale_run": "2026-10-15T00:01:48Z",
+  "model_run": "2026-10-15T00:06:54Z",
+  "timed_production_prefix_sha256": {
+    "crates/screenpipe-db/src/db/privacy_release.rs": "850ab46ad33512a008176a212eddcd7da88dc48fd1c01ff9cb51267100b8818e",
+    "crates/screenpipe-redact/src/image/worker.rs": "5cf228bf0a3e2a379225675ed4bec5b3ae6618f0892a9ceac3482102f5aecc30"
+  },
+  "model_sha256": {
+    "v50_distilled6l/model_quantized.onnx": "e67efa3a511108b6864db3cb19be37853524e6ed4f0f26cc041ecb822ba12e6e",
+    "v50_distilled6l/tokenizer.json": "14c7e8bf7d9b58ca061fcda93bc8d0eedd1a51ffc3af01a1ba1ef54e2154887e",
+    "v50_distilled6l/config.json": "ab11d9f79693e29c0d9f11de185e48d80462e95799030c37bfa08c14379a9244",
+    "v50_distilled6l/remap.json": "334df93eb6843ecc7ea0939ab6450df4df203e21d5227bbcb9f7c2af19f98827",
+    "rfdetr_v38.onnx": "0e968657aafcfb2c5d61ece264d5959ddeeec53091171fae226b45ecd3a8a880"
+  }
+}

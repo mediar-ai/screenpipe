@@ -32,7 +32,7 @@ BEGIN UPDATE _storage_revocation SET revision=revision+1; END;
 pub(crate) async fn upgrade(
     conn: &mut SqliteConnection,
     storage: &HybridStorage,
-) -> Result<(), sqlx::Error> {
+) -> Result<bool, sqlx::Error> {
     use sha2::{Digest, Sha256};
     let checksum = format!(
         "{:x}",
@@ -46,7 +46,7 @@ pub(crate) async fn upgrade(
             .await?;
     if let Some(installed) = installed {
         return if installed == checksum {
-            Ok(())
+            upgrade_export_revocation(conn).await
         } else {
             Err(storage_error("read schema checksum mismatch"))
         };
@@ -123,7 +123,92 @@ pub(crate) async fn upgrade(
             .await?;
     }
     tx.commit().await?;
-    Ok(())
+    upgrade_export_revocation(conn).await
+}
+
+/// Preserve v3's recorded identity, but upgrade installed hooks atomically.
+/// Snapshot compaction moves the same image into a video. All other updates,
+/// deletions and privacy-policy changes retain their existing revocation rules.
+async fn upgrade_export_revocation(conn: &mut SqliteConnection) -> Result<bool, sqlx::Error> {
+    const IDENTITY: &str = "export-revocation-causes-and-frame-locators-v7";
+    let installed: Option<String> =
+        sqlx::query_scalar("SELECT checksum FROM _hybrid_migrations WHERE version=7")
+            .fetch_optional(&mut *conn)
+            .await?;
+    if let Some(installed) = installed {
+        return if installed == IDENTITY {
+            Ok(false)
+        } else {
+            Err(storage_error("export revocation schema checksum mismatch"))
+        };
+    }
+    let mut tx = conn.begin().await?;
+    sqlx::raw_sql("CREATE TABLE IF NOT EXISTS _storage_revocation_cause(id INTEGER PRIMARY KEY CHECK(id=1),cause TEXT NOT NULL); INSERT OR IGNORE INTO _storage_revocation_cause VALUES(1,'unknown_before_upgrade');")
+        .execute(&mut *tx).await?;
+    let columns: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('frames')")
+        .fetch_all(&mut *tx)
+        .await?;
+    const MEDIA: [&str; 3] = ["video_chunk_id", "offset_index", "snapshot_path"];
+    let content_updates = columns
+        .iter()
+        .filter(|column| !MEDIA.contains(&column.as_str()))
+        .map(|column| format!("\"{}\"", column.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(",");
+    let hooks: Vec<(String, String)> = sqlx::query_as(
+        "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name GLOB 'hybrid_read_revoke_*'",
+    ).fetch_all(&mut *tx).await?;
+    for (name, sql) in hooks {
+        let sql = if sql.contains("UPDATE _storage_revocation_cause") {
+            sql
+        } else {
+            sql.replace(
+                "UPDATE _storage_revocation SET revision=revision+1;",
+                &revocation(&name, true),
+            )
+        };
+        let sql = if name == "hybrid_read_revoke_redaction_frames"
+            && !sql.contains("AFTER UPDATE OF")
+        {
+            // UPDATE OF matters: a repeated image watermark in the same second
+            // still revokes, even if a statement also relocates its media.
+            let content = sql.replace(
+                "AFTER UPDATE ON",
+                &format!("AFTER UPDATE OF {content_updates} ON"),
+            );
+            let media_name = "hybrid_read_revoke_media_frames";
+            let media = sql.replace(&name, media_name)
+                .replace("AFTER UPDATE ON", &format!("AFTER UPDATE OF {} ON", MEDIA.join(",")))
+                .replace(" BEGIN ", " AND NOT (OLD.snapshot_path IS NOT NULL AND NEW.snapshot_path IS NULL AND NEW.video_chunk_id IS NOT NULL AND OLD.video_chunk_id IS NOT NEW.video_chunk_id) BEGIN ");
+            format!("{content}; {media}")
+        } else {
+            sql
+        };
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "DROP TRIGGER \"{}\"; {sql}",
+            name.replace('"', "\"\"")
+        )))
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query("INSERT INTO _hybrid_migrations VALUES(7,?)")
+        .bind(IDENTITY)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+fn revocation(trigger: &str, with_cause: bool) -> String {
+    let cause = if with_cause {
+        format!(
+            " UPDATE _storage_revocation_cause SET cause='{}' WHERE id=1;",
+            trigger.replace('\'', "''")
+        )
+    } else {
+        String::new()
+    };
+    format!("UPDATE _storage_revocation SET revision=revision+1;{cause}")
 }
 
 // Shared by initial conversion and tables introduced by later SQLx migrations.
@@ -137,8 +222,14 @@ pub(super) async fn install_resident_hooks(
         .await?;
     let escaped = table.replace('"', "\"\"");
     let quoted = format!("\"{escaped}\"");
+    let with_cause: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='_storage_revocation_cause')",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    let deletion = revocation(&format!("hybrid_read_revoke_delete_{table}"), with_cause);
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "CREATE TRIGGER IF NOT EXISTS \"hybrid_read_revoke_delete_{escaped}\" AFTER DELETE ON {quoted} BEGIN UPDATE _storage_revocation SET revision=revision+1; END;"
+            "CREATE TRIGGER IF NOT EXISTS \"hybrid_read_revoke_delete_{escaped}\" AFTER DELETE ON {quoted} BEGIN {deletion} END;"
         ))).execute(&mut *conn).await?;
     let redacted = columns
         .iter()
@@ -147,9 +238,105 @@ pub(super) async fn install_resident_hooks(
         .collect::<Vec<_>>()
         .join(" OR ");
     if !redacted.is_empty() {
+        let update = revocation(&format!("hybrid_read_revoke_redaction_{table}"), with_cause);
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "CREATE TRIGGER IF NOT EXISTS \"hybrid_read_revoke_redaction_{escaped}\" AFTER UPDATE ON {quoted} WHEN (SELECT maintenance=0 FROM storage_metadata) AND ({redacted}) BEGIN UPDATE _storage_revocation SET revision=revision+1; END;"
+                "CREATE TRIGGER IF NOT EXISTS \"hybrid_read_revoke_redaction_{escaped}\" AFTER UPDATE ON {quoted} WHEN (SELECT maintenance=0 FROM storage_metadata) AND ({redacted}) BEGIN {update} END;"
             ))).execute(&mut *conn).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DatabaseManager;
+
+    #[tokio::test]
+    async fn existing_revocation_hooks_upgrade_atomically_and_survive_reopen() {
+        let root = tempfile::tempdir().unwrap();
+        let db = DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap();
+        let identities: Vec<(i64, String)> = sqlx::query_as(
+            "SELECT version,checksum FROM _hybrid_migrations WHERE version<7 ORDER BY version",
+        )
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+        // Restore the installed pre-v7 hooks, including the unconditional
+        // redacted-frame update hook. No stored recordings are rewritten.
+        let mut tx = db.begin_immediate_with_retry().await.unwrap();
+        let hooks: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name GLOB 'hybrid_read_revoke_*'"
+        ).fetch_all(&mut **tx.conn()).await.unwrap();
+        for (name, sql) in hooks {
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP TRIGGER \"{name}\"")))
+                .execute(&mut **tx.conn())
+                .await
+                .unwrap();
+            if name == "hybrid_read_revoke_media_frames" {
+                continue;
+            }
+            let mut sql = sql.replace(&revocation(&name, true), &revocation(&name, false));
+            if name == "hybrid_read_revoke_redaction_frames" {
+                let start = sql.find("AFTER UPDATE OF").unwrap();
+                let end = start + sql[start..].find(" ON ").unwrap();
+                sql.replace_range(start..end, "AFTER UPDATE");
+            }
+            sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+                .execute(&mut **tx.conn())
+                .await
+                .unwrap();
+        }
+        sqlx::raw_sql(
+            "DROP TABLE _storage_revocation_cause; DELETE FROM _hybrid_migrations WHERE version=7;",
+        )
+        .execute(&mut **tx.conn())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text,snapshot_path) VALUES(1,'2026-10-16','retained','redacted.jpg'); UPDATE frames SET image_redacted_at=1 WHERE id=1;").await.unwrap();
+        db.close().await;
+        for reopen in 0..2 {
+            let db = DatabaseManager::new(
+                root.path().join("db.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(identities, sqlx::query_as::<_,(i64,String)>(
+                "SELECT version,checksum FROM _hybrid_migrations WHERE version<7 ORDER BY version"
+            ).fetch_all(&db.pool).await.unwrap());
+            let export = db.storage_export_token().await.unwrap();
+            if reopen == 0 {
+                let chunk = db
+                    .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
+                    .await
+                    .unwrap();
+                db.compact_snapshots_queued(chunk, vec![(1, 0)])
+                    .await
+                    .unwrap();
+                drop(export.admit(&db.pool).await.unwrap());
+            } else {
+                db.execute_raw_sql_write("UPDATE frames SET image_redacted_at=1 WHERE id=1")
+                    .await
+                    .unwrap();
+                let error = export.admit(&db.pool).await.unwrap_err().to_string();
+                assert!(
+                    error.contains("cause=hybrid_read_revoke_redaction_frames"),
+                    "{error}"
+                );
+            }
+            assert_eq!(
+                db.frame_payloads(&[1], super::super::Projection::All)
+                    .await
+                    .unwrap()[&1]
+                    .full_text
+                    .as_deref(),
+                Some("retained")
+            );
+            drop(export);
+            db.close().await;
+        }
+    }
 }

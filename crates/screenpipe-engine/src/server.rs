@@ -610,8 +610,14 @@ impl SCServer {
     }
 
     async fn create_router_inner(&self) -> Router {
+        let protected_db = self
+            .db
+            .protected_reads()
+            .await
+            .expect("privacy read adapter must initialize before API admission");
         let api_request_count = Arc::new(AtomicUsize::new(0));
         let analytics_enabled = analytics::is_enabled();
+        let mut telemetry_tasks = crate::telemetry_tasks::TelemetryTasks::default();
         let api_usage_counter = analytics_enabled.then(|| api_request_count.clone());
 
         // Recording-coverage sampler: accumulates working-time-vs-healthy-capture
@@ -648,7 +654,7 @@ impl SCServer {
 
             // Spawn periodic vision pipeline metrics reporter (every 60 seconds)
             let metrics_for_posthog = self.vision_metrics.clone();
-            tokio::spawn(async move {
+            telemetry_tasks.spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(60));
                 loop {
                     interval.tick().await;
@@ -703,7 +709,7 @@ impl SCServer {
             // Spawn periodic audio pipeline metrics reporter (every 60 seconds)
             let audio_metrics_for_posthog = self.audio_metrics.clone();
             let audio_manager_for_posthog = self.audio_manager.clone();
-            tokio::spawn(async move {
+            telemetry_tasks.spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(60));
                 loop {
                     interval.tick().await;
@@ -763,11 +769,14 @@ impl SCServer {
         // within seconds. This avoids blocking server start for 40+ seconds on large DBs.
         // WS clients that connect before warm completes will see frames without audio
         // initially, then audio appears as the cache populates.
-        let hot_frame_cache = self
-            .hot_frame_cache
-            .clone()
-            .unwrap_or_else(|| Arc::new(HotFrameCache::new()));
-        if self.timeline_disabled {
+        let hot_frame_cache = if protected_db.protected_reads_enabled() {
+            None
+        } else {
+            self.hot_frame_cache.clone()
+        }
+        /* protected history never consumes the raw capture cache */
+        .unwrap_or_else(|| Arc::new(HotFrameCache::new()));
+        if self.timeline_disabled || protected_db.protected_reads_enabled() {
             // Skip the potentially expensive warm-up but mark it resolved so
             // requests for saved history immediately use database backfill.
             hot_frame_cache.skip_warmup();
@@ -781,7 +790,7 @@ impl SCServer {
         }
 
         let app_state = Arc::new(AppState {
-            db: self.db.clone(),
+            db: protected_db.clone(),
             history_access: self.history_access.clone(),
             audio_manager: self.audio_manager.clone(),
             app_start_time: Utc::now(),
@@ -790,7 +799,7 @@ impl SCServer {
             audio_disabled: self.audio_disabled,
             frame_cache: match FrameCache::new(
                 self.screenpipe_dir.clone().join("data"),
-                self.db.clone(),
+                protected_db.clone(),
             )
             .await
             {
@@ -1104,6 +1113,14 @@ impl SCServer {
 
         // Build the main router with all routes
         let router = Router::new()
+            .route(
+                "/privacy/status",
+                get(crate::routes::privacy_release::status),
+            )
+            .route(
+                "/privacy/ready/:kind",
+                get(crate::routes::privacy_release::ready_page),
+            )
             .merge(server.into_router())
             // Agent self-improvement lives behind one validated local API so
             // native Pi and ACP share profile safety, prompt rendering, skill
@@ -1540,8 +1557,12 @@ impl SCServer {
                 }),
             )
             .layer(Extension(crate::routes::workflows::WorkflowCatalogSource(self.workflow_catalog_dir.clone())))
+            // Router clones keep this generation alive; the last drop cancels
+            // its reporters, including on failed startup or server restart.
+            .layer(Extension(Arc::new(telemetry_tasks)))
             .with_state(app_state.clone())
             .layer(axum::middleware::from_fn(crate::search_only::history_only))
+            .layer(axum::middleware::from_fn_with_state(app_state.clone(),crate::routes::privacy_release::release_middleware))
             .layer(axum::middleware::from_fn_with_state(
                 app_state.clone(),
                 crate::routes::search::storage_snapshot_middleware,

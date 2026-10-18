@@ -73,6 +73,7 @@ fn batch_for(device: &Device) -> Vec<u8> {
         device.label,
         &[
             FrameRow {
+                accessibility_tree: None,
                 frame_id: 1,
                 timestamp: ts(0),
                 app_name: Some("Arc".to_string()),
@@ -84,6 +85,7 @@ fn batch_for(device: &Device) -> Vec<u8> {
                 )),
             },
             FrameRow {
+                accessibility_tree: None,
                 frame_id: 2,
                 timestamp: ts(5),
                 app_name: Some("Slack".to_string()),
@@ -158,6 +160,7 @@ fn batch_for(device: &Device) -> Vec<u8> {
             device.id,
             device.label,
             &[FrameRow {
+                accessibility_tree: None,
                 frame_id: STALE_FRAME_ID,
                 timestamp: format!("{STALE_DAY}T{:02}:00:00Z", device.hour),
                 app_name: Some("Arc".to_string()),
@@ -206,6 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             frames: 2 + usize::from(device.stale_sentinel),
             parsed: 1,
             activities: 0,
+            starred: 0,
             audio: 1,
             ui: 1,
             snapshots: 0,

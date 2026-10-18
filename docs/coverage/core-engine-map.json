@@ -333,6 +333,7 @@
         "src/routes/meetings.rs",
         "src/routes/memories.rs",
         "src/routes/pipe_store.rs",
+        "src/routes/privacy_release.rs",
         "src/routes/request_origin.rs",
         "src/routes/response_format.rs",
         "src/routes/retranscribe.rs",
@@ -448,7 +449,7 @@
       "criticality": "medium",
       "confidence": "conditional",
       "kind": "unit",
-      "notes": "Platform focus-tracker parsing/helpers. These files are cfg-gated and only execute on their target OS."
+      "notes": "Platform focus-tracker parsing/helpers. These files are cfg-gated and only execute on their target OS. The separately invoked harness=false tests/native_multi_monitor.rs acceptance is documented in scripts/native-test-fixtures/macos/README.md and is not counted as an automatic Rust test block."
     },
     {
       "id": "engine-meeting-privacy-sync",
@@ -579,11 +580,13 @@
       "crate": "screenpipe-engine",
       "files": [
         "src/analytics.rs",
+        "src/resource_summary.rs",
         "src/crash_log.rs",
         "src/piggyback_telemetry.rs",
         "src/recording_coverage.rs",
         "src/resource_monitor.rs",
-        "src/telemetry_context.rs"
+        "src/telemetry_context.rs",
+        "src/telemetry_tasks.rs"
       ],
       "platforms": [
         "windows",
@@ -746,10 +749,12 @@
         "src/failpoint_vfs.rs",
         "src/recovery.rs",
         "src/sqlite_error.rs",
+        "src/storage/read_schema.rs",
         "src/storage/reader.rs",
         "tests/cancellable_query_test.rs",
         "tests/cancellation_performance_bench.rs",
         "tests/close_severs_connections_test.rs",
+        "tests/physical_disk_full_vm_test.rs",
         "tests/hybrid_recovery.rs",
         "tests/memory_pressure_test.rs",
         "tests/multi_pool_wal_parity_test.rs",
@@ -1047,6 +1052,30 @@
       "confidence": "strong",
       "kind": "mixed",
       "notes": "Meeting streaming config/controller logic, speaker embedding state, cross-device dedupe simulations, and overlap cleanup coverage."
+    },
+    {
+      "id": "audio-min-speech-ratio-gate",
+      "label": "Disabled-audio speech ratio gate",
+      "crate": "screenpipe-audio",
+      "files": [
+        "tests/vad_min_speech_ratio_gate_test.rs"
+      ],
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "layers": [
+        "audio",
+        "transcription"
+      ],
+      "flows": [
+        "audio-record-transcribe"
+      ],
+      "criticality": "high",
+      "confidence": "partial",
+      "kind": "integration",
+      "notes": "Synthetic VAD input verifies that a minimum speech ratio of one rejects even a fully spoken chunk and emits no segments. Does not exercise physical devices or live model inference."
     },
     {
       "id": "audio-pipeline-benchmarks",
@@ -1355,6 +1384,9 @@
         "src/platform/macos_click_attribution_e2e.rs",
         "src/platform/macos_click_attribution_eval.rs",
         "src/platform/macos.rs",
+        "src/platform/macos/clipboard_delivery.rs",
+        "src/platform/macos/input_focus.rs",
+        "src/platform/macos/text_buffer.rs",
         "src/tree/macos.rs",
         "src/tree/macos_lines.rs",
         "tests/e2e_obsidian.rs",

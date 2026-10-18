@@ -657,6 +657,28 @@ fn native_notif_action_callback_inner(json_ptr: *const std::os::raw::c_char) {
     dispatch_notification_action(json);
 }
 
+/// The optional join setting uses the same authenticated local endpoint as
+/// the HD action. Bound the wait so recording trouble cannot strand joining.
+fn start_meeting_join_screen_detail(
+    api: &crate::recording::LocalApiContext,
+    body: &serde_json::Value,
+) -> Result<(), String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = api
+        .apply_auth_blocking(client.post(api.url("/capture/hd/start")).json(body))
+        .send()
+        .map_err(|e| e.to_string())?;
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("HTTP {}", response.status()))
+    }
+}
+
 /// Run one notification action. Shared by the standalone notification panel and
 /// by notifications the shortcut overlay renders itself, so a meeting alert
 /// behaves identically whichever surface showed it.
@@ -899,14 +921,37 @@ pub(crate) fn dispatch_notification_action(json: String) {
             return;
         };
 
+        let screen_detail = parsed
+            .as_ref()
+            .and_then(|v| v.get("screen_detail"))
+            .filter(|v| v.is_object())
+            .cloned();
         let app_clone = app.clone();
         std::thread::spawn(move || {
             use tauri_plugin_opener::OpenerExt;
+            let capture_error = screen_detail.and_then(|body| {
+                let api = crate::recording::local_api_context_from_app(&app_clone);
+                start_meeting_join_screen_detail(&api, &body).err()
+            });
             if let Err(e) = app_clone.opener().open_url(&meeting_url, None::<&str>) {
                 error!(
                     "failed to open meeting url '{}' from notification: {}",
                     meeting_url, e
                 );
+            }
+
+            if let Some(error) = capture_error {
+                warn!("meeting join screen detail failed: {}", error);
+                let _ = app_clone.run_on_main_thread(|| {
+                    native_notification::show(&serde_json::json!({
+                        "id": "meeting-screen-detail-failed",
+                        "type": "warning",
+                        "title": crate::localization::ui_text("Screen detail could not start"),
+                        "body": crate::localization::ui_text("You can still join your meeting normally."),
+                        "actions": [],
+                        "autoDismissMs": 12000,
+                    }).to_string());
+                });
             }
 
             let Some(deeplink_url) = deeplink_url else {
@@ -1553,7 +1598,7 @@ fn native_shortcut_action_callback_inner(action_ptr: *const std::os::raw::c_char
                                     .header("Content-Type", "application/json")
                                     .body(r#"{"app":"manual"}"#),
                             );
-                            if let Ok(res) = req.send() {
+                            if let Ok(res) = req.send().and_then(|r| r.error_for_status()) {
                                 track_native_overlay_event(
                                     &app_clone,
                                     "shortcut_reminder_meeting_toggled",
@@ -1591,9 +1636,70 @@ mod tests {
         artifact_request_from_notification_url, chat_prefill_payload_from_action,
         native_overlay_meeting_note_id, notification_copy_value, notification_deeplink_target,
         notification_source_url, parse_meeting_deeplink, parse_overlay_anchor,
-        resolve_timeline_event_target, viewer_path_from_notification_url, SHORTCUT_OVERLAY_ANCHORS,
+        resolve_timeline_event_target, start_meeting_join_screen_detail,
+        viewer_path_from_notification_url, SHORTCUT_OVERLAY_ANCHORS,
     };
     use serde_json::json;
+
+    #[test]
+    fn meeting_join_screen_detail_posts_authenticated_scope_and_reports_failures() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        for (status, succeeds) in [
+            ("200 OK", true),
+            ("503 Service Unavailable", false),
+            ("302 Found", false),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                loop {
+                    let count = stream.read(&mut buffer).unwrap();
+                    assert!(count > 0);
+                    request.extend_from_slice(&buffer[..count]);
+                    if let Some(header_end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let headers =
+                            String::from_utf8_lossy(&request[..header_end]).to_lowercase();
+                        let length: usize = headers
+                            .lines()
+                            .find_map(|line| line.strip_prefix("content-length: "))
+                            .unwrap()
+                            .parse()
+                            .unwrap();
+                        if request.len() >= header_end + 4 + length {
+                            assert!(headers.starts_with("post /capture/hd/start http/1.1"));
+                            assert!(headers.contains("authorization: bearer test-key"));
+                            let body: serde_json::Value =
+                                serde_json::from_slice(&request[header_end + 4..]).unwrap();
+                            assert_eq!(body, json!({"boundTo": "prewarm_pending"}));
+                            break;
+                        }
+                    }
+                }
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+                )
+                .unwrap();
+            });
+            let api = crate::recording::LocalApiContext {
+                api_key: Some("test-key".into()),
+                port,
+            };
+            assert_eq!(
+                start_meeting_join_screen_detail(&api, &json!({"boundTo": "prewarm_pending"}))
+                    .is_ok(),
+                succeeds
+            );
+            server.join().unwrap();
+        }
+    }
 
     #[test]
     fn viewer_path_parses_view_deeplinks() {

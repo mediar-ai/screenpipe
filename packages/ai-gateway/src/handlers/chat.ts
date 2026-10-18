@@ -31,10 +31,11 @@ import {
 import { getHostedAiCapacityUpgrade } from '../services/hosted-ai-policy';
 
 // Auto model waterfall (INTERACTIVE) — use only current OpenAI/Anthropic models.
-// Keep a cross-provider option second so an OpenAI outage does not break chat.
+// Keep a cross-provider option second so an Anthropic outage does not break chat.
 // Exported so tests can pin that every chain entry has a MODEL_PRICING match
 // (otherwise served-model cost rows fall into the unknown-model estimate).
 export const AUTO_WATERFALL = [
+  'claude-haiku-5-5',
   'gpt-6-luna',
   'claude-sonnet-5',
   'gpt-5.4-mini',
@@ -42,6 +43,7 @@ export const AUTO_WATERFALL = [
 
 // Vision-capable models for requests containing images
 export const AUTO_WATERFALL_VISION = [
+  'claude-haiku-5-5',
   'gpt-6-luna',
   'claude-sonnet-5',
   'gpt-5.4-mini',
@@ -50,6 +52,7 @@ export const AUTO_WATERFALL_VISION = [
 // Background waterfall — for pipes, summaries, and suggestions. All entries
 // support tools; the second entry crosses providers for outage resilience.
 export const AUTO_WATERFALL_BACKGROUND = [
+  'claude-haiku-5-5',
   'gpt-6-luna',
   'claude-sonnet-5',
   'gpt-5.4-mini',
@@ -60,12 +63,13 @@ export const AUTO_WATERFALL_BACKGROUND = [
 // the difficulty router's premium tier heads. Keep this list and its attempt cap
 // in sync with the conservative reservation in free-chat-limit.ts.
 export const FREE_PREVIEW_WATERFALL = [
+  'claude-haiku-5-5',
   'gpt-6-luna',
-  'gpt-5.4-mini',
 ];
 export const FREE_PREVIEW_MAX_UPSTREAM_ATTEMPTS = 2;
 
 const NON_FRONTIER_FALLBACK_MODELS = new Set([
+  'claude-haiku-5-5',
   'gpt-6-luna',
   'gpt-5.6-luna',
   'gpt-5.4-mini',
@@ -284,7 +288,8 @@ async function tryModel(
 
     // Flex tier applies only to the Vertex Gemini lane. Set per-attempt (not on
     // the shared body) so a cascade to glm-5 runs standard tier.
-    const useFlex = flexEligible && isGeminiModel(model);
+    // Argon launches on standard service; do not inherit the retired Gemini flex policy.
+    const useFlex = flexEligible && isGeminiModel(model) && model !== 'gemini-4-argon';
 
     const callOnce = async (withFlex: boolean): Promise<Response> => {
       const rb = { ...reqBody } as RequestBody;
@@ -943,7 +948,7 @@ export async function handleChatCompletions(
   // an actual provider-call ceiling, not merely a model-count ceiling.
   const flexEligible = !freePreview && isFlexEligible(latency, env);
 
-  // Chain selection is keyed on latency and image support, with Luna leading all
+  // Chain selection is keyed on latency and image support, with Haiku leading all
   // three lanes and current OpenAI/Anthropic models providing resilience.
   const useBackgroundChain = latency === 'background';
 
@@ -974,7 +979,7 @@ export async function handleChatCompletions(
         if (!routerEnabled) chain = chain.filter((model) => model !== TIER_HEAD.hard);
         if (routerEnabled && !efficientOnly) routerTier = pinned.tier;
       }
-      // Legacy/no-session callers stay on Luna: never repeatedly guess frontier
+      // Legacy/no-session callers stay on Haiku: never repeatedly guess frontier
       // on requests that cannot be correlated into a stable logical turn.
     }
     const result = await runChain(

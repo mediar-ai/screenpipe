@@ -103,7 +103,10 @@ fn regular(path: &Path, directory: bool) -> io::Result<bool> {
         }
         Ok(_) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "starter skill path must not be a symlink or special file",
+            format!(
+                "starter skill path must not be a symlink or special file: {}; existing files were preserved",
+                path.display()
+            ),
         )),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(e) => Err(e),
@@ -124,6 +127,21 @@ fn ensure_root(root: &Path) -> io::Result<()> {
     fs::create_dir_all(root)
 }
 
+/// Linked starter skills are user-managed collisions, just like unmarked
+/// regular files. We may use an existing readable skill, but never write or
+/// remove either the link or its target (including a linked ownership marker).
+fn linked_skill(dir: &Path) -> io::Result<bool> {
+    for path in [dir.to_path_buf(), dir.join("SKILL.md"), dir.join(MARKER)] {
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => return Ok(true),
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(false)
+}
+
 pub fn install_one(root: &Path, name: &str, content: &str) -> io::Result<PathBuf> {
     if !STARTER_SKILLS.iter().any(|(key, _)| *key == name) {
         return Err(io::Error::new(
@@ -133,9 +151,28 @@ pub fn install_one(root: &Path, name: &str, content: &str) -> io::Result<PathBuf
     }
     ensure_root(root)?;
     let dir = root.join(name);
+    let path = dir.join("SKILL.md");
+    if linked_skill(&dir)? {
+        // Checking the target type first avoids reading a pipe/device. A
+        // dangling link remains an actionable failure, not a claimed install.
+        let readable = fs::metadata(&path).and_then(|metadata| {
+            if !metadata.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "target is not a regular file",
+                ));
+            }
+            fs::read_to_string(&path)
+        });
+        return readable.map(|_| path.clone()).map_err(|error| {
+            io::Error::new(error.kind(), format!(
+                "linked starter skill is not a readable regular file: {}: {error}; repair the link and retry; existing files were preserved",
+                path.display()
+            ))
+        });
+    }
     regular(&dir, true)?;
     fs::create_dir_all(&dir)?;
-    let path = dir.join("SKILL.md");
     let marker = dir.join(MARKER);
     let exists = regular(&path, false)?;
     let owned = regular(&marker, false)?;
@@ -217,9 +254,15 @@ pub fn install_store(root: &Path) -> io::Result<Vec<PathBuf>> {
 
 pub fn is_current_or_custom(root: &Path, name: &str, content: &str) -> bool {
     let dir = root.join(name);
+    if !dir.join("SKILL.md").is_file() {
+        return false;
+    }
     let Ok(current) = fs::read_to_string(dir.join("SKILL.md")) else {
         return false;
     };
+    if linked_skill(&dir).unwrap_or(false) {
+        return true;
+    }
     if current == content {
         return true;
     }
@@ -235,6 +278,9 @@ pub fn remove_one(root: &Path, name: &str) -> io::Result<bool> {
     }
     ensure_root(root)?;
     let dir = root.join(name);
+    if linked_skill(&dir)? {
+        return Ok(false);
+    }
     if !regular(&dir, true)? {
         return Ok(false);
     }
@@ -377,9 +423,9 @@ mod tests {
     }
     #[cfg(unix)]
     #[test]
-    fn reject_links_at_root_directory_file_and_marker() {
+    fn reject_linked_roots_and_unreadable_linked_skills() {
         use std::os::unix::fs::symlink;
-        for part in ["root", "directory", "file", "marker"] {
+        for part in ["root", "directory", "marker"] {
             let t = Temp::new();
             let outside = Temp::new();
             let (name, body) = STARTER_SKILLS[0];
@@ -394,15 +440,78 @@ mod tests {
                 } else {
                     fs::create_dir(&dir).unwrap();
                     fs::write(outside.0.join("target"), "unchanged").unwrap();
-                    symlink(
-                        outside.0.join("target"),
-                        dir.join(if part == "file" { "SKILL.md" } else { MARKER }),
-                    )
-                    .unwrap();
+                    symlink(outside.0.join("target"), dir.join(MARKER)).unwrap();
                 }
             }
             assert!(install_one(&root, name, body).is_err());
             assert!(!outside.0.join("SKILL.md").exists());
         }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn preserve_linked_starters_across_install_refresh_and_disconnect() {
+        use std::os::unix::fs::symlink;
+        for part in ["directory", "file", "marker"] {
+            let t = Temp::new();
+            let outside = Temp::new();
+            let (name, _) = STARTER_SKILLS[0];
+            let dir = t.0.join(name);
+            let original = "user-managed recall skill";
+            fs::write(outside.0.join("SKILL.md"), original).unwrap();
+            if part == "directory" {
+                symlink(&outside.0, &dir).unwrap();
+            } else {
+                fs::create_dir(&dir).unwrap();
+                if part == "file" {
+                    symlink(outside.0.join("SKILL.md"), dir.join("SKILL.md")).unwrap();
+                } else {
+                    fs::write(dir.join("SKILL.md"), original).unwrap();
+                    symlink(outside.0.join("SKILL.md"), dir.join(MARKER)).unwrap();
+                }
+            }
+            let link = match part {
+                "directory" => dir.clone(),
+                "file" => dir.join("SKILL.md"),
+                _ => dir.join(MARKER),
+            };
+            let target = fs::read_link(&link).unwrap();
+            // Remaining starter skills still install despite the collision.
+            assert_eq!(install(&t.0).unwrap().len(), STARTER_SKILLS.len());
+            install_one(&t.0, name, "new bundled version").unwrap();
+            assert!(is_current_or_custom(&t.0, name, "new bundled version"));
+            assert!(!remove_one(&t.0, name).unwrap());
+            assert_eq!(fs::read_link(&link).unwrap(), target);
+            assert_eq!(fs::read_to_string(dir.join("SKILL.md")).unwrap(), original);
+            assert_eq!(
+                fs::read_to_string(outside.0.join("SKILL.md")).unwrap(),
+                original
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_link_reports_path_preserves_link_and_recovers_after_repair() {
+        use std::os::unix::fs::symlink;
+        let t = Temp::new();
+        let outside = Temp::new();
+        let (name, body) = STARTER_SKILLS[0];
+        let dir = t.0.join(name);
+        let target = outside.0.join("missing");
+        symlink(&target, &dir).unwrap();
+        let error = install_one(&t.0, name, body).unwrap_err().to_string();
+        assert!(error.contains(&dir.join("SKILL.md").display().to_string()));
+        assert!(error.contains("repair the link and retry"));
+        assert!(!is_current_or_custom(&t.0, name, body));
+        assert!(!remove_one(&t.0, name).unwrap());
+        assert_eq!(fs::read_link(&dir).unwrap(), target);
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("SKILL.md"), "repaired user skill").unwrap();
+        install_one(&t.0, name, body).unwrap();
+        assert!(is_current_or_custom(&t.0, name, body));
+        assert_eq!(
+            fs::read_to_string(target.join("SKILL.md")).unwrap(),
+            "repaired user skill"
+        );
     }
 }

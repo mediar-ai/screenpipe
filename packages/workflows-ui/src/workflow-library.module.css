@@ -29,3 +29,15 @@
 .library button:disabled { opacity: .5; cursor: default; }
 .library button:focus-visible, .library input:focus-visible, .library textarea:focus-visible { outline: 2px solid var(--muted); outline-offset: 3px; }
 @media (max-width: 680px) { .controls { align-items: stretch; flex-direction: column-reverse; gap: 4px; } .search input { width: 100%; } }
+.skillPage { max-width: 1200px; margin: 0 auto; color: var(--ink); }
+.skillLayout { display: grid; grid-template-columns: minmax(0, 860px) 210px; gap: 56px; padding: 0 8px; }
+.description { margin: 0 0 30px; }
+.description > span { display: block; font-size: 12px; color: var(--muted); margin: 0 0 6px 4px; }
+.description textarea { display: block; width: 100%; box-sizing: border-box; resize: none; border: 1px solid transparent; border-radius: 4px; padding: 4px; color: var(--ink); background: transparent; font: inherit; font-size: 15px; line-height: 1.6; }
+.description textarea:focus-visible { outline: 1px solid var(--muted); }
+.source { padding-top: 30px; font-size: 13px; overflow-wrap: anywhere; }
+.source p { color: var(--muted); margin: 0 0 8px; }
+.source strong { display: block; font-weight: 500; margin-bottom: 24px; }
+.saveStatus { color: var(--muted); font-size: 12px; }
+.saveError { font-size: 13px; padding: 12px; border: 1px solid var(--line); }
+@media (max-width: 1000px) { .skillLayout { grid-template-columns: minmax(0, 1fr); gap: 20px; } .source { border-top: 1px solid var(--line); padding-top: 16px; } }

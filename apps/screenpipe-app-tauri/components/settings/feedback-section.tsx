@@ -5,7 +5,7 @@
 
 import React from "react";
 import { ShareLogsButton } from "@/components/share-logs-button";
-import { MessageSquare, Github, Lightbulb, FileText, Youtube, BookOpen, Play, ClipboardList } from "lucide-react";
+import { MessageSquare, Github, Lightbulb, FileText, Youtube, BookOpen, Play, ClipboardList, Calendar } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { screenpipeWebUrl } from "@/lib/web-url";
 import { useGT } from "gt-react";
@@ -33,6 +33,26 @@ export function FeedbackSection() {
       </p>
 
       <div className="space-y-2">
+        <button
+          type="button"
+          data-testid="help-book-call"
+          onClick={() => open("https://cal.com/team/screenpipe/chat")}
+          className="group w-full text-left px-3 py-2.5 bg-card border border-border hover:border-foreground transition-colors duration-150"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Talk to the team</h3>
+                <p className="text-xs text-muted-foreground">Get setup help, work through an issue, or share feedback</p>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors duration-150 shrink-0">
+              Book a call →
+            </span>
+          </div>
+        </button>
+
         <div className="px-3 py-2.5 bg-card border border-border">
           <div className="flex items-center gap-2.5 mb-2.5">
             <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />

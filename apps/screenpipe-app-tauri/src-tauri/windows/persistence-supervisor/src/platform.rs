@@ -2054,6 +2054,7 @@ pub fn remove_persistence() -> Result<()> {
         let state = state_dir(Path::new(&program_data));
         let _ = fs::remove_file(policy_disabled_path(Path::new(&program_data)));
         let _ = fs::remove_file(log_path(Path::new(&program_data)));
+        let _ = fs::remove_file(state.join(INSTALLED_STATE_FILE));
         let _ = fs::remove_file(state.join(RECOVERY_SUPERVISOR_FILE));
         let _ = fs::remove_dir_all(state.join(UPDATE_STAGING_DIR));
         let _ = fs::remove_dir(state);
@@ -2241,7 +2242,12 @@ if (($attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
 }
 $owner = $acl.Owner
 try { $owner = ([System.Security.Principal.NTAccount]$owner).Translate([System.Security.Principal.SecurityIdentifier]).Value } catch {}
-if ($owner -notin @('S-1-5-18', 'S-1-5-32-544')) { exit 40 }
+$trustedOwners = @(
+  'S-1-5-18',
+  'S-1-5-32-544',
+  'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+)
+if ($owner -notin $trustedOwners) { exit 40 }
 $write = [System.Security.AccessControl.FileSystemRights]::WriteData -bor
          [System.Security.AccessControl.FileSystemRights]::CreateFiles -bor
          [System.Security.AccessControl.FileSystemRights]::AppendData -bor
@@ -2255,7 +2261,15 @@ $write = [System.Security.AccessControl.FileSystemRights]::WriteData -bor
 foreach ($rule in $acl.Access) {
   $sid = $rule.IdentityReference
   try { $sid = $sid.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $sid = [string]$sid }
-  $trusted = $sid -in @('S-1-5-18', 'S-1-5-32-544')
+  $trusted = $sid -in $trustedOwners
+  # Program Files and ProgramData normally carry this placeholder ACE. It
+  # cannot grant access to the directory itself and is substituted with the
+  # trusted creator/owner only on descendants. Do not generalize this exception
+  # to other inherit-only principals: they can create writable child namespaces.
+  $trustedCreatorOwner = $sid -eq 'S-1-3-0' -and
+    $rule.InheritanceFlags -ne [System.Security.AccessControl.InheritanceFlags]::None -and
+    (($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)
+  $trusted = $trusted -or $trustedCreatorOwner
   if (-not $trusted -and $rule.AccessControlType -eq 'Allow' -and (($rule.FileSystemRights -band $write) -ne 0)) { exit 42 }
 }
 exit 0
@@ -2420,6 +2434,52 @@ mod tests {
 
     static PROGRAM_DATA_TEST: Mutex<()> = Mutex::new(());
 
+    fn acl_test_dir(parent: &Path, case: &str) -> PathBuf {
+        let path = parent.join(format!(
+            "screenpipe-acl-{case}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&path).unwrap();
+        path
+    }
+
+    fn remove_acl_test_dir(path: &Path) {
+        let _ = run_icacls(path, &["/grant:r", "*S-1-5-32-544:(OI)(CI)F"]);
+        let _ = fs::remove_dir_all(path);
+    }
+
+    fn assert_private_acl(path: &Path) {
+        let script = r#"
+$acl = [System.IO.Directory]::GetAccessControl($env:SCREENPIPE_ACL_TEST_PATH)
+if (-not $acl.AreAccessRulesProtected) { exit 1 }
+$allowed = @('S-1-5-18', 'S-1-5-32-544')
+foreach ($rule in $acl.Access) {
+  $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+  if ($rule.IsInherited -or $sid -notin $allowed) { exit 2 }
+}
+"#;
+        let status = Command::new("powershell.exe")
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ])
+            .env("SCREENPIPE_ACL_TEST_PATH", path)
+            .status()
+            .unwrap();
+        assert!(
+            status.success(),
+            "unexpected effective ACL on {}",
+            path.display()
+        );
+    }
+
     #[test]
     fn service_status_accepts_stop_shutdown_and_session_changes() {
         let status = service_status(ServiceState::Running);
@@ -2499,5 +2559,74 @@ mod tests {
         } else {
             env::remove_var("ProgramData");
         }
+    }
+
+    #[test]
+    fn default_program_files_and_protected_program_data_are_hardened() {
+        let _lock = PROGRAM_DATA_TEST.lock().unwrap();
+        let program_files = PathBuf::from(env::var_os("ProgramFiles").unwrap());
+        let install = acl_test_dir(&program_files, "trusted-default");
+        validate_trusted_acl_namespace(&install).unwrap();
+        protect_private_directory(&install).unwrap();
+        assert_private_acl(&install);
+        remove_acl_test_dir(&install);
+
+        let program_data = PathBuf::from(env::var_os("ProgramData").unwrap());
+        let state = program_data.join(format!("screenpipe-acl-protected-{}", std::process::id()));
+        create_protected_directory(&state, true).unwrap();
+        validate_trusted_acl_namespace(&state).unwrap();
+        assert_private_acl(&state);
+        remove_acl_test_dir(&state);
+    }
+
+    #[test]
+    fn writable_builtin_namespaces_are_rejected_including_inherit_only() {
+        let _lock = PROGRAM_DATA_TEST.lock().unwrap();
+        let parent = PathBuf::from(env::var_os("ProgramData").unwrap());
+        for (case, sid, grant) in [
+            ("users", "*S-1-5-32-545", "M"),
+            ("everyone", "*S-1-1-0", "M"),
+            ("authenticated", "*S-1-5-11", "M"),
+            ("users-inherit-only", "*S-1-5-32-545", "(OI)(CI)(IO)M"),
+            ("creator-owner-direct", "*S-1-3-0", "F"),
+        ] {
+            let path = acl_test_dir(&parent, case);
+            run_icacls(&path, &["/grant", &format!("{sid}:{grant}")]).unwrap();
+            assert!(
+                validate_trusted_acl_namespace(&path).is_err(),
+                "accepted {case}"
+            );
+            remove_acl_test_dir(&path);
+        }
+    }
+
+    #[test]
+    fn untrusted_owner_is_rejected() {
+        let _lock = PROGRAM_DATA_TEST.lock().unwrap();
+        let parent = PathBuf::from(env::var_os("ProgramData").unwrap());
+        let path = acl_test_dir(&parent, "owner");
+        let user = env::var("USERNAME").unwrap();
+        run_icacls(&path, &["/setowner", &user]).unwrap();
+        assert!(validate_trusted_acl_namespace(&path).is_err());
+        remove_acl_test_dir(&path);
+    }
+
+    #[test]
+    fn junction_is_rejected_before_acl_hardening() {
+        let _lock = PROGRAM_DATA_TEST.lock().unwrap();
+        let parent = PathBuf::from(env::var_os("ProgramData").unwrap());
+        let target = acl_test_dir(&parent, "junction-target");
+        let junction = parent.join(format!("screenpipe-acl-junction-{}", std::process::id()));
+        let _ = fs::remove_dir(&junction);
+        let status = Command::new("cmd.exe")
+            .args(["/c", "mklink", "/J"])
+            .arg(&junction)
+            .arg(&target)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(protect_private_directory(&junction).is_err());
+        let _ = fs::remove_dir(&junction);
+        remove_acl_test_dir(&target);
     }
 }

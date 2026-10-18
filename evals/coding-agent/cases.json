@@ -6323,6 +6323,461 @@
         ],
         "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-upstream-json.test.ts"
       }
+    },
+    {
+      "id": "app-acp-declined-warmup",
+      "name": "Keep declined automatic agent warmups quiet across chat remounts",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "6a443fb1ff9e0a11848f7dbddd923ec6748be87a"
+      },
+      "base_ref": "67f8fdf8222305796a9cafe31cdb74c289a8121d",
+      "oracle_ref": "6a443fb1ff9e0a11848f7dbddd923ec6748be87a",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "authentication",
+        "chat",
+        "react"
+      ],
+      "prompt": "The chat view can repeatedly reopen an agent sign-in after the user declined an automatic warmup. Fix the existing useAcpWarmup hook so a pending or unsuccessful automatic start for the same preset and ACP agent stays quiet across new conversations and chat remounts within the same webview lifetime. Non-running replies, error replies and rejected starts all count as unsuccessful. A successful running handshake must still permit automatic warming for a later conversation. Failure for one preset/agent must not suppress another preset or agent. Preserve disabled-feature, hosted-provider, missing preset/agent, already-running and in-flight start guards. A process-liveness update must not release a handshake guard before its call completes. Release the guard on settlement or unmount; ignore late UI/config/thinking updates after unmount, and only update them after successful running handshakes. Preserve session, project directory, token and provider config passed to the start command, and successful state/config/thinking synchronization. The hidden checks mount the actual hook with synthetic native command responses; native sign-in UI, cross-webview persistence and manual send/retry paths are outside this case. Keep changes scoped to automatic warmup and add or update tests as needed.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 120,
+        "fixtures": [
+          {
+            "local_path": "graders/acp-declined-warmup.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-acp-warmup.test.ts"
+          },
+          {
+            "local_path": "graders/acp-warmup.config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-acp-warmup.config.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-acp-warmup.config.mjs"
+      },
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/chat/standalone/hooks/use-acp-warmup.ts"
+      ],
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ]
+    },
+    {
+      "id": "app-meeting-speaker-source",
+      "name": "Keep per-stream speaker labels distinct in meeting transcript text",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "13d960d27f7c4b95b1e35c23c76a45ea241d912b"
+      },
+      "base_ref": "b9cff1112aff37a2e461c620db4e03209c164b54",
+      "oracle_ref": "13d960d27f7c4b95b1e35c23c76a45ea241d912b",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/lib/utils/meeting-context.ts"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "meetings",
+        "transcript",
+        "speaker-identity"
+      ],
+      "prompt": "Meeting transcript text merges microphone and meeting-audio turns when independent streams reuse generic speaker labels. Repair the actual transcript renderer and the transcript section of full meeting Markdown. Generic labels speaker, speaker followed by a space and digits, or speaker followed by an underscore and digits are case-insensitive: qualify them as Microphone for input, Meeting audio for output, and Unidentified for an unknown direction. Preserve the original label alongside that source using the existing bracketed speaker format, for example [Microphone · speaker 1]. Adjacent generic turns from different sources must remain separate and retain all words. Preserve explicit names, including names that only resemble generic labels; an explicit matching name may still coalesce across sources. Keep same-source consecutive turns grouped below a ten-second gap, but separate turns at exactly ten seconds. Preserve chronological sorting, whitespace normalization, empty/null inputs, omission of blank speech and omission of the unknown speaker label. Never mutate input chunks or their stored identities. Full meeting Markdown must retain notes. The grader invokes the complete existing module with synthetic chunks and refuses local API work. Any implementation achieving these outputs is acceptable. This task covers rendered transcript text only, not live announcements, the transcript panel, native clipboard delivery, audio diarization, storage identity, execution isolation or model capability.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/meeting-speaker-source.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/lib/utils/meeting-speaker-source.eval.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test apps/screenpipe-app-tauri/lib/utils/meeting-speaker-source.eval.test.ts"
+      }
+    },
+    {
+      "id": "app-historical-analytics-false-persistence",
+      "name": "Preserve explicit falsy preferences across historical settings reload",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "648c89abeb770ab5a2630fa90d9fcd80e1bbc813"
+      },
+      "base_ref": "500c8fc3e658fd8045e19f35b814dc310b5c65a7",
+      "oracle_ref": "648c89abeb770ab5a2630fa90d9fcd80e1bbc813",
+      "oracle_paths": [
+        "screenpipe-app-tauri/lib/hooks/use-settings.tsx"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "privacy",
+        "settings",
+        "historical-contract"
+      ],
+      "prompt": "In this historical app revision, loading saved settings replaces explicit false, zero and empty-string choices with defaults. Repair the actual useSettings hook while retaining its public interface. Loading must preserve false analyticsEnabled, enableFrameCache and isFirstTimeUser; zero fps and aiMaxContextChars; and empty aiModel and customPrompt. Accepted analyticsEnabled=false, fps=0 and customPrompt=\"\" updates must be visible immediately and survive unmount/remount from the synthetic store, preserving unrelated port and model values. Absent or null fields must retain this revision's defaults, including analytics enabled and macOS fps 0.2 and apple-native OCR. Loading explicit preferences, ordinary values, empty ignoredWindows or absent fields must not write the store. Ordinary values and empty ignoredWindows must be preserved. Custom dataDir must still be returned by getDataDir. Tests mount the real React hook with synthetic native storage, platform and path ports; no network or native builds are needed. The storage port verifies accepted values across hook reload, not physical disk durability or native process restart. These scalar fields and default rules belong to this historical revision; do not apply them to a later settings schema. No particular private helper or implementation path is required.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/settings-falsy.fixture.tsx.txt",
+            "destination_path": "screenpipe-app-tauri/lib/hooks/eval-settings-falsy.test.tsx"
+          },
+          {
+            "local_path": "graders/settings-falsy.config.mjs",
+            "destination_path": "screenpipe-app-tauri/eval-settings-falsy.config.mjs"
+          }
+        ],
+        "command": "cd screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-settings-falsy.config.mjs"
+      }
+    },
+    {
+      "id": "app-browser-native-consent-navigation",
+      "name": "Show native browser session consent without losing ownership safeguards",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "0cf9a64a5d7684b00c318154b249400bc007fd38"
+      },
+      "base_ref": "a71e821de98615c9bafde1574298cb592b664634",
+      "oracle_ref": "0cf9a64a5d7684b00c318154b249400bc007fd38",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "privacy",
+        "browser",
+        "react"
+      ],
+      "prompt": "The browser sidebar can stay on a loading view when native navigation pauses for permission to use a browser login. Fix the existing consent flow so a valid session-access request for the current chat and navigation presents the explicit Use browser session and Continue logged out choices. Accept native snake_case navigation_id and the existing camelCase navigationId event format, for both the default browser and user-created tabs. Pause loading while permission is pending and hide the native user tab so it cannot cover the choices. Do not resolve the request or change cookie-access/settings state before the user chooses. Each explicit choice must resolve the original request once with the selected boolean, set cookie access to that choice (mark denial when declined), update browserCookieAccessGranted, and dismiss the prompt. Preserve rejection of stale or absent navigation IDs and foreign or absent owners, with no prompt or permission/settings effects. The hidden checks mount the actual component with synthetic native events, persistence and presentation ports. Native webview geometry and cookie extraction are outside this case. Keep the existing ownership protections and add or update relevant tests.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 120,
+        "fixtures": [
+          {
+            "local_path": "graders/browser-consent.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/components/.eval-browser-consent.test.tsx"
+          },
+          {
+            "local_path": "graders/browser-consent.bootstrap.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-browser-consent-bootstrap.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node .eval-browser-consent-bootstrap.mjs"
+      },
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/browser-sidebar.tsx"
+      ],
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ]
+    },
+    {
+      "id": "ai-gateway-vertex-stream-fallback",
+      "name": "Keep reasoning-only Vertex streams visibly readable",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "65f7928a294cc847534cb1adfe693e8553addfa1"
+      },
+      "base_ref": "dec32b804203013868d99a87ba94b6bac61d00e9",
+      "oracle_ref": "65f7928a294cc847534cb1adfe693e8553addfa1",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/vertex-maas.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "streaming",
+        "provider-compatibility"
+      ],
+      "prompt": "The public Vertex MaaS streaming completion can return no visible answer when a thinking model supplies only reasoning_content. Preserve the original reasoning deltas and expose their complete text as content exactly once when the stream finishes, sends [DONE], or closes without either, provided no nonempty content was delivered. Handle empty content deltas, CRLF lines and arbitrary byte boundaries including split Unicode. Preserve response id, model and choice index; fallback content must precede an existing [DONE] marker. Ordinary content and reasoning followed by a real answer must remain exact without appended reasoning. Empty streams must not invent text. Preserve tool-call deltas, usage records, comments, malformed data lines and ordinary upstream client-error refusal. For the existing glm-4.7 endpoint, retain one completion POST, bearer authorization, user messages, zero temperature, max_tokens and stream:true without changing caller input. Use synthetic authentication and transport only; never call live providers. No particular helper or transform implementation is required. This task covers one-choice streaming transport, not non-streaming JSON parsing, multiple-choice multiplexing, live model output, billing or desktop rendering.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/vertex-stream-fallback.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-vertex-stream-fallback.test.ts"
+      }
+    },
+    {
+      "id": "app-recording-status-authority",
+      "name": "Recover unavailable recording status without changing capture authority",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "dd332af338ba8302b3df12ef424d8a4c7e7bf291"
+      },
+      "base_ref": "bbc17e34d453abb9449be47e0cfc9d7a9ecd8565",
+      "oracle_ref": "dd332af338ba8302b3df12ef424d8a4c7e7bf291",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/recording-status.tsx"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/recording-status.tsx"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "recording",
+        "user-pause",
+        "status-recovery"
+      ],
+      "prompt": "The recording status popover offers the wrong controls when device information is empty or stale. Preserve the RecordingStatus public interface. For a running session with no reported devices, provide accessible Check again and Open settings actions, without offering a global pause/resume action or changing capture. Check again calls onRefreshDevices once, keeps an accessible Check again or Checking button disabled while pending, prevents duplicate requests, and becomes usable again after either success or rejection. Open settings invokes onOpenRecordingSettings. Global pause must take precedence over an empty device list or stale active devices: show an accessible Resume all recording action that invokes onResumeRecording once, with no individual Pause/Resume controls or device requests. When settings disable all capture, show no capture or status-retry controls, but keep Open settings available, regardless of reported device or global-pause state. Preserve existing behavior: a live session whose devices are individually paused resumes those devices through POST /vision/device/start with monitor_id and POST /audio/device/start with device_name, without global callbacks; active or mixed devices pause through onPauseRecording; a globally paused session resumes through the global callback. A monitor without an id must issue no request while eligible audio devices still resume. Failed individual requests must restore their previous paused state. Hide the global control when both callbacks are absent; an unavailable global resume callback must leave its action disabled or absent. Preserve accessible action names pause all recording, resume all recording and resume (case-insensitive). No private function names, test attributes or implementation structure are required. This task covers frontend controls with synthetic callback/API boundaries, not Home wiring or native recording.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/recording-status-authority.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume.test.tsx"
+          },
+          {
+            "local_path": "graders/recording-resume-config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume.config.mjs"
+          },
+          {
+            "local_path": "graders/recording-resume-translation.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/recording-resume-translation.ts"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/recording-resume.config.mjs"
+      }
+    },
+    {
+      "id": "app-pipe-watch-switch-preservation",
+      "name": "Keep authoritative watched-pipe text when switching conversations",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "3a427b22626db983406d917b43abe4888c647dfc"
+      },
+      "base_ref": "6b4edca9b022ddfdc5c489e6175507f626298f71",
+      "oracle_ref": "3a427b22626db983406d917b43abe4888c647dfc",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/hooks/use-chat-conversations.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/hooks/use-chat-conversations.ts",
+        "apps/screenpipe-app-tauri/lib/stores/chat-store.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "data-preservation",
+        "pipe-history"
+      ],
+      "prompt": "Switching conversations can replace a watched pipe's newer streamed text with the panel's stale copy when both copies have the same message count. Repair the actual useChatConversations loadConversation path so leaving a pipe-watch session retains its authoritative store messages. Preserve normal chat ownership: an equally sized panel transcript must still replace the normal chat's older store transcript, while a shorter panel snapshot must not discard additional stored messages. Loading a warm incoming chat must restore its stored messages and update both the current store identity and the panel session reference to that incoming chat. Keep the public hook and session-store interfaces compatible. Checks mount the real React hook with its real store and synthetic native, storage and translation ports. No particular guard, helper, or reducer architecture is required. New-chat creation, stream-event delivery, native rendering, disk durability and crash recovery are outside this historical task.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/pipe-watch-switch.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/pipe-watch-switch.test.tsx"
+          },
+          {
+            "local_path": "graders/pipe-watch-switch-config.mjs.txt",
+            "destination_path": "apps/screenpipe-app-tauri/.eval-hidden/pipe-watch-switch.config.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config .eval-hidden/pipe-watch-switch.config.mjs"
+      }
+    },
+    {
+      "id": "app-telemetry-full-ax-wire",
+      "name": "Preserve complete accessibility trees through the telemetry wire format",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "449156e009be5580b0235d52c8543c56e29e37be",
+        "pull_request": "https://github.com/screenpipe/screenpipe/pull/7659"
+      },
+      "base_ref": "ada8f2fab2f78ea6a9ac8d59f97c932063418a24",
+      "oracle_ref": "449156e009be5580b0235d52c8543c56e29e37be",
+      "oracle_paths": [
+        "crates/screenpipe-telemetry-wire/src/records.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-telemetry-wire/src/records.rs"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "telemetry",
+        "preserved-behavior"
+      ],
+      "prompt": "Enterprise frame telemetry loses retained accessibility evidence while encoding or decoding a batch. Repair the existing telemetry wire boundary so an optional accessibility_tree survives JSON input, the public batch encoder and the public batch decoder without losing nodes, order, empty text, nested or unknown properties, false/zero/null values, Unicode, multiline text or long values. An empty tree must remain distinct from an absent tree. Older frames without a tree must remain readable; missing and null trees must be omitted from encoded output. Preserve the existing flattened frame fields, timestamps, device identity and labels, visible summary and nullable browser URL. Mixed frame/audio batches must retain both records and speech. Repeated frame IDs must retain input order and distinct payloads; device identities must not merge. Keep tolerant parsing: blank lines are ignored, each malformed or unknown-kind nonblank line is counted and skipped, and valid neighboring records survive. Empty batches remain empty. Use existing public wire interfaces; no particular implementation is required. Grading compiles the complete records module with synthetic inputs. This task does not require native capture, PII redaction, upload authorization, database hydration or persistence, live services, customer data or execution-isolation changes.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/telemetry-ax.fixture.rs",
+            "destination_path": ".eval-telemetry-ax/outcomes.rs"
+          },
+          {
+            "local_path": "graders/telemetry-ax.lib.rs",
+            "destination_path": ".eval-telemetry-ax/lib.rs"
+          },
+          {
+            "local_path": "graders/telemetry-ax.Cargo.toml.txt",
+            "destination_path": ".eval-telemetry-ax/Cargo.toml"
+          }
+        ],
+        "command": "cargo test --offline --manifest-path .eval-telemetry-ax/Cargo.toml --test outcomes -- --nocapture"
+      }
+    },
+    {
+      "id": "app-audio-drop-control-dispatch",
+      "name": "Dispatch audio shutdown before dropping the stream",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "cd1fe138819e573b89e975283e4d19c8307748ed"
+      },
+      "base_ref": "e53b0f0938e47d7d161e4e50a088c43ac04a402c",
+      "oracle_ref": "cd1fe138819e573b89e975283e4d19c8307748ed",
+      "oracle_paths": [
+        "crates/screenpipe-audio/src/core/stream.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-audio/src/core/stream.rs"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "audio",
+        "resource-lifecycle"
+      ],
+      "prompt": "Dropping an AudioStream outside an asynchronous runtime can leave its shutdown request unsent and shared disconnect state unchanged. Repair the actual stream destructor so dropping a synthetic stream synchronously marks it disconnected and dispatches its stop request before returning, even when no executor is polling. If the control receiver is already closed, dropping must still mark it disconnected without panicking. A live stream must remain connected until stopped or dropped, and explicit stop with the synthetic closed receiver must remain successful and mark it disconnected. Preserve the existing AudioStream interfaces and synthetic constructor. The hidden checks use the existing internal control sender and shared disconnect flag to observe these outcomes; no particular shutdown helper, task implementation or control-message representation is required. Use synthetic streams only. Native worker completion, device teardown timing, capture hardware, durable recording, migration authority and real customer data are outside this task.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/audio-drop.mjs",
+            "destination_path": ".eval-audio-drop/audio-drop.mjs"
+          },
+          {
+            "local_path": "graders/audio-drop.fixture.rs",
+            "destination_path": ".eval-audio-drop/audio-drop.fixture.rs"
+          }
+        ],
+        "command": "node .eval-audio-drop/audio-drop.mjs && cargo test --locked -p screenpipe-audio --lib eval_audio_drop -- --test-threads=1"
+      }
+    },
+    {
+      "id": "app-mcp-browser-boundary",
+      "name": "Reject foreign browser authority at the HTTP MCP boundary",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "52297f8edee9c85ada55581f6ae7287b0643df82"
+      },
+      "base_ref": "6bb753f85c6a01cc3a2fc26890ce68cef5cbad85",
+      "oracle_ref": "52297f8edee9c85ada55581f6ae7287b0643df82",
+      "oracle_paths": [
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/screenpipe-mcp/src/http-server.ts"
+      ],
+      "tags": [
+        "regression",
+        "security",
+        "mcp",
+        "privacy",
+        "preserved-behavior"
+      ],
+      "agent_timeout_seconds": 900,
+      "prompt": "The HTTP MCP listener trusts every loopback TCP peer, allowing browser requests with attacker-controlled Host or Origin headers to initialize or use sessions. Repair the actual HTTP boundary. Without a matching configured bearer token, reject foreign authorities, misleading localhost/IP suffixes, userinfo-like authorities, numeric IP aliases, foreign origins and opaque null origins with HTTP 401 and no new session. Apply that protection to initialization, existing-session tools/list and DELETE, including /mcp query URLs; rejected deletion must leave the legitimate session usable. Preserve native clients using literal 127.0.0.1, localhost (case insensitive) or bracketed ::1 authorities with optional ports, and local HTTP/HTTPS origins using those literals. Explicit matching bearer credentials must still authorize otherwise untrusted authorities/origins; wrong or malformed bearer values must not. Successful initialization must return a real usable session and advertise tools, including search_content on listing. Preserve health status/session accounting, unauthenticated /health and OPTIONS, and 404 for unknown authorized routes. Use synthetic loopback traffic with telemetry disabled and no real tool/backend calls. No particular private helper or implementation path is required. This task does not test a real browser/DNS resolver, remote network reachability, all header-parser ambiguities, native recording, telemetry delivery or registry packaging.",
+      "grader_dependency_links": [
+        {
+          "source_path": "packages/screenpipe-mcp/node_modules",
+          "destination_path": "packages/screenpipe-mcp/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/mcp-browser-boundary.fixture.ts.txt",
+            "destination_path": "packages/screenpipe-mcp/src/eval-browser-boundary.test.ts"
+          }
+        ],
+        "command": "cd packages/screenpipe-mcp && SCREENPIPE_DISABLE_TELEMETRY=1 SCREENPIPE_MCP_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 SCREENPIPE_API_URL=http://127.0.0.1:1 node node_modules/vitest/vitest.mjs run src/eval-browser-boundary.test.ts"
+      }
+    },
+    {
+      "id": "app-shared-inventory-duplicate-devices",
+      "name": "Return a unique audio device inventory without losing cache behavior",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "c6c6382768caf87a83758f65b13e5f6bf53ffb5a"
+      },
+      "base_ref": "5ce7edfcda145fa1bb074574925b290a1356bf2c",
+      "oracle_ref": "c6c6382768caf87a83758f65b13e5f6bf53ffb5a",
+      "oracle_paths": [
+        "crates/screenpipe-audio/src/core/device.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-audio/src/core/device.rs"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "audio",
+        "device-inventory"
+      ],
+      "prompt": "The shared audio inventory can repeat the same device when platform enumeration returns duplicate entries. Make every fresh or cached inventory contain each exact device name and input/output direction once, preserving first-seen order. Same-named inputs and outputs remain distinct, as do names differing in case or whitespace. Empty and single-device inventories remain valid. Preserve the existing cache contract: unexpired same-generation reads reuse the inventory, concurrent readers share one enumeration, TTL expiry or a topology-generation change refreshes it, refresh replaces removed devices, enumeration errors propagate and remain retryable, and a topology change during enumeration forces another refresh on the next read. Preserve the existing AudioDevice and list_audio_devices_with_cache interfaces so synthetic enumeration can exercise the real cache function. No particular deduplication algorithm is required. Use synthetic devices only; do not access recording hardware, customer data or external services. This task does not require changing capture, pause, migration or HTTP behavior.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/audio-inventory.mjs",
+            "destination_path": ".eval-audio-inventory/audio-inventory.mjs"
+          },
+          {
+            "local_path": "graders/audio-inventory.fixture.rs",
+            "destination_path": ".eval-audio-inventory/audio-inventory.fixture.rs"
+          }
+        ],
+        "command": "node .eval-audio-inventory/audio-inventory.mjs && cargo test --locked -p screenpipe-audio --lib eval_audio_inventory -- --test-threads=1"
+      }
     }
   ]
 }

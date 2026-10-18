@@ -18,6 +18,7 @@
 
 mod columns;
 mod hybrid;
+mod release;
 mod tables;
 
 use std::collections::HashMap;
@@ -128,6 +129,8 @@ pub struct WorkerStatus {
 
 #[derive(Clone)]
 pub struct Worker {
+    release_db: Option<Arc<screenpipe_db::DatabaseManager>>,
+    release_scheduler: Arc<Mutex<release::ReleaseScheduler>>,
     frame_storage: Option<Arc<screenpipe_db::DatabaseManager>>,
     pool: SqlitePool,
     writer: SqliteWritePool,
@@ -152,6 +155,8 @@ impl Worker {
     ) -> Self {
         Self {
             frame_storage: None,
+            release_db: None,
+            release_scheduler: Arc::new(Mutex::new(Default::default())),
             pool,
             writer,
             redactor,
@@ -499,6 +504,18 @@ impl Worker {
     /// per-row path (issue #4115); everything else uses the generic
     /// single-column path.
     async fn process_one(&self, table: TargetTable, batch_size: u32) -> Result<u32, anyhow::Error> {
+        if let Some(db) = &self.release_db {
+            if db.release_policy().await?.text {
+                return if table == TargetTable::FullText {
+                    self.process_release_slice(batch_size)
+                        .await
+                        .map(|(attempted, _)| attempted)
+                } else {
+                    Ok(0)
+                };
+            }
+        }
+
         if self.frame_storage.is_some() {
             match table {
                 TargetTable::FullText => return self.process_hybrid_frames(batch_size).await,

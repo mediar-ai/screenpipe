@@ -49,6 +49,19 @@ existing successful-retrieval path, including cached searches. No new events are
 added for cache hits. Health/resource telemetry and local monitoring retain their
 existing cadence.
 
+Resource events additionally report `telemetry_window_samples`,
+`window_cpu_percent_mean`, `window_cpu_percent_max`, `window_memory_gb_mean`,
+`window_memory_gb_max`, and `window_phys_footprint_gb_max` across local samples
+since the previous reporting attempt. These supplement the existing point-in-time
+properties. Weight window means by their sample counts when aggregating them.
+Transport remains best effort; these summaries are not a durable sample archive.
+
+Cost reductions must preserve successful-retrieval counts and cohort-relative
+retention windows. A future reduction in diagnostic cadence needs a validated
+replacement for fault timelines, short-session coverage, and resource peaks,
+including shutdown and failed-delivery handling. This change does not reduce
+PostHog event volume or claim billing savings.
+
 Attribution adds fields to existing events and uses the existing analytics
 opt-out. It does not scan running apps or send prompts, search text, or raw
 client names. HTTP MCP now reports successful searches through the same

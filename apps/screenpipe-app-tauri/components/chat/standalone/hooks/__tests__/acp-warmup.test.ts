@@ -184,4 +184,62 @@ describe("ACP warmup fires exactly when it should", () => {
     await waitFor(() => expect(piStartInFlightRef.current).toBe(false));
     expect(setPiStarting).toHaveBeenLastCalledWith(false);
   });
+  it.each(["cancelled", "failed"])("does not reopen %s warmup on new chats or remounts", async (outcome) => {
+    warmupMocks.piStart.mockReset();
+    warmupMocks.piStart.mockResolvedValue(outcome === "cancelled"
+      ? { status: "ok", data: { running: false, startupError: "ACP authentication cancelled" } }
+      : { status: "error", error: "Authentication required" });
+    const piSessionIdRef = { current: "first-chat" };
+    const options = {
+      enabled: true,
+      activePreset: { id: `declined-${outcome}`, provider: "acp", acpAgent: { id: "claude-acp" } } as any,
+      piInfo: null,
+      piStartInFlightRef: { current: false },
+      piSessionIdRef,
+      piProjectDirForSession: vi.fn(async () => "/tmp/chat"),
+      buildProviderConfig: vi.fn(() => ({ provider: "acp" }) as any),
+      userToken: null,
+      setPiInfo: vi.fn(),
+      setPiStarting: vi.fn(),
+      setRunningConfigFromProviderConfig: vi.fn(),
+      syncThinkingLevelAfterStart: vi.fn(),
+    };
+    const first = renderHook(() => useAcpWarmup(options));
+    await waitFor(() => expect(warmupMocks.piStart).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(options.piStartInFlightRef.current).toBe(false));
+    piSessionIdRef.current = "second-chat";
+    first.rerender();
+    first.unmount();
+    const reopened = renderHook(() => useAcpWarmup(options));
+    await act(async () => {});
+    expect(warmupMocks.piStart).toHaveBeenCalledTimes(1);
+    reopened.unmount();
+  });
+
+  it("continues warming new conversations after a successful handshake", async () => {
+    warmupMocks.piStart.mockReset();
+    warmupMocks.piStart.mockResolvedValue({ status: "ok", data: { running: true } });
+    const piSessionIdRef = { current: "first-ready-chat" };
+    const options = {
+      enabled: true,
+      activePreset: { id: "ready-preset", provider: "acp", acpAgent: { id: "claude-acp" } } as any,
+      piInfo: null,
+      piStartInFlightRef: { current: false },
+      piSessionIdRef,
+      piProjectDirForSession: vi.fn(async () => "/tmp/chat"),
+      buildProviderConfig: vi.fn(() => ({ provider: "acp" }) as any),
+      userToken: null,
+      setPiInfo: vi.fn(),
+      setPiStarting: vi.fn(),
+      setRunningConfigFromProviderConfig: vi.fn(),
+      syncThinkingLevelAfterStart: vi.fn(),
+    };
+    const hook = renderHook(() => useAcpWarmup(options));
+    await waitFor(() => expect(options.setPiInfo).toHaveBeenCalledTimes(1));
+    piSessionIdRef.current = "second-ready-chat";
+    hook.rerender();
+    await waitFor(() => expect(warmupMocks.piStart).toHaveBeenCalledTimes(2));
+    hook.unmount();
+  });
+
 });

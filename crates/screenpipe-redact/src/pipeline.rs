@@ -405,8 +405,110 @@ impl Pipeline {
     }
 }
 
+struct RequiredPipeline<P> {
+    pipeline: P,
+    text: String,
+    key: [u8; 32],
+    current: Option<RedactionOutput>,
+    detector: Option<Box<dyn crate::RequiredRedaction>>,
+    attempt: Option<AiAttempt>,
+}
+
+impl<P: std::borrow::Borrow<Pipeline>> RequiredPipeline<P> {
+    fn new(pipeline: P, text: String) -> Self {
+        let p = pipeline.borrow();
+        let key = cache_key(
+            &text,
+            &format!("required:{}", p.policy_identity()),
+            p.version(),
+        );
+        Self {
+            pipeline,
+            text,
+            key,
+            current: None,
+            detector: None,
+            attempt: None,
+        }
+    }
+}
+
+#[async_trait]
+impl<P: std::borrow::Borrow<Pipeline> + Send> crate::RequiredRedaction for RequiredPipeline<P> {
+    async fn step(&mut self) -> Result<Option<RedactionOutput>, RedactError> {
+        let p = self.pipeline.borrow();
+        if self.detector.is_none() {
+            let ai =
+                p.ai.as_ref()
+                    .filter(|ai| ai.provides_model_detection())
+                    .ok_or_else(|| {
+                        RedactError::Unavailable("required PII model is unavailable".into())
+                    })?;
+            if let Some(hit) = p.cache.get(&self.key).await {
+                return Ok(Some((*hit).clone()));
+            }
+            let current = apply_policy(
+                regex_adapter::redact_one(&self.text),
+                &p.cfg.policy,
+                p.pseudonyms.as_deref(),
+            );
+            self.attempt = match &p.ai_failure_circuit {
+                Some(circuit) => Some(circuit.begin_attempt().await.ok_or_else(|| {
+                    RedactError::Unavailable("required PII model is backing off".into())
+                })?),
+                None => None,
+            };
+            self.detector = Some(ai.clone().required_session(current.redacted.clone()));
+            self.current = Some(current);
+        }
+        let result = self.detector.as_mut().unwrap().step().await;
+        if let (Some(circuit), Some(attempt)) = (&p.ai_failure_circuit, self.attempt) {
+            match &result {
+                Ok(Some(_)) => {
+                    circuit.record_success(attempt).await;
+                }
+                Err(_) => {
+                    circuit.record_failure(attempt).await;
+                }
+                Ok(None) => {}
+            }
+        }
+        let Some(detected) = result? else {
+            return Ok(None);
+        };
+        let mut current = self.current.take().unwrap();
+        current.redacted = if detected.spans.is_empty() {
+            detected.redacted
+        } else {
+            apply_policy(detected, &p.cfg.policy, p.pseudonyms.as_deref()).redacted
+        };
+        p.cache.insert(self.key, current.clone()).await;
+        Ok(Some(current))
+    }
+}
+
 #[async_trait]
 impl Redactor for Pipeline {
+    fn provides_model_detection(&self) -> bool {
+        self.ai
+            .as_ref()
+            .is_some_and(|ai| ai.provides_model_detection())
+    }
+
+    fn required_session(self: Arc<Self>, text: String) -> Box<dyn crate::RequiredRedaction> {
+        Box::new(RequiredPipeline::new(self, text))
+    }
+
+    async fn redact_required(&self, text: &str) -> Result<RedactionOutput, RedactError> {
+        let mut session = RequiredPipeline::new(self, text.to_owned());
+        loop {
+            if let Some(output) = crate::RequiredRedaction::step(&mut session).await? {
+                return Ok(output);
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+
     fn policy_identity(&self) -> String {
         format!(
             "{}:{}:{:?}:{}:{}:pseudonyms={}:ai={}",
