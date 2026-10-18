@@ -6739,6 +6739,45 @@
         ],
         "command": "cd packages/screenpipe-mcp && SCREENPIPE_DISABLE_TELEMETRY=1 SCREENPIPE_MCP_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 SCREENPIPE_API_URL=http://127.0.0.1:1 node node_modules/vitest/vitest.mjs run src/eval-browser-boundary.test.ts"
       }
+    },
+    {
+      "id": "app-shared-inventory-duplicate-devices",
+      "name": "Return a unique audio device inventory without losing cache behavior",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "c6c6382768caf87a83758f65b13e5f6bf53ffb5a"
+      },
+      "base_ref": "5ce7edfcda145fa1bb074574925b290a1356bf2c",
+      "oracle_ref": "c6c6382768caf87a83758f65b13e5f6bf53ffb5a",
+      "oracle_paths": [
+        "crates/screenpipe-audio/src/core/device.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-audio/src/core/device.rs"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "audio",
+        "device-inventory"
+      ],
+      "prompt": "The shared audio inventory can repeat the same device when platform enumeration returns duplicate entries. Make every fresh or cached inventory contain each exact device name and input/output direction once, preserving first-seen order. Same-named inputs and outputs remain distinct, as do names differing in case or whitespace. Empty and single-device inventories remain valid. Preserve the existing cache contract: unexpired same-generation reads reuse the inventory, concurrent readers share one enumeration, TTL expiry or a topology-generation change refreshes it, refresh replaces removed devices, enumeration errors propagate and remain retryable, and a topology change during enumeration forces another refresh on the next read. Preserve the existing AudioDevice and list_audio_devices_with_cache interfaces so synthetic enumeration can exercise the real cache function. No particular deduplication algorithm is required. Use synthetic devices only; do not access recording hardware, customer data or external services. This task does not require changing capture, pause, migration or HTTP behavior.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/audio-inventory.mjs",
+            "destination_path": ".eval-audio-inventory/audio-inventory.mjs"
+          },
+          {
+            "local_path": "graders/audio-inventory.fixture.rs",
+            "destination_path": ".eval-audio-inventory/audio-inventory.fixture.rs"
+          }
+        ],
+        "command": "node .eval-audio-inventory/audio-inventory.mjs && cargo test --locked -p screenpipe-audio --lib eval_audio_inventory -- --test-threads=1"
+      }
     }
   ]
 }
