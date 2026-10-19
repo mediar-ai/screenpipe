@@ -2,7 +2,6 @@
 // https://screenpipe.com
 "use client";
 
-import { MessageSquare, Workflow } from "lucide-react";
 import { useWorkflowsRolloutEnabled } from "@/lib/workflows/rollout";
 import { cn } from "@/lib/utils";
 import { useGT } from "gt-react";
@@ -21,25 +20,24 @@ export function ProductSwitcher({ mode, onChange, compact = false }: {
     <div
       role="group"
       aria-label={ui("Switch workspace")}
-      className={cn("flex rounded-md border border-border bg-muted/50 p-1", compact ? "w-fit" : "w-full")}
+      className={cn("flex gap-5 border-b border-[color-mix(in_srgb,currentColor_12%,transparent)] text-inherit", compact ? "w-fit" : "w-full")}
     >
       {([
-        ["screenpipe", MessageSquare, ui("Chat")],
-        ["workflows", Workflow, ui("Workflows")],
-      ] as const).map(([value, Icon, label]) => (
+        ["screenpipe", ui("Memory")],
+        ["workflows", ui("Workflows")],
+      ] as const).map(([value, label]) => (
         <button
           key={value}
           type="button"
           aria-pressed={mode === value}
           onClick={() => { if (mode !== value) onChange(value); }}
           className={cn(
-            "flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1",
+            "relative -mb-px min-w-0 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1.5 text-[13px] font-medium text-inherit transition-opacity focus-visible:rounded-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-current",
             mode === value
-              ? "bg-background text-foreground"
-              : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+              ? "border-current opacity-100"
+              : "border-transparent opacity-60 hover:opacity-100",
           )}
         >
-          <Icon size={15} className="shrink-0" aria-hidden="true" />
           <span>{label}</span>
         </button>
       ))}

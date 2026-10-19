@@ -71,14 +71,12 @@ fs.mkdirSync(out, { recursive: true });
       await page.getByRole('region',{name:'Video SOP',exact:true}).waitFor();
       await snap('recipe-video');
       await page.getByRole('button',{name:'Back to SOP',exact:true}).click();
-      await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-      await page.getByRole('menuitemradio',{name:/^Chat/}).click();
-      await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-      await page.getByRole('menuitemradio',{name:/^Workflows/}).click();
+      await page.getByRole('group',{name:'Switch workspace'}).getByRole('button',{name:'Memory',exact:true}).click();
+      await page.getByRole('group',{name:'Switch workspace'}).getByRole('button',{name:'Workflows',exact:true}).click();
       await page.getByRole('textbox',{name:'SOP title',exact:true}).waitFor();
     }
     assert.deepEqual(errors,[]);
-    console.log(baseline ? 'PASS: recreated baseline captured' : 'PASS: integrated skill/recipe editor, formatting persistence, download, explicit share review, video entry, compact layout, Chat/Workflows switching');
+    console.log(baseline ? 'PASS: recreated baseline captured' : 'PASS: integrated skill/recipe editor, formatting persistence, download, explicit share review, video entry, compact layout, Memory/Workflows switching');
   } catch (e) { console.error(e); console.error((await page.locator('body').innerText()).slice(-6000)); await snap('failure'); throw e; }
   finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exit(1)});
