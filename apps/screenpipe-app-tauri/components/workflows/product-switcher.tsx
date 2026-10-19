@@ -2,12 +2,10 @@
 // https://screenpipe.com
 "use client";
 
-import { Check, ChevronDown, MessageSquare, Workflow } from "lucide-react";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { MessageSquare, Workflow } from "lucide-react";
 import { useWorkflowsRolloutEnabled } from "@/lib/workflows/rollout";
 import { cn } from "@/lib/utils";
 import { useGT } from "gt-react";
-
 
 export type ProductMode = "screenpipe" | "workflows";
 export function ProductSwitcher({ mode, onChange, compact = false }: {
@@ -19,20 +17,32 @@ export function ProductSwitcher({ mode, onChange, compact = false }: {
   const ui = useGT();
   const enabled = useWorkflowsRolloutEnabled();
   if (!enabled) return null;
-  return <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      <button type="button" aria-label={ui("Switch workspace")} className={cn("flex items-center gap-2 rounded-md px-3 py-2 text-inherit hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring", compact ? "text-sm" : "w-full text-lg font-semibold")}>
-        {mode === "workflows" ? <Workflow size={18} /> : <MessageSquare size={18} />}
-        <span>{mode === "workflows" ? ui("Workflows") : ui("Chat")}</span><ChevronDown size={14} className="ml-auto text-muted-foreground" />
-      </button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" sideOffset={6} className="w-72 p-1.5" aria-label={ui("Workspaces")}>
+  return (
+    <div
+      role="group"
+      aria-label={ui("Switch workspace")}
+      className={cn("flex rounded-md border border-border bg-muted/50 p-1", compact ? "w-fit" : "w-full")}
+    >
       {([
-        ["screenpipe", MessageSquare, "Chat", "Find anything from your day"],
-        ["workflows", Workflow, "Workflows", "Understand how your work gets done"],
-      ] as const).map(([value, Icon, title, subtitle]) => <DropdownMenuItem key={value} onSelect={() => onChange(value)} className="gap-3 px-3 py-3 cursor-pointer" role="menuitemradio" aria-checked={mode === value}>
-        <Icon size={18} className="shrink-0" /><span className="flex-1"><span className="block text-sm font-medium">{title}</span><span className="block mt-1 text-xs text-muted-foreground">{subtitle}</span></span>{mode === value && <Check size={15} />}
-      </DropdownMenuItem>)}
-    </DropdownMenuContent>
-  </DropdownMenu>;
+        ["screenpipe", MessageSquare, ui("Chat")],
+        ["workflows", Workflow, ui("Workflows")],
+      ] as const).map(([value, Icon, label]) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={mode === value}
+          onClick={() => { if (mode !== value) onChange(value); }}
+          className={cn(
+            "flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1",
+            mode === value
+              ? "bg-background text-foreground"
+              : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+          )}
+        >
+          <Icon size={15} className="shrink-0" aria-hidden="true" />
+          <span>{label}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
