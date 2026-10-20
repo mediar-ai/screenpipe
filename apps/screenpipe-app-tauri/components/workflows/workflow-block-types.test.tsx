@@ -26,7 +26,8 @@ describe("direct workflow block type editing", () => {
     expect(save.mock.calls[0][0].stages[0].procedure[0]).toEqual({
       id: "block-0", sourceIndex: 0, kind: "decision", text: workflow.stages[0].procedure![0].text,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Undo last edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Undo last edit" }));
     expect(type()).toHaveValue(workflow.stages[0].procedure![0].kind);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 2000 });
   });

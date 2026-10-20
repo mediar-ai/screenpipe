@@ -61,14 +61,16 @@ it("keeps variable examples and execution fields in the portable skill context",
 it("creates a named reference through the real editor and can undo it", async () => {
   const save = vi.fn(async () => source());
   render(<WorkflowEditor workflow={source()} save={save} sessionRecovery={false} saveDisabled />);
-  fireEvent.click(screen.getByRole("button", { name: "Variables" }));
+  fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Variables" }));
   fireEvent.click(screen.getByRole("button", { name: "Add input" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Name", exact: true }), { target: { value: "Customer" } });
   fireEvent.change(screen.getByRole("textbox", { name: "Example value" }), { target: { value: "Acme" } });
   fireEvent.click(screen.getByRole("button", { name: "Use named reference" }));
   expect(screen.getByRole("link", { name: "Customer" })).toHaveAttribute("href", expect.stringContaining("#workflow-io-"));
   expect(screen.getByText("Acme", { selector: "blockquote" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Undo last edit" }));
+  fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Undo last edit" }));
   expect(screen.queryByRole("link", { name: "Customer" })).toBeNull();
   expect(screen.getByRole("textbox", { name: "Step 1 description" })).toHaveTextContent("Acme");
 });
@@ -108,7 +110,8 @@ it("restores through the revision-checked save path and retains typing made whil
   let resolve!: (workflow: typeof old) => void;
   const save = vi.fn((_draft: ReturnType<typeof workflowEdit>) => new Promise<typeof old>(done => { resolve = done; }));
   render(<WorkflowEditor workflow={workflow} save={save} sessionRecovery={false} />);
-  fireEvent.click(screen.getByRole("button", { name: "History" }));
+  fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "History" }));
   fireEvent.click(screen.getByRole("button", { name: "Restore revision 2" }));
   expect(save.mock.calls[0][0]).toMatchObject({ expected_revision: 3, restoreRevision: 2 });
   fireEvent.change(screen.getByRole("textbox", { name: "Workflow title" }), { target: { value: "My typing" } });
@@ -147,4 +150,25 @@ it("filters local archive and review state without losing the underlying workflo
   fireEvent.change(screen.getByRole("combobox",{name:"Workflow status"}),{target:{value:"reviewed"}});
   fireEvent.click(screen.getByRole("button",{name:"Clear filters"}));
   expect(screen.getByRole("heading",{name:"Active research"})).toBeVisible();
+});
+
+it("opens secondary tools by keyboard and restores focus without changing the draft", () => {
+  render(<WorkflowEditor workflow={source()} save={vi.fn()} sessionRecovery={false} />);
+  const trigger = screen.getByRole("button", { name: "More workflow actions" });
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  expect(screen.getByRole("menuitem", { name: "Variables" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "End" });
+  // Disabled Undo is skipped until there is an edit to undo.
+  expect(screen.getByRole("menuitem", { name: "Workflow details" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(trigger).toHaveFocus();
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.change(screen.getByRole("textbox", { name: "Workflow title" }), { target: { value: "My unfinished edit" } });
+  fireEvent.click(trigger);
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "h" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Workflow title" })).toHaveValue("My unfinished edit");
+  fireEvent.click(trigger);
+  fireEvent.pointerDown(document.body);
+  expect(screen.queryByRole("menu")).toBeNull();
 });
