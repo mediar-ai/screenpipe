@@ -2045,3 +2045,15 @@ the historical reference and current source pass all twelve. Run
 correct, broken, equivalent, bypass, preserved-behavior and infrastructure controls.
 Fixtures appear only at grading. This does not establish streaming, cache accounting,
 monetary settlement, live provider behavior, enforced host isolation or model performance.
+
+### OpenRouter streaming response fields
+
+`ai-gateway-openrouter-stream-envelope` exercises the actual streaming provider
+with a synthetic SDK iterator. Seven outcomes cover response identity, roles,
+tools, finish reasons, usage, empty text and multiple choices; five preserve
+text, termination, request inputs and errors. Run
+`bun test evals/coding-agent/calibrate-openrouter-stream.test.js` for ten controls,
+including equivalent serialization, unused correct code, lost fields, lost text
+and missing-source classification. The hidden fixture needs no dependency links.
+This does not execute live SDK transport, Pi, billing or model trials, and does
+not establish enforced host isolation.
