@@ -131,17 +131,17 @@ it("hands off workflow identity without embedding captured content", async () =>
 });
 
 
-it("keeps catalog search and refresh without the advanced filter controls", async () => {
+it("keeps catalog search and refresh alongside local document filters", async () => {
   window.history.replaceState(null, "", "/home?mode=workflows");
   render(<IntegratedWorkflows active onModeChange={vi.fn()} recordingStatus={null} />);
   await screen.findByRole("heading", { name: "Research synthesis" });
-  expect(screen.queryByRole("button", { name: /^Filters/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole("region", { name: "Workflow filters" })).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Workflow status" })).toBeVisible();
+  expect(screen.getByRole("combobox", { name: "Workflow app" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Update now" })).toHaveAttribute("title", "Update now");
   const search = screen.getByPlaceholderText("Search workflows");
   fireEvent.change(search, { target: { value: "no-such-workflow-xyz" } });
-  expect(screen.getByText("No workflows match your search")).toBeVisible();
-  fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
+  expect(screen.getByText("No workflows match these filters")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(screen.getByRole("heading", { name: "Research synthesis" })).toBeVisible();
   expect(search).toHaveValue("");
 });
