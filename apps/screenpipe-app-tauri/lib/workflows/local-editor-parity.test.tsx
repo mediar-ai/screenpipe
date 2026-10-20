@@ -159,7 +159,7 @@ it("opens secondary tools by keyboard and restores focus without changing the dr
   expect(screen.getByRole("menuitem", { name: "Variables" })).toHaveFocus();
   fireEvent.keyDown(document.activeElement!, { key: "End" });
   // Disabled Undo is skipped until there is an edit to undo.
-  expect(screen.getByRole("menuitem", { name: "Workflow details" })).toHaveFocus();
+  expect(screen.getByRole("menuitem", { name: "Archive workflow" })).toHaveFocus();
   fireEvent.keyDown(document.activeElement!, { key: "Escape" });
   expect(trigger).toHaveFocus();
   expect(screen.queryByRole("menu")).toBeNull();

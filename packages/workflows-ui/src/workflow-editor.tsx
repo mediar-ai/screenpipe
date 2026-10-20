@@ -3,6 +3,8 @@
 "use client";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDown,
   ArrowUp,
   GripVertical,
@@ -31,6 +33,8 @@ import { WorkflowVersionPanel } from "./workflow-version-panel";
 import { executionFields, variableId } from "./workflow-variables";
 import styles from "./workflow-editor.module.css";
 import { WorkflowMoreActions, type WorkflowSecondaryAction } from "./workflow-more-actions";
+import { useWorkflowDocumentExports } from "./workflow-document-exports";
+import type { DownloadDocument } from "./document-export";
 
 function Text(props: Parameters<typeof InlineText>[0] & { title?: boolean }) {
   return <InlineText {...props} className={props.title ? styles.title : undefined} />;
@@ -66,11 +70,12 @@ export type WorkflowEditorOptions = {
   sessionRecovery?: boolean;
   saveDisabled?: boolean;
 };
-export function WorkflowEditor({ workflow, save, actions, secondaryActions = [], renderSource, relatedWorkflows = [], openRelated, stepsOnly = false, singleCheck = false, initialDraft, onDraftChange, sessionRecovery = true, saveDisabled = false }: WorkflowEditorOptions & {
+export function WorkflowEditor({ workflow, save, actions, secondaryActions = [], downloadDocument, renderSource, relatedWorkflows = [], openRelated, stepsOnly = false, singleCheck = false, initialDraft, onDraftChange, sessionRecovery = true, saveDisabled = false }: WorkflowEditorOptions & {
   workflow: WorkflowMap;
   save: (draft: WorkflowEdit) => Promise<WorkflowMap>;
   actions?: ReactNode;
   secondaryActions?: WorkflowSecondaryAction[];
+  downloadDocument?: DownloadDocument;
   renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
   const key = `screenpipe:workflow-edit:${workflow.id ?? workflow.title}`;
@@ -83,6 +88,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
     } catch { /* Optional tab-local recovery. */ }
     return initial;
   });
+  const exports = useWorkflowDocumentExports(draft, downloadDocument);
   const unchangedStages = draft.stages.length === workflow.stages.length && draft.stages.every((stage, index) => stage.sourceIndex === index && isUnchangedStage(stage, workflow.stages[index]));
   const [panel, setPanel] = useState<"variables" | "history" | "details" | null>(null);
   useEffect(()=>{
@@ -320,6 +326,8 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
               { label: "History", icon: History, shortcut: "H", expanded: panel === "history", onSelect: () => setPanel(panel === "history" ? null : "history") },
               { label: "Workflow details", icon: Info, shortcut: "D", expanded: panel === "details", onSelect: () => setPanel(panel === "details" ? null : "details") },
             ] : []),
+            ...exports.actions,
+            ...(!stepsOnly ? [{ label: draft.archived ? "Unarchive workflow" : "Archive workflow", icon: draft.archived ? ArchiveRestore : Archive, separatorBefore: true, disabled: !valid || dirty || saving || saveDisabled || !!error || draft.expected_revision !== (workflow.revision ?? 0), onSelect: () => change({ ...current.current, archived: !current.current.archived }) }] : []),
             { label: "Undo last edit", icon: Undo2, separatorBefore: true, disabled: !history.length, onSelect: () => {
               update(history[history.length - 1]);
               setHistory(h => h.slice(0, -1));
@@ -328,6 +336,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
           ]} />
         </div>
       </header>
+      {exports.feedback}
       {error && (
         <p role="alert" className={styles.error}>
           {error} <button type="button" onClick={() => void submit()} disabled={saving}>Retry save</button>
@@ -648,7 +657,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
       {panel === "details" && <aside className={styles.panel} aria-label="Workflow details"><h2>Workflow details</h2><p>{workflow.apps.join(" · ")}</p><p>{workflow.people?.join(" · ")}</p><p>{workflow.quality.reasons.join(" · ")}</p>
         <label>Review status<select value={draft.reviewStatus ?? "needs-review"} onChange={e=>change({...draft,reviewStatus:e.target.value as WorkflowMap["reviewStatus"]})}><option value="needs-review">Needs review</option><option value="needs-edits">Needs edits</option><option value="reviewed">Reviewed</option></select></label>
         <label>Review note<textarea maxLength={8000} value={draft.reviewNote ?? ""} onChange={e=>change({...draft,reviewNote:e.target.value})}/></label><small>Reviewing the instructions does not verify execution or time savings.</small>
-        <button type="button" onClick={()=>change({...draft,archived:!draft.archived})}>{draft.archived ? "Unarchive workflow" : "Archive workflow"}</button><p>{draft.archived ? "Archived. Still available in the Archived filter." : "Archiving keeps this workflow and its sources."}</p>
+        <p>{draft.archived ? "Archived. Still available in the Archived filter." : "Archiving keeps this workflow and its sources."}</p>
       </aside>}
       </div>
       {renderSource && <p className={styles.note}>
@@ -665,22 +674,25 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
 /** Read-only workflows share the editor's document layout without mounting draft
  * recovery, autosave, or editable controls. Permission changes do not change the
  * reading experience. */
-export function WorkflowDocument({ workflow, actions, secondaryActions = [], sourceLabel, renderSource }: {
+export function WorkflowDocument({ workflow, actions, secondaryActions = [], downloadDocument, sourceLabel, renderSource }: {
   workflow: WorkflowMap;
   actions?: ReactNode;
   secondaryActions?: WorkflowSecondaryAction[];
+  downloadDocument?: DownloadDocument;
   sourceLabel?: string;
   renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
   const [selected, select] = useState("");
+  const exports = useWorkflowDocumentExports(workflowEdit(workflow), downloadDocument);
   return <section className={styles.editor} aria-label="Workflow document" onClickCapture={event=>{
     const link=(event.target as Element).closest("a"); const id=variableId(link?.getAttribute("href") ?? "");
     if(id) {event.preventDefault();select(id);}
   }}>
     <header className={styles.toolbar}>
       <div><span>{sourceLabel}</span></div>
-      <div>{actions}<WorkflowMoreActions actions={secondaryActions} /></div>
+      <div>{actions}<WorkflowMoreActions actions={[...secondaryActions, ...exports.actions.map((action, i) => i === 0 ? { ...action, separatorBefore: secondaryActions.length > 0 } : action)]} /></div>
     </header>
+    {exports.feedback}
     <div className={styles.intro}>
       <div className={styles.titleRow}>
         <h1 className={styles.title}>{workflow.title}</h1>
