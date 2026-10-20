@@ -761,6 +761,20 @@ pub fn split_jsonl_requests(body: Vec<u8>, target_bytes: usize) -> Vec<Vec<u8>> 
 
 // ─── Ingest HTTP ────────────────────────────────────────────────────────────
 
+/// Preserve transport/decode causes before crossing the string error boundary.
+/// Reqwest's Display omits its source chain; request URLs can contain secrets.
+fn http_error_detail(operation: &str, error: reqwest::Error) -> String {
+    let error = error.without_url();
+    let mut detail = format!("{operation}: {error}");
+    let mut source = std::error::Error::source(&error);
+    while let Some(cause) = source {
+        detail.push_str(": ");
+        detail.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    detail
+}
+
 /// POST a JSONL body to the ingest endpoint. Returns `Ok(())` on 2xx.
 /// Distinguishes auth (401/403) from transient (5xx) so the caller can apply
 /// the appropriate retry handling.
@@ -856,7 +870,7 @@ async fn post_jsonl_with_identity(
         .body(body)
         .send()
         .await
-        .map_err(|e| EnterpriseSyncError::Ingest(e.to_string()))?;
+        .map_err(|e| EnterpriseSyncError::Ingest(http_error_detail("upload telemetry", e)))?;
 
     let status = resp.status();
     if status.is_success() {
@@ -910,7 +924,7 @@ async fn migrate_device_identity(
     let response = http.post(format!("{base}/api/enterprise/device-identity-migration"))
         .header("X-License-Key", &cfg.license_key)
         .json(&serde_json::json!({"source_id": source_id, "device_id": stable_id, "migrate_from": cfg.device_id}))
-        .send().await.map_err(|e| EnterpriseSyncError::Ingest(e.to_string()))?;
+        .send().await.map_err(|e| EnterpriseSyncError::Ingest(http_error_detail("migrate device identity", e)))?;
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         return Err(EnterpriseSyncError::IngestAuthRejected);
     }
@@ -919,10 +933,9 @@ async fn migrate_device_identity(
             "device identity migration pending; recordings remain local".into(),
         ));
     }
-    let confirmed: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| EnterpriseSyncError::Ingest(e.to_string()))?;
+    let confirmed: serde_json::Value = response.json().await.map_err(|e| {
+        EnterpriseSyncError::Ingest(http_error_detail("decode device identity migration", e))
+    })?;
     // Version 1 servers ignore unknown fields. Never treat that as a migration.
     if confirmed["version"] != 2
         || confirmed["migrate_from"] != cfg.device_id
@@ -1003,7 +1016,7 @@ async fn prepare_upload_identity(
         .json(&serde_json::json!({"source_id": source_id, "device_id": cfg.device_id}))
         .send()
         .await
-        .map_err(|e| EnterpriseSyncError::Ingest(e.to_string()))?;
+        .map_err(|e| EnterpriseSyncError::Ingest(http_error_detail("register device source", e)))?;
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         return Err(EnterpriseSyncError::IngestAuthRejected);
     }
@@ -1012,10 +1025,9 @@ async fn prepare_upload_identity(
             "device source registration unavailable; recordings remain local".into(),
         ));
     }
-    let registered: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| EnterpriseSyncError::Ingest(e.to_string()))?;
+    let registered: serde_json::Value = response.json().await.map_err(|e| {
+        EnterpriseSyncError::Ingest(http_error_detail("decode device source registration", e))
+    })?;
     if registered["version"] != 1
         || registered["source_id"] != source_id
         || registered["device_id"] != cfg.device_id
@@ -5530,6 +5542,48 @@ pub(crate) mod tests {
             .cursor_path
             .with_file_name(diagnostics::LOG_NAME)
             .exists());
+    }
+
+    #[tokio::test]
+    async fn ingest_transport_error_retains_originating_cause_without_request_secrets() {
+        let dir = TempDir::new().unwrap();
+        check_retained_ingest_transport_error(dir.path()).await;
+    }
+
+    // Also exercised by the real support collector in diagnostic_logs' tests.
+    pub(crate) async fn check_retained_ingest_transport_error(log_dir: &std::path::Path) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let url = format!("http://{address}/api/enterprise/ingest?signature=private-signature");
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let error = post_jsonl(&http, &url, "private-license", b"{}\n".to_vec())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, EnterpriseSyncError::Ingest(_)));
+        let detail = error.to_string();
+        assert!(detail.contains("upload telemetry"));
+        assert!(detail.to_lowercase().contains("refused"), "{detail}");
+        assert!(detail.contains("os error"), "{detail}");
+        assert!(!detail.contains("private-signature"));
+        assert!(!detail.contains("private-license"));
+        assert!(!detail.contains("http://"));
+
+        let dir = TempDir::new().unwrap();
+        let mut cfg = test_cfg(&dir, url);
+        cfg.cursor_path = log_dir.join("cursor.json");
+        diagnostics::retain(&cfg, &format!("{detail}; upload did not complete, pending data retained; retry in 300 seconds; user=private-person@example.com https://bucket.example/object?signature=private-signature"))
+            .await
+            .unwrap();
+        // Re-read the persisted diagnostic, as a reporter after restart would.
+        let retained = std::fs::read_to_string(log_dir.join(diagnostics::LOG_NAME)).unwrap();
+        assert!(retained.contains("upload telemetry"));
+        assert!(retained.to_lowercase().contains("refused"));
+        assert!(retained.contains("os error"));
+        assert!(retained.contains("pending data retained"));
+        assert!(!retained.contains("private-person@example.com"));
+        assert!(!retained.contains("private-signature"));
+        assert!(!retained.contains("private-license"));
     }
 
     pub(crate) async fn check_retained_diagnostic(log_dir: &std::path::Path) {

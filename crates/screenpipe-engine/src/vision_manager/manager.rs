@@ -118,12 +118,10 @@ pub struct VisionManager {
     status: Arc<RwLock<VisionManagerStatus>>,
     /// Map of monitor_id -> JoinHandle
     recording_tasks: Arc<DashMap<u32, JoinHandle<()>>>,
-    /// macOS capture backend used by each active monitor task. A fallback
-    /// CoreGraphics handle and a recovered ScreenCaptureKit handle share the
-    /// same display ID, so the watcher needs this separate generation signal
-    /// to upgrade the running task after SCK recovers.
+    /// Configuration held by each macOS task. Same-ID scale/layout changes and
+    /// recovery from fallback both require replacing that immutable handle.
     #[cfg(target_os = "macos")]
-    monitor_sck_backends: Arc<DashMap<u32, bool>>,
+    monitor_configurations: Arc<DashMap<u32, screenpipe_screen::monitor::CaptureConfiguration>>,
     /// Per-monitor pipeline heartbeat. Aggregate metrics remain in `config` for
     /// `/health`; these independent clocks are exclusively the recovery source
     /// so partial multi-display stalls are observable.
@@ -183,6 +181,11 @@ pub struct VisionManager {
 }
 
 impl VisionManager {
+    /// Report unresolved attribution separately from capture-loop liveness.
+    pub fn focus_resolution_degraded(&self) -> bool {
+        self.focus_controller.resolution_degraded()
+    }
+
     /// Create a new VisionManager
     pub fn new(
         config: VisionManagerConfig,
@@ -233,7 +236,7 @@ impl VisionManager {
             status: Arc::new(RwLock::new(VisionManagerStatus::Stopped)),
             recording_tasks: Arc::new(DashMap::new()),
             #[cfg(target_os = "macos")]
-            monitor_sck_backends: Arc::new(DashMap::new()),
+            monitor_configurations: Arc::new(DashMap::new()),
             monitor_liveness: Arc::new(DashMap::new()),
             hd_recording_tasks: Arc::new(DashMap::new()),
             trigger_tx,
@@ -577,7 +580,7 @@ impl VisionManager {
         );
 
         #[cfg(target_os = "macos")]
-        let uses_sck_backend = monitor.uses_sck_backend();
+        let configuration = monitor.capture_configuration();
         let liveness = Arc::new(PipelineMetrics::new());
         let handle = self
             .start_event_driven_monitor(monitor_id, monitor, liveness.clone())
@@ -585,8 +588,8 @@ impl VisionManager {
 
         self.monitor_liveness.insert(monitor_id, liveness);
         #[cfg(target_os = "macos")]
-        self.monitor_sck_backends
-            .insert(monitor_id, uses_sck_backend);
+        self.monitor_configurations
+            .insert(monitor_id, configuration);
         self.recording_tasks.insert(monitor_id, handle);
 
         Ok(())
@@ -795,7 +798,7 @@ impl VisionManager {
     pub async fn stop_monitor(&self, monitor_id: u32) -> Result<()> {
         self.monitor_liveness.remove(&monitor_id);
         #[cfg(target_os = "macos")]
-        self.monitor_sck_backends.remove(&monitor_id);
+        self.monitor_configurations.remove(&monitor_id);
         // Stop the HD recorder first. Aborting drops its ffmpeg stdin, which
         // sends EOF so ffmpeg finalizes the .mp4 (moov atom) on its own.
         if let Some((_, hd_handle)) = self.hd_recording_tasks.remove(&monitor_id) {
@@ -846,7 +849,7 @@ impl VisionManager {
         for id in &dead {
             self.monitor_liveness.remove(id);
             #[cfg(target_os = "macos")]
-            self.monitor_sck_backends.remove(id);
+            self.monitor_configurations.remove(id);
             if let Some((_, handle)) = self.recording_tasks.remove(id) {
                 // Await to clean up the JoinHandle and capture exit reason
                 match handle.await {
@@ -875,12 +878,20 @@ impl VisionManager {
             .collect()
     }
 
-    /// Return the capture backend generation held by an active macOS monitor.
+    /// Compare fresh topology with the immutable handle held by the task.
     #[cfg(target_os = "macos")]
-    pub(crate) fn active_monitor_uses_sck(&self, monitor_id: u32) -> Option<bool> {
-        self.monitor_sck_backends
-            .get(&monitor_id)
-            .map(|entry| *entry.value())
+    pub(crate) fn active_monitor_needs_refresh(
+        &self,
+        monitor: &screenpipe_screen::monitor::SafeMonitor,
+    ) -> bool {
+        self.monitor_configurations
+            .get(&monitor.id())
+            .map(|active| {
+                monitor
+                    .capture_configuration()
+                    .should_replace(*active.value())
+            })
+            .unwrap_or(false)
     }
 
     /// Independent liveness for each active capture loop. Never derive this

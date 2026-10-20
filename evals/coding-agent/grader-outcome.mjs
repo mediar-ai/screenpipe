@@ -29,6 +29,16 @@ export function classifyGraderError(grader) {
     return "playwright_ct_build_error";
   }
   const summary = [...stdout.matchAll(/^\s*Tests\s+(.+)$/gm)].at(-1)?.[1]?.trim();
+  // A missing Vitest environment can abort before any suite or test runs.
+  // Match the dependency in both diagnostics and require the final empty
+  // summaries; executed outcomes and quoted assertions remain behavior results.
+  const fileSummary = [...stdout.matchAll(/^\s*Test Files\s+(.+)$/gm)].at(-1)?.[1]?.trim();
+  const missingEnvironment = stderr.match(/^\s*MISSING DEPENDENCY\s+Cannot find dependency ['"]([^'"\r\n]+)['"]\s*$/m)?.[1];
+  const missingPackage = stderr.match(/^Error: Cannot find package ['"]([^'"\r\n]+)['"] imported from [^\r\n]*[/\\]vitest[/\\]dist[/\\][^\r\n]+$/m)?.[1];
+  if (summary === "no tests" && fileSummary === "no tests" && noAssertion &&
+      /^\s*RUN\s+v\d+\./m.test(stdout) && /^\s*Errors\s+[1-9]\d* errors?\s*$/m.test(stdout) &&
+      missingEnvironment && missingEnvironment === missingPackage &&
+      /^Serialized Error: \{ code: ['"]ERR_MODULE_NOT_FOUND['"] \}\s*$/m.test(stderr)) return "vitest_environment_error";
   // A failed suite can collect zero tests while neighboring suites pass or skip.
   // Only summaries without executed failures qualify; diagnostic and assertion
   // guards still apply to both streams, including quoted setup errors.

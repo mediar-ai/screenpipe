@@ -15,7 +15,7 @@ usage documentation is available at [docs.screenpi.pe](https://docs.screenpi.pe/
 
 ## Workflows integration preview
 
-The workspace menu in `/home` switches between Chat and Workflows. In the
+The workspace menu in `/home` switches between Memory and Workflows. In the
 browser-mock build (`bun run dev:web`), Workflows uses synthetic data and its
 build-catalog action does not call the engine or an AI provider. Packaged builds
 use the main app's recorder, account, and app-local workflow storage.
@@ -108,7 +108,7 @@ run this from the repository root:
 WORKFLOW_SCHEDULE_URL=http://127.0.0.1:1420 bun apps/screenpipe-workflows-web/scripts/eval-schedule-toggle.mjs
 ```
 
- The check exercises the real Chat/Workflows switcher, consent, persistence,
+ The check exercises the real Memory/Workflows switcher, consent, persistence,
 keyboard control, partial-save recovery and narrow layouts with fictional data.
 
 The default `ready` state also seeds a stateful Live View and canvas document.

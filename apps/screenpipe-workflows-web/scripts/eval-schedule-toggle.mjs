@@ -35,7 +35,7 @@ await page.getByRole('dialog',{name:'Keep your workflows up to date?'}).waitFor(
 const sharing=page.getByRole('dialog',{name:'Help improve Screenpipe'}); if(await sharing.isVisible()) await sharing.getByRole('button',{name:'Not now',exact:true}).click();
 assert.deepEqual(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)),key),[true,true,true,true]);
 await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-await page.getByRole('menuitemradio',{name:'Chat',exact:false}).click();
+await page.getByRole('menuitemradio',{name:'Memory',exact:false}).click();
 assert.equal(await toggle().count(),0);
 await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
 await page.getByRole('menuitemradio',{name:'Workflows',exact:false}).click(); await saved(true);

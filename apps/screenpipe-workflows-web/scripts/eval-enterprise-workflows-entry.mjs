@@ -46,14 +46,14 @@ try {
   await page.locator('article').filter({ has: page.getByRole('heading', { name: 'Research synthesis', exact: true }) }).getByRole('button', { name: 'Open map' }).click();
   await page.getByRole('heading', { name: 'Collect sources', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Switch workspace', exact: true }).click();
-  await page.getByRole('menuitemradio', { name: /^Chat/ }).click();
+  await page.getByRole('menuitemradio', { name: /^Memory/ }).click();
   await page.getByRole('button', { name: 'Switch workspace', exact: true }).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Collect sources', exact: true }).isVisible(), false);
   await authenticate('/home?mode=workflows&cloudWorkflowState=error');
   await page.getByRole('button', { name: 'Keep local processing', exact: true }).click();
   await page.getByRole('heading', { name: 'Cloud workflows unavailable', exact: true }).waitFor();
   assert.equal(await page.locator('article').count(), 0, 'Cloud denial must not expose cached workflows');
-  console.log('PASS: enterprise authentication gate, Home switcher, default cloud source, workflow steps, return to Chat, and denied cloud deep link');
+  console.log('PASS: enterprise authentication gate, Home switcher, default cloud source, workflow steps, return to Memory, and denied cloud deep link');
 } catch (error) {
   if (page) {
     console.error(await page.locator('body').innerText());

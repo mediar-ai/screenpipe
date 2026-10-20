@@ -503,7 +503,7 @@ export function WorkflowsView({ documentFilters = false, refreshControl, emptySt
               </div>
             </article>
           );
-        })}</div> : <section className={styles.emptyState}><Search size={23} /><h2>No workflows match these filters</h2><p>Try another search or clear the filters to see active workflows.</p><button className={styles.primaryButton} onClick={() => {setQuery("");setStatus("active");setApp("all");setPerson("all");}}>Clear filters</button></section>}
+        })}</div> : <section className={styles.emptyState}><Search size={23} /><h2>{documentFilters ? "No workflows match these filters" : "No workflows match your search"}</h2><p>{documentFilters ? "Try another search or clear the filters to see active workflows." : "Try another search or clear it to see all your workflows."}</p><button className={styles.primaryButton} onClick={() => {setQuery("");setStatus("active");setApp("all");setPerson("all");}}>{documentFilters ? "Clear filters" : "Clear search"}</button></section>}
       </>}
     </>
   );

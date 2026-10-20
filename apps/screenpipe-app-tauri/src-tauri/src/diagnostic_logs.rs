@@ -324,6 +324,32 @@ mod tests {
 
     #[cfg(feature = "enterprise-build")]
     #[tokio::test]
+    async fn ingest_transport_cause_survives_rotation_and_support_redaction() {
+        let dir = tempfile::tempdir().unwrap();
+        crate::enterprise::sync::tests::check_retained_ingest_transport_error(dir.path()).await;
+        for index in 0..7 {
+            tokio::fs::write(
+                dir.path()
+                    .join(format!("screenpipe-app.2026-10-19.{index}.log")),
+                "INFO recorder restarted\n",
+            )
+            .await
+            .unwrap();
+        }
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("upload telemetry"));
+        assert!(report.to_lowercase().contains("refused"));
+        assert!(report.contains("os error"));
+        assert!(report.contains("pending data retained"));
+        assert!(!report.contains("private-person@example.com"));
+        assert!(!report.contains("private-signature"));
+        assert!(!report.contains("private-license"));
+    }
+
+    #[cfg(feature = "enterprise-build")]
+    #[tokio::test]
     async fn retained_sync_diagnostic_survives_rotation_and_support_redaction() {
         let dir = tempfile::tempdir().unwrap();
         crate::enterprise::sync::tests::check_retained_diagnostic(dir.path()).await;

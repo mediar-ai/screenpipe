@@ -1,6 +1,6 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
-import { validVariables } from "./workflow-variables";
+import { validVariables } from "./workflow-variable-model";
 import type { WorkflowAnalysis, WorkflowMap, WorkflowStage, WorkflowVariable } from "./model";
 
 export type ProcedureEdit = {
