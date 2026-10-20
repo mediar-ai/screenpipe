@@ -27,10 +27,11 @@ it.skipIf(!catalogPath)("opens every workflow in a saved catalog", async () => {
     render(<WorkflowsApp platform={platform} embedded />);
     const card = (await screen.findByRole("heading", { name: workflow.title })).closest("article")!;
     fireEvent.click(within(card).getByRole("button", { name: "Open map" }));
-    expect(await screen.findByRole("button", { name: "Create SOP" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "More workflow actions" })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Workflow title" })).toHaveValue(workflow.title);
     if (guide) {
-      fireEvent.click(screen.getByRole("button", { name: "Create SOP" }));
+      fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+      fireEvent.click(await screen.findByRole("menuitem", { name: /^(Create|Open) SOP$/ }));
       expect(await screen.findByLabelText("Saved on this device")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Back to workflow" })).toBeVisible();
       openedGuides++;

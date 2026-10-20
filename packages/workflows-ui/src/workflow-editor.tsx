@@ -30,6 +30,7 @@ import { WorkflowVariablePanel, type VariableQuote } from "./workflow-variable-p
 import { WorkflowVersionPanel } from "./workflow-version-panel";
 import { executionFields, variableId } from "./workflow-variables";
 import styles from "./workflow-editor.module.css";
+import { WorkflowMoreActions, type WorkflowSecondaryAction } from "./workflow-more-actions";
 
 function Text(props: Parameters<typeof InlineText>[0] & { title?: boolean }) {
   return <InlineText {...props} className={props.title ? styles.title : undefined} />;
@@ -65,10 +66,11 @@ export type WorkflowEditorOptions = {
   sessionRecovery?: boolean;
   saveDisabled?: boolean;
 };
-export function WorkflowEditor({ workflow, save, actions, renderSource, relatedWorkflows = [], openRelated, stepsOnly = false, singleCheck = false, initialDraft, onDraftChange, sessionRecovery = true, saveDisabled = false }: WorkflowEditorOptions & {
+export function WorkflowEditor({ workflow, save, actions, secondaryActions = [], renderSource, relatedWorkflows = [], openRelated, stepsOnly = false, singleCheck = false, initialDraft, onDraftChange, sessionRecovery = true, saveDisabled = false }: WorkflowEditorOptions & {
   workflow: WorkflowMap;
   save: (draft: WorkflowEdit) => Promise<WorkflowMap>;
   actions?: ReactNode;
+  secondaryActions?: WorkflowSecondaryAction[];
   renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
   const key = `screenpipe:workflow-edit:${workflow.id ?? workflow.title}`;
@@ -311,14 +313,19 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, relatedW
         <div><span role="status" aria-label="Save status">{error ? "Not saved" : saving ? "Saving…" : dirty ? valid ? "Saving…" : "Finish the empty block to save" : savedOnce ? "Saved" : ""}</span></div>
         <div>
           {actions}
-          {!stepsOnly && <><button type="button" aria-expanded={panel === "variables"} title="Variables (V)" onClick={()=>setPanel(panel === "variables" ? null : "variables")}><Braces size={16}/>Variables</button>
-          <button type="button" aria-expanded={panel === "history"} title="History (H)" onClick={()=>setPanel(panel === "history" ? null : "history")}><History size={16}/>History</button>
-          <button type="button" aria-expanded={panel === "details"} onClick={()=>setPanel(panel === "details" ? null : "details")}><Info size={16}/>Details</button></>}
-          <button type="button" title="Undo last edit" aria-label="Undo last edit" disabled={!history.length} onClick={() => {
-            update(history[history.length - 1]);
-            setHistory(h => h.slice(0, -1));
-            setError("");
-          }}><Undo2 size={17} /></button>
+          <WorkflowMoreActions actions={[
+            ...secondaryActions,
+            ...(!stepsOnly ? [
+              { label: "Variables", icon: Braces, shortcut: "V", separatorBefore: secondaryActions.length > 0, expanded: panel === "variables", onSelect: () => setPanel(panel === "variables" ? null : "variables") },
+              { label: "History", icon: History, shortcut: "H", expanded: panel === "history", onSelect: () => setPanel(panel === "history" ? null : "history") },
+              { label: "Workflow details", icon: Info, shortcut: "D", expanded: panel === "details", onSelect: () => setPanel(panel === "details" ? null : "details") },
+            ] : []),
+            { label: "Undo last edit", icon: Undo2, separatorBefore: true, disabled: !history.length, onSelect: () => {
+              update(history[history.length - 1]);
+              setHistory(h => h.slice(0, -1));
+              setError("");
+            } },
+          ]} />
         </div>
       </header>
       {error && (
@@ -658,9 +665,10 @@ export function WorkflowEditor({ workflow, save, actions, renderSource, relatedW
 /** Read-only workflows share the editor's document layout without mounting draft
  * recovery, autosave, or editable controls. Permission changes do not change the
  * reading experience. */
-export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource }: {
+export function WorkflowDocument({ workflow, actions, secondaryActions = [], sourceLabel, renderSource }: {
   workflow: WorkflowMap;
   actions?: ReactNode;
+  secondaryActions?: WorkflowSecondaryAction[];
   sourceLabel?: string;
   renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
@@ -671,7 +679,7 @@ export function WorkflowDocument({ workflow, actions, sourceLabel, renderSource 
   }}>
     <header className={styles.toolbar}>
       <div><span>{sourceLabel}</span></div>
-      <div>{actions}</div>
+      <div>{actions}<WorkflowMoreActions actions={secondaryActions} /></div>
     </header>
     <div className={styles.intro}>
       <div className={styles.titleRow}>

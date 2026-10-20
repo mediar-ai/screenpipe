@@ -58,7 +58,8 @@ fs.mkdirSync(out, { recursive: true });
     }
     await page.getByRole('button',{name:/^Home/}).click();
     await page.getByRole('button',{name:'Open map',exact:true}).first().click();
-    await page.getByRole('button',{name:'Create SOP',exact:true}).click();
+    await page.getByRole("button", { name: "More workflow actions", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Create SOP", exact: true }).click();
     await page.getByRole('textbox',{name:'SOP title',exact:true}).waitFor();
     await dismiss();
     await snap(baseline ? 'recipe-before' : 'recipe-after');

@@ -90,7 +90,8 @@ it("a background workflow revision does not close its open SOP", async () => {
   const view = render(<WorkflowsApp platform={p} initialAnalysis={analysis} storageKey={null} />);
   await waitFor(() => expect(screen.queryByText("Refreshing saved workflows…")).toBeNull());
   fireEvent.click(screen.getByRole("button", { name: "Open map", exact: true }));
-  fireEvent.click(await screen.findByRole("button", { name: "Open SOP", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Open SOP", exact: true }));
   expect(await screen.findByText("Saved summary")).toBeTruthy();
   const refreshed = { ...p, loadCapturedWork: vi.fn().mockResolvedValue({ ...analysis, analysis: { workflows: [{ ...workflow, title: "Refined source title", revision: 2 }] } }) };
   view.rerender(<WorkflowsApp platform={refreshed} initialAnalysis={analysis} storageKey={null} />);

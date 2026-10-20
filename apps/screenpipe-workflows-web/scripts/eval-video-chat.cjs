@@ -14,7 +14,8 @@ const fs = require("node:fs");
     fs.mkdirSync(dir, { recursive: true });
     await page.goto((process.env.WORKFLOWS_PREVIEW_URL || "http://localhost:1431/preview") + "?catalog=video-chat");
     await page.getByRole("button", { name: "Open map" }).first().click();
-    await page.getByRole("button", { name: "Create SOP", exact: true }).click();
+    await page.getByRole("button", { name: "More workflow actions", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Create SOP", exact: true }).click();
     await page.getByText("Saved your SOP on this device. Review its steps on the page.", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Minimize chat", exact: true }).click();
     if (!before) {

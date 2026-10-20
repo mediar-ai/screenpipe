@@ -16,7 +16,8 @@ const assert = require("node:assert/strict"),
   );
   await p.getByRole("button", { name: "Open map" }).first().click();
   await p.screenshot({ path: dir + "/desktop-workflow.png" });
-  await p.getByRole("button", { name: "Create SOP", exact: true }).click();
+  await p.getByRole("button", { name: "More workflow actions", exact: true }).click();
+    await p.getByRole("menuitem", { name: "Create SOP", exact: true }).click();
   await p.getByRole("button", { name: "Stop answer", exact: true }).waitFor();
   await p.screenshot({ path: dir + "/desktop-creating.png" });
   await p
@@ -33,7 +34,8 @@ const assert = require("node:assert/strict"),
   );
   await p.reload();
   await p.getByRole("button", { name: "Open map" }).first().click();
-  await p.getByRole("button", { name: "Create SOP", exact: true }).click();
+  await p.getByRole("button", { name: "More workflow actions", exact: true }).click();
+    await p.getByRole("menuitem", { name: "Create SOP", exact: true }).click();
   await p.getByText("Before you start", { exact: true }).last().waitFor();
   assert.equal(
     await p.getByRole("button", { name: "Stop answer", exact: true }).count(),

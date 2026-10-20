@@ -44,9 +44,8 @@ fs.mkdirSync(out, { recursive: true });
         .getByRole("button", { name: "Open map", exact: true })
         .first()
         .click();
-      await page
-        .getByRole("button", { name: "Create SOP", exact: true })
-        .click();
+      await page.getByRole("button", { name: "More workflow actions", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Create SOP", exact: true }).click();
       await page
         .getByRole("textbox", { name: "SOP title", exact: true })
         .waitFor()
@@ -265,12 +264,9 @@ fs.mkdirSync(out, { recursive: true });
     });
     await page.mouse.move(900, 150);
     await snap("workflow-toolbar");
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Create SOP", exact: true })
-        .innerText(),
-      "Create SOP",
-    );
+    await page.getByRole("button", { name: "More workflow actions", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Open SOP", exact: true }).waitFor();
+    await page.keyboard.press("Escape");
     await workflowTitle.fill("Research synthesis updated");
     await page
       .getByRole("status", { name: "Save status", exact: true })

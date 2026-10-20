@@ -93,13 +93,21 @@ it("opens the existing sharing review from the selected workflow in the main app
   fireEvent.click(within(card).getByRole("button", { name: "Open map" }));
   expect(screen.queryByRole("dialog", { name: "Sharing review" })).not.toBeInTheDocument();
   const agent = screen.getByRole("button", { name: "Open in agent" });
-  expect(agent.parentElement).toContainElement(screen.getByRole("button", { name: "Create SOP" }));
+  expect(agent.parentElement).toContainElement(screen.getByRole("button", { name: "Share", exact: true }));
+  expect(screen.queryByRole("button", { name: "Feedback", exact: true })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Create SOP" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "More workflow actions" }));
+  for (const name of ["Create SOP", "Create skill", "Variables", "History", "Workflow details", "Undo last edit"]) {
+    expect(screen.getByRole("menuitem", { name })).toBeVisible();
+  }
+  expect(screen.queryByRole("menuitem", { name: "Feedback" })).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
   fireEvent.keyDown(agent, { key: "ArrowDown" });
   for (const name of ["Codex", "Claude", "Cursor", "Screenpipe"]) {
     expect(await screen.findByRole("menuitem", { name })).toBeVisible();
   }
   fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-  fireEvent.click(screen.getByRole("button", { name: "Share with team" }));
+  fireEvent.click(screen.getByRole("button", { name: "Share", exact: true }));
   expect(screen.getByRole("dialog", { name: "Sharing review" })).toHaveTextContent("Research synthesis");
   expect(screen.getByRole("dialog", { name: "Sharing review" })).toHaveTextContent("workflow");
   fireEvent.click(screen.getByRole("button", { name: "Connect Slack" }));
@@ -156,7 +164,7 @@ it("waits for the catalog then opens the exact workflow once across delivery ret
   rememberWorkflowReview(request);
   window.history.replaceState(null, "", "/home?mode=workflows");
   render(<IntegratedWorkflows active onModeChange={vi.fn()} recordingStatus={null} />);
-  expect(await screen.findByRole("button", { name: "Create SOP" })).toBeVisible();
+  expect(await screen.findByRole("button", { name: "More workflow actions" })).toBeVisible();
   expect(screen.getByRole("textbox", { name: "Workflow title" })).toHaveValue("Research synthesis");
   act(() => rememberWorkflowReview(request));
   await waitFor(() => expect(vi.mocked(posthog.capture).mock.calls.filter(c => c[0] === "workflow_notification_opened")).toHaveLength(1));

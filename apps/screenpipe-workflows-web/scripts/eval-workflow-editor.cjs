@@ -18,7 +18,7 @@ require("node:fs").mkdirSync(out, { recursive: true });
   const check = async (label, f) => { await f(); console.log("PASS", label); };
   try {
     await page.goto(process.env.WORKFLOWS_PREVIEW_URL || "http://127.0.0.1:1431/preview");
-    await button("Open map").first().click();
+    await page.locator("article").filter({ has: page.getByRole("heading", { name: "Research synthesis", exact: true }) }).getByRole("button", { name: "Open map", exact: true }).click();
     await check("workflow is editable immediately, without edit/save controls", async () => {
       await field("Workflow title").waitFor();
       assert.equal(await button("Edit workflow").count(), 0);
@@ -155,7 +155,8 @@ require("node:fs").mkdirSync(out, { recursive: true });
       await grip.focus(); await page.keyboard.press("Enter");
       await button("Delete block 1 in step 1").click(); await saved();
       assert.equal((await stored()).stages[0].procedure.length, initialBlocks.length - 1);
-      await button("Undo last edit").click(); await saved();
+      await button("More workflow actions").click();
+      await page.getByRole("menuitem", { name: "Undo last edit", exact: true }).click(); await saved();
       assert.deepEqual((await stored()).stages[0].procedure.map(p => p.text), initialBlocks);
     });
     await check("drag step, auto-save and retain its screenshot", async () => {
@@ -168,7 +169,8 @@ require("node:fs").mkdirSync(out, { recursive: true });
       assert(workflow.stages[1].screenshot.dataUrl);
     });
     await check("undo works after automatic save", async () => {
-      await button("Undo last edit").click();
+      await button("More workflow actions").click();
+      await page.getByRole("menuitem", { name: "Undo last edit", exact: true }).click();
       assert.equal(await field("Step 1 title").inputValue(), "Collect sources");
       await saved();
       assert.equal((await stored()).stages[0].name, "Collect sources");
@@ -242,12 +244,12 @@ require("node:fs").mkdirSync(out, { recursive: true });
       await field("Workflow outcome").fill("A reviewed brief is ready to share.");
       await button("All workflows").click();
       await page.waitForFunction(() => JSON.parse(localStorage.getItem("screenpipe:fictional-workflow-editor-preview")).analysis.workflows.some(w => w.outcome === "A reviewed brief is ready to share."));
-      await button("Open map").first().click();
+      await page.locator("article").filter({ has: page.getByRole("heading", { name: "Research synthesis", exact: true }) }).getByRole("button", { name: "Open map", exact: true }).click();
       assert.equal(await field("Workflow outcome").inputValue(), "A reviewed brief is ready to share.");
     });
     await check("reload restores saved title, steps and blocks", async () => {
       await page.reload();
-      await button("Open map").first().click();
+      await page.locator("article").filter({ has: page.getByRole("heading", { name: "Research synthesis", exact: true }) }).getByRole("button", { name: "Open map", exact: true }).click();
       assert.equal(await field("Workflow title").inputValue(), "Research brief");
       assert.equal(await field("Step 1 title").inputValue(), "Collect sources");
       assert.equal(await field("Block 4 in step 1").innerText(), "Check the source author.");
@@ -272,7 +274,7 @@ require("node:fs").mkdirSync(out, { recursive: true });
     await check("incomplete draft survives navigation", async () => {
       await button("Add step").click();
       await button("All workflows").click();
-      await button("Open map").first().click();
+      await page.locator("article").filter({ has: page.getByRole("heading", { name: "Research synthesis", exact: true }) }).getByRole("button", { name: "Open map", exact: true }).click();
       assert.equal(await field("Step 4 title").inputValue(), "");
       await field("Step 4 title").fill("Send for review");
       await saved();
