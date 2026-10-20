@@ -6813,6 +6813,41 @@
         ],
         "command": "bun --no-env-file test packages/ai-gateway/eval-anthropic-json-usage.test.ts"
       }
+    },
+    {
+      "id": "ai-gateway-openrouter-stream-envelope",
+      "name": "Preserve OpenRouter streaming response fields",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "4678cc32842a2992a338016557a7c14e6335a18e"
+      },
+      "base_ref": "f9fc6e488643a798920a1cd72b4dcdf6208ef3e1",
+      "oracle_ref": "4678cc32842a2992a338016557a7c14e6335a18e",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/openrouter.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/openrouter.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "ai-gateway",
+        "streaming"
+      ],
+      "prompt": "OpenRouter streaming responses lose fields and omit events without visible text. Repair the existing public streaming completion entrypoint so its SSE output retains response identity, object, creation time, model and each choice index alongside text. Preserve assistant role-only deltas, tool-only identity/name/argument fragments in order, finish-only deltas and finish reasons, usage-only events including zero counts, explicit empty text, and multiple choices. Preserve ordinary Unicode text order, exactly one final [DONE] marker, and empty-stream termination without fabricated chunks. Make one upstream streaming request preserving model, messages, temperature and tools without mutating the caller. An initial provider rejection must still reject; an iterator failure after partial output must retain that text and emit error message/type/string status code before termination. Use synthetic provider responses; no live services. Any implementation meeting these observable outcomes is acceptable. SDK transport, Pi execution, monetary settlement, cancellation and model behavior are outside scope.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/openrouter-stream.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-openrouter-stream.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-openrouter-stream.test.ts"
+      }
     }
   ]
 }
