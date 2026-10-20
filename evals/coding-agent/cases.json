@@ -6778,6 +6778,41 @@
         ],
         "command": "node .eval-audio-inventory/audio-inventory.mjs && cargo test --locked -p screenpipe-audio --lib eval_audio_inventory -- --test-threads=1"
       }
+    },
+    {
+      "id": "ai-gateway-anthropic-json-usage",
+      "name": "Preserve reported Anthropic usage through JSON completions",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "3ccae296d1c99840669ed1472306907eac093198"
+      },
+      "base_ref": "7f4f1494042e31968fb8062936a0b971283dcf84",
+      "oracle_ref": "3ccae296d1c99840669ed1472306907eac093198",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/anthropic.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/anthropic.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "billing",
+        "provider-usage"
+      ],
+      "prompt": "Successful non-streaming Anthropic completions return an answer but lose the provider-reported token usage. Repair the existing AnthropicProvider.createCompletion entrypoint so its JSON response includes prompt_tokens, completion_tokens and total_tokens for uncached input/output usage supplied by the upstream SDK. Preserve exact nonnegative counts, including either or both counts being zero and large counts; total_tokens is their sum. Successive calls on the same provider must use each response's own counts. Preserve HTTP 200 and JSON content type, visible Unicode text and assistant role, tool names and structured arguments beside text or in tool-only responses with empty text. Each completion must make one upstream request, retain the requested message, generation limit and temperature, normalize the existing @date model spelling, and leave the caller's request unchanged. Upstream rejection must remain a failure rather than a fabricated completion. Use synthetic provider responses; do not call live services. Any implementation meeting these outcomes is acceptable. Streaming, absent usage, prompt-cache accounting, downstream monetary settlement, provider billing and live model behavior are outside this task.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/anthropic-json-usage.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/eval-anthropic-json-usage.test.ts"
+          }
+        ],
+        "command": "bun --no-env-file test packages/ai-gateway/eval-anthropic-json-usage.test.ts"
+      }
     }
   ]
 }
