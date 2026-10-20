@@ -4,8 +4,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, Copy, Download, MoreHorizontal, Printer, Share2, X } from "lucide-react";
 import styles from "./document-actions.module.css";
-import { DOMSerializer } from "prosemirror-model";
-import { procedureMarkdownParser } from "./procedure-markdown";
+import { downloadMarkdown, markdownFilename, printMarkdown } from "./document-export";
 
 /** Explicit text projection. Opening the picker never uploads a document. */
 export type LibraryShareDocument = { kind: "skill" | "sop"; title: string; markdown: string };
@@ -37,37 +36,17 @@ export function DocumentActions({ document, onShare, download, children }: {
   }
   async function saveFile() {
     setError(""); setBusy(true);
-    const filename = document.kind === "skill" ? "SKILL.md" : `${document.title.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 80) || "recipe"}.md`;
+    const filename = document.kind === "skill" ? "SKILL.md" : markdownFilename(document.title, "recipe");
     try {
-      if (download) await download(document.markdown, filename);
-      else {
-        const url = URL.createObjectURL(new Blob([document.markdown], { type: "text/markdown;charset=utf-8" }));
-        const link = window.document.createElement("a"); link.href = url; link.download = filename; link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
+      await downloadMarkdown(document.markdown, filename, download);
       if (menu.current) menu.current.open = false;
     } catch { setError("Could not download. Your document is still open. Try again."); }
     finally { setBusy(false); }
   }
   function printDocument() {
     if (menu.current) menu.current.open = false;
-    // Print only this document. Build DOM from the allowlisted Markdown schema,
-    // never raw HTML or the app shell, and keep remote images as references.
-    const frame = window.document.createElement("iframe");
-    frame.title = "Document print preview";
-    frame.style.cssText = "position:fixed;width:0;height:0;border:0";
-    window.document.body.appendChild(frame);
-    const target = frame.contentDocument;
-    if (!target || !frame.contentWindow) { frame.remove(); setError("Could not open print preview."); return; }
-    target.title = document.title;
-    const style = target.createElement("style");
-    style.textContent = "body{font:15px/1.65 system-ui;margin:40px;color:#111}pre{white-space:pre-wrap}h1,h2,h3{line-height:1.3}a{color:inherit}blockquote{border-left:2px solid #aaa;padding-left:16px}";
-    target.head.appendChild(style);
-    const doc = procedureMarkdownParser.parse(document.markdown);
-    target.body.appendChild(DOMSerializer.fromSchema(doc.type.schema).serializeFragment(doc.content, { document: target }));
-    frame.contentWindow.addEventListener("afterprint", () => frame.remove(), { once: true });
-    frame.contentWindow.print();
-    setTimeout(() => frame.remove(), 60000);
+    try { printMarkdown(document.title, document.markdown); }
+    catch { setError("Could not open print preview. Try again."); }
   }
   return <>
     <button className={styles.share} onClick={() => { setCopied(false); setError(""); onShare ? onShare(document) : dialog.current?.showModal(); }}><Share2 size={16} />Share</button>
