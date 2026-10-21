@@ -20,7 +20,9 @@ function editor(stepsOnly = false) {
 
 it("shows one editable step, bounds navigation, and never saves a view change", () => {
   const { change, save } = editor();
-  expect(title(3)).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: "Step 3 title" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Add step at start" })).toBeNull();
+  expect(screen.queryByRole("textbox", { name: "Workflow trigger" })).toBeNull();
   fireEvent.click(button("Walkthrough"));
   expect(button("Walkthrough")).toHaveAttribute("aria-pressed", "true");
   expect(title(1)).toBeVisible();
@@ -82,6 +84,36 @@ it("leaves the cloud steps-only consumer's view controls with its host", () => {
   editor(true);
   expect(screen.queryByRole("group", { name: "Workflow view" })).toBeNull();
   expect(title(3)).toBeVisible();
+});
+
+it("keeps secondary step editing behind the step menu in both views", () => {
+  const { change } = editor();
+  for (const view of ["Walkthrough", "Steps"]) {
+    fireEvent.click(button(view));
+    expect(screen.queryByRole("button", { name: "Add detail to step 1" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Details for step 1" })).toBeNull();
+    fireEvent.click(button("Step 1 actions"));
+    fireEvent.click(button("Execution details and links"));
+    const details = screen.getByRole("region", { name: "Details for step 1" });
+    expect(within(details).getByRole("textbox", { name: "Required access for step 1" })).toBeVisible();
+    fireEvent.click(button("Close step details"));
+    expect(details).not.toBeVisible();
+  }
+  fireEvent.click(button("Step 1 actions"));
+  fireEvent.click(button("Add block"));
+  expect(change.mock.lastCall![0].stages[0].procedure).toHaveLength((workflow().stages[0].procedure?.length ?? 0) + 1);
+});
+
+it("keeps the same evidence mounted while switching presentation", () => {
+  const source = workflow();
+  render(<WorkflowEditor workflow={source} save={vi.fn()} sessionRecovery={false} saveDisabled renderSource={stage => <img alt={stage.name} src={stage.screenshot!.dataUrl} />} />);
+  const image = screen.getByRole("img", { name: source.stages[0].name });
+  fireEvent.click(button("Steps"));
+  expect(screen.getByRole("img", { name: source.stages[0].name })).toBe(image);
+  fireEvent.click(button("Walkthrough"));
+  fireEvent.click(button("Next"));
+  fireEvent.click(button("Previous"));
+  expect(screen.getByRole("img", { name: source.stages[0].name })).toBe(image);
 });
 
 it("enlarges an existing screenshot without selecting, deleting or reordering it", () => {
