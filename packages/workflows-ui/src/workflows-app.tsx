@@ -748,7 +748,6 @@ export function WorkflowDetail({ breadcrumb, relatedWorkflows, openRelated, edit
       {saveEdits ? <WorkflowEditor {...editorOptions} relatedWorkflows={relatedWorkflows} openRelated={openRelated} key={workflow.id || workflow.title} workflow={workflow} save={saveEdits} actions={workflowActions} secondaryActions={secondaryActions} downloadDocument={platform.library?.downloadDocument} renderSource={observationsAvailable ? (stage, onImageLayoutChange) => <WorkflowStepEvidence workflow={workflow} stage={stage} platform={platform} onImageLayoutChange={onImageLayoutChange} /> : undefined} /> : <WorkflowDocument workflow={workflow} actions={workflowActions} secondaryActions={secondaryActions} downloadDocument={platform.library?.downloadDocument} sourceLabel={sourceLabel}
         renderSource={observationsAvailable ? stage => <WorkflowStepEvidence workflow={workflow} stage={stage} platform={platform} /> : undefined} />}
       <div className={styles.workflowNotes}>
-      <p className={styles.workflowReviewState}>{workflow.userEditedAt ? ui("Edited by you · sources kept as references") : workflow.evidenceStatus === "supported-steps" ? ui("Source-backed steps · not execution-tested") : ui("Needs review")}</p>
       {saveCorrection && !platform.assistant?.saveFeedback && <WorkflowCorrection key={`correction:${workflow.title}`} workflow={workflow} save={saveCorrection} />}
       {observationsAvailable && <WorkflowQuestions workflow={workflow} active={active} voice={platform.questionnaireVoice} save={canSaveAnswers && platform.saveWorkflowAnswers ? async correction => {
         try {
@@ -764,11 +763,15 @@ export function WorkflowDetail({ breadcrumb, relatedWorkflows, openRelated, edit
           throw error;
         }
       } : undefined} />}
+      <details className={styles.workflowContext}>
+      <summary>Workflow context</summary>
+      <p className={styles.workflowReviewState}>{workflow.userEditedAt ? ui("Edited by you · sources kept as references") : workflow.evidenceStatus === "supported-steps" ? ui("Source-backed steps · not execution-tested") : ui("Needs review")}</p>
       {!!workflow.variations.length && <section className={styles.panel}><h2>Variations</h2><ul className={styles.plainList}>{workflow.variations.map(item => <li key={item}>{item}</li>)}</ul></section>}
       {!!actionableFriction.length && <section><div className={styles.sectionHeading}><div><h2>Friction you can affect</h2></div></div><BottleneckList items={actionableFriction.map((item) => ({ ...item, workflowTitle: workflow.title, repetitions: workflow.repetitions }))} /></section>}
       {!!constraints.length && <section><div className={styles.sectionHeading}><div><h2>External and required constraints</h2></div></div><BottleneckList items={constraints.map((item) => ({ ...item, workflowTitle: workflow.title, repetitions: workflow.repetitions }))} numbered={false} /></section>}
 
 
+      </details>
       </div>
       {skillOpen && <WorkflowSkillDialog workflow={workflow} draft={skillDraft} generating={skillGenerating} saving={skillSaving} saved={skillSaved} preview={platform.skillInstallMode === "preview"} progress={skillProgress} error={skillError} update={draft => {
         setSkillDraft(draft);
