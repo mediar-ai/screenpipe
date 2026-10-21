@@ -1,5 +1,20 @@
 # Coding-agent regression evals
 
+`app-log-share-redaction-false-positive` mounts the historical shared-log upload
+caller with synthetic chat and native/network ports. Eight outcomes preserve
+numeric telemetry and chat/log context while checking formatted phones, personal
+data, payment cards, API credentials, non-local IP addresses and home usernames.
+The parent fails flattened bounds and complete card removal, preserving six; the reference
+passes eight. Replacement labels and inline redactors remain valid solutions.
+Run `bun test evals/coding-agent/calibrate-log-share-redaction.test.js` with desktop
+Vitest dependencies available. Twelve controls reject unused fixes, disabled or
+partial redaction, omitted chat and corrupted telemetry; missing source remains
+an infrastructure error. `SCREENPIPE_EVAL_DESKTOP_DEPENDENCIES` can select an
+existing dependency directory for calibration. Fixtures and dependencies appear
+only at grading. The current upload path uses native feedback jobs, so these
+historical outcomes do not establish current native redaction, live upload,
+complete privacy coverage, enforced isolation or model performance.
+
 `app-audio-drop-control-dispatch` executes the actual AudioStream destructor
 with synthetic streams and no capture hardware. Three Drop outcomes distinguish
 the broken parent from the reference while two checks preserve live-stream and
