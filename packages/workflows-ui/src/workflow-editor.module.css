@@ -37,7 +37,14 @@
 .intro .title { font-family: var(--heading-font); font-size: 30px; font-weight: 600; line-height: 1.25; letter-spacing: -.03em; margin-bottom: 4px; }
 .endpoint { display: block; color: var(--muted); font-size: 11px; padding: 6px 5px; }
 .endpoint textarea { margin-left: -5px; }
-.stepsHeading { margin: 18px 0 8px; padding: 0 5px; }
+.stepsHeading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 18px 0 8px; padding: 0 5px; }
+.viewSwitch { display: flex; padding: 2px; gap: 2px; border: 1px solid var(--line); border-radius: 6px; }
+.viewSwitch button[aria-pressed="true"] { background: var(--soft); color: var(--ink); }
+.stepsHeading select { min-width: 0; max-width: 100%; min-height: 32px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 12px; }
+.walkthroughNavigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px 49px; padding-top: 12px; border-top: 1px solid var(--line); }
+.walkthroughNavigation span { color: var(--muted); font-size: 12px; }
+.step[hidden], .insertion[hidden] { display: none; }
+.step[tabindex="-1"] { scroll-margin-top: 80px; }
 .stepsHeading strong { color: var(--muted); font-size: 11px; font-weight: 500; }
 .steps { margin: 0 0 4px; padding-left: 26px; }
 .step { position: relative; padding: 4px 0; margin: 0 0 24px; border: 0; background: transparent; }
