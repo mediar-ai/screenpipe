@@ -163,7 +163,7 @@ export function cloudProcedureRoutes(value: CloudProcedure): import("./workflow-
     return index < 0 ? null : index;
   };
   return steps.map((step, index) => step.kind === "decision" ? {
-    condition: step.decision?.condition,
-    links: [{ label: "Yes", target: target(step.decision?.yes_step_id) }, { label: "No", target: target(step.decision?.no_step_id) }],
-  } : { links: [{ label: "Then", target: target(step.next_step_id ?? steps[index + 1]?.id ?? "end") }] });
+    condition: step.decision?.condition, kind: step.kind, app: step.app,
+    links: [{ label: "Yes", description: step.decision?.if_yes, target: target(step.decision?.yes_step_id) }, { label: "No", description: step.decision?.if_no, target: target(step.decision?.no_step_id) }],
+  } : { kind: step.kind, app: step.app, links: [{ label: "Then", target: target(step.next_step_id ?? steps[index + 1]?.id ?? "end") }] });
 }

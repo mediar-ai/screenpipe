@@ -32,8 +32,8 @@ describe("cloud workflow reading modes", () => {
     expect(screen.getByLabelText("Step 2 title")).not.toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Map", exact: true }));
     expect(screen.getByText("Is it matched?")).toBeVisible();
-    expect(screen.getByText("No → End")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "From step 1: Yes, go to step 3" }));
+    expect(screen.getByText("No")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "03 Send order" }));
     expect(screen.getByLabelText("Step 3 title")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Steps", exact: true }));
     expect(screen.getByLabelText("Step 1 title")).toBeVisible();
@@ -57,7 +57,7 @@ describe("cloud workflow reading modes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next", exact: true }));
     expect(screen.getByRole("heading", { name: "Hold order" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Map", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "From step 1: Yes, go to step 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "03 Send order" }));
     expect(screen.getByRole("heading", { name: "Send order" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Steps", exact: true }));
     expect(screen.getByRole("heading", { name: "Review order" })).toBeVisible();
@@ -79,8 +79,8 @@ describe("cloud workflow reading modes", () => {
     value.document.steps[0].decision!.no_step_id = "missing";
     delete value.document.steps[1].next_step_id;
     expect(cloudProcedureRoutes(value)).toEqual([
-      { condition: "Is it matched?", links: [{ label: "Yes", target: 2 }, { label: "No", target: null }] },
-      { links: [{ label: "Then", target: 2 }] }, { links: [{ label: "Then", target: "end" }] },
+      { condition: "Is it matched?", kind: "decision", app: "Orders", links: [{ label: "Yes", description: "Confirm", target: 2 }, { label: "No", description: "Escalate", target: null }] },
+      { kind: "action", app: "Orders", links: [{ label: "Then", target: 2 }] }, { kind: "action", app: "Orders", links: [{ label: "Then", target: "end" }] },
     ]);
     delete value.document.steps[0].decision;
     expect(cloudProcedureRoutes(value)[0].links.every(link => link.target === null)).toBe(true);

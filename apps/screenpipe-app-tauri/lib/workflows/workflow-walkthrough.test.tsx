@@ -133,7 +133,7 @@ it("uses the same selected step in Map and lets screenshots be hidden without ed
   expect(image).not.toBeVisible();
   expect(button("Screenshots off")).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(button("Map"));
-  fireEvent.click(button(`Go to step 3: ${source.stages[2].name}`));
+  fireEvent.click(button(`03 ${source.stages[2].name}`));
   expect(title(3)).toBeVisible();
   fireEvent.click(button("Walkthrough"));
   expect(title(3)).toBeVisible();

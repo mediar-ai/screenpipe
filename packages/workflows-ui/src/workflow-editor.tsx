@@ -35,6 +35,7 @@ import { WorkflowVariablePanel, type VariableQuote } from "./workflow-variable-p
 import { WorkflowVersionPanel } from "./workflow-version-panel";
 import { executionFields, variableId } from "./workflow-variables";
 import styles from "./workflow-editor.module.css";
+import type { ProcedureMapLayout } from "./workflow-map-layout";
 import { WorkflowReadingControls, WorkflowReadingMap, WorkflowReadingNavigation, type WorkflowReadingView, type WorkflowMapRoute } from "./workflow-reading-views";
 import { WorkflowMoreActions, type WorkflowSecondaryAction } from "./workflow-more-actions";
 import { useWorkflowDocumentExports } from "./workflow-document-exports";
@@ -97,6 +98,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
   });
   const exports = useWorkflowDocumentExports(draft, downloadDocument);
   const [view, setView] = useState<WorkflowReadingView>("walkthrough");
+  const [mapLayout, setMapLayout] = useState<ProcedureMapLayout>("flow");
   const [selectedStep, setSelectedStep] = useState(draft.stages[0]?.key);
   const stepIndex = Math.max(0, draft.stages.findIndex(stage => stage.key === selectedStep));
   const viewsEnabled = readingModes ?? !stepsOnly;
@@ -315,7 +317,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
   return (
     <section
       ref={editorRoot}
-      className={`${styles.editor} ${viewsEnabled ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${view === "map" && viewsEnabled ? styles.mapView : ""} ${!showEvidence || !renderSource ? styles.noEvidence : ""} ${panel ? styles.withPanel : ""}`}
+      className={`${styles.editor} ${viewsEnabled ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${view === "map" && viewsEnabled ? styles.mapView : ""} ${mapLayout === "focus" ? styles.focusMap : ""} ${!showEvidence || !renderSource ? styles.noEvidence : ""} ${panel ? styles.withPanel : ""}`}
       onMouseUp={event => {
         const selection = window.getSelection(); const value = selection?.toString().trim();
         if (!value || value.length > 1000 || !event.currentTarget.contains(selection?.anchorNode ?? null) || !event.currentTarget.contains(selection?.focusNode ?? null)) return;
@@ -402,7 +404,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
         </label>
         {viewsEnabled ? <WorkflowReadingControls view={view} change={setView} variables={!stepsOnly ? { open: panel === "variables", toggle: () => setPanel(panel === "variables" ? null : "variables") } : undefined} /> : <div className={styles.stepsHeading}><strong>Steps</strong></div>}
         <div className={styles.stepLayout}>
-        {viewsEnabled && view === "map" && <WorkflowReadingMap steps={draft.stages} selected={stepIndex} choose={chooseStep} routes={mapRoutes} />}
+        {viewsEnabled && view === "map" && <WorkflowReadingMap steps={draft.stages.map(stage => ({ name: stage.name, apps: stage.sourceIndex === null ? [] : workflow.stages[stage.sourceIndex]?.apps }))} selected={stepIndex} choose={chooseStep} routes={mapRoutes} layout={mapLayout} changeLayout={setMapLayout} />}
         <div className={styles.steps}>
           {draft.stages.map((stage, index) => (
             <Fragment key={stage.key}>
@@ -736,6 +738,7 @@ export function WorkflowDocument({ workflow, actions, secondaryActions = [], dow
 }) {
   const [selected, select] = useState("");
   const [view, setView] = useState<WorkflowReadingView>("walkthrough");
+  const [mapLayout, setMapLayout] = useState<ProcedureMapLayout>("flow");
   const [selectedStep, setSelectedStep] = useState(0);
   const stepIndex = Math.min(selectedStep, Math.max(0, workflow.stages.length - 1));
   const walkthrough = readingModes && view !== "steps";
@@ -745,7 +748,7 @@ export function WorkflowDocument({ workflow, actions, secondaryActions = [], dow
     requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-document-step="${index}"]`)?.focus({ preventScroll: true }));
   };
   const exports = useWorkflowDocumentExports(workflowEdit(workflow), downloadDocument);
-  return <section ref={root} className={`${styles.editor} ${readingModes ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${readingModes && view === "map" ? styles.mapView : ""} ${!renderSource ? styles.noEvidence : ""}`} aria-label="Workflow document" onClickCapture={event=>{
+  return <section ref={root} className={`${styles.editor} ${readingModes ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${readingModes && view === "map" ? styles.mapView : ""} ${mapLayout === "focus" ? styles.focusMap : ""} ${!renderSource ? styles.noEvidence : ""}`} aria-label="Workflow document" onClickCapture={event=>{
     const link=(event.target as Element).closest("a"); const id=variableId(link?.getAttribute("href") ?? "");
     if(id) {event.preventDefault();select(id);}
   }}>
@@ -765,7 +768,7 @@ export function WorkflowDocument({ workflow, actions, secondaryActions = [], dow
     <div className={styles.endpoint} hidden={walkthrough}>Starts when<span className={styles.readOnlyText}>{workflow.trigger}</span></div>
     {readingModes ? <WorkflowReadingControls view={view} change={setView} /> : <div className={styles.stepsHeading}><strong>Steps</strong></div>}
     <div className={styles.stepLayout}>
-    {readingModes && view === "map" && <WorkflowReadingMap steps={workflow.stages} selected={stepIndex} choose={chooseStep} routes={mapRoutes} />}
+    {readingModes && view === "map" && <WorkflowReadingMap steps={workflow.stages} selected={stepIndex} choose={chooseStep} routes={mapRoutes} layout={mapLayout} changeLayout={setMapLayout} />}
     <div className={styles.steps}>
       {workflow.stages.map((stage, index) => <article className={styles.step} key={stage.id ?? index} aria-label={`Step ${index + 1}`} hidden={walkthrough && index !== stepIndex} tabIndex={walkthrough ? -1 : undefined} data-document-step={index}>
         <div className={styles.stepBody}>

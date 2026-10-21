@@ -1,14 +1,19 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 "use client";
-import { Fragment } from "react";
-import { ArrowDown, Braces, ChevronLeft, ChevronRight, GitBranch, ListOrdered, PanelsTopLeft } from "lucide-react";
+import { useMemo } from "react";
+import { Braces, ChevronLeft, ChevronRight, GitBranch, ListOrdered, PanelsTopLeft } from "lucide-react";
 import styles from "./workflow-editor.module.css";
+import { ProcedureFlowchart } from "./workflow-map";
+import type { ProcedureMapLayout } from "./workflow-map-layout";
+import type { MapStage } from "./workflow-map-model";
 
 export type WorkflowReadingView = "walkthrough" | "map" | "steps";
 export type WorkflowMapRoute = {
   condition?: string;
-  links: { label: string; target: number | "end" | null }[];
+  kind?: MapStage["kind"];
+  app?: string;
+  links: { label: string; description?: string; target: number | "end" | null }[];
 };
 export function WorkflowReadingControls({ view, change, variables }: {
   view: WorkflowReadingView; change: (view: WorkflowReadingView) => void;
@@ -24,21 +29,27 @@ export function WorkflowReadingControls({ view, change, variables }: {
     </div>
   </div>;
 }
-export function WorkflowReadingMap({ steps, selected, choose, routes }: {
-  steps: { name: string }[]; selected: number; choose: (index: number) => void; routes?: WorkflowMapRoute[];
+export function WorkflowReadingMap({ steps, selected, choose, routes, layout, changeLayout }: {
+  steps: { name: string; apps?: string[] }[]; selected: number; choose: (index: number) => void; routes?: WorkflowMapRoute[];
+  layout: ProcedureMapLayout; changeLayout: (layout: ProcedureMapLayout) => void;
 }) {
-  return <nav className={styles.map} aria-label="Workflow map">
-    {steps.map((stage, index) => <Fragment key={index}>
-      {!routes && index > 0 && <ArrowDown size={16} aria-hidden="true" />}
-      <button type="button" aria-label={`Go to step ${index + 1}: ${stage.name || "Untitled step"}`} aria-pressed={index === selected} onClick={() => choose(index)}><span>{String(index + 1).padStart(2, "0")}</span>{stage.name || "Untitled step"}</button>
-      {routes?.[index] && <div className={styles.mapRoutes}>
-        {routes[index].condition && <p>{routes[index].condition}</p>}
-        {routes[index].links.map((link, i) => { const target = link.target; return typeof target === "number" && steps[target]
-          ? <button key={i} type="button" aria-label={`From step ${index + 1}: ${link.label}, go to step ${target + 1}`} onClick={() => choose(target)}>{link.label} → {steps[target].name || `Step ${target + 1}`}</button>
-          : <span key={i}>{link.label} → {link.target === "end" ? "End" : "Destination not set"}</span>; })}
-      </div>}
-    </Fragment>)}
-  </nav>;
+  const stages = useMemo<MapStage[]>(() => steps.map((step, index) => {
+    const route = routes?.[index];
+    const target = (value: number | "end" | null) => value === null ? undefined : value === "end" ? "end" : `step-${value}`;
+    const decision = route?.kind === "decision" || route?.links.some(link => link.label === "Yes" || link.label === "No");
+    return {
+      key: `step-${index}`, stepId: `step-${index}`, title: step.name || "Untitled step",
+      kind: route?.kind ?? (decision ? "decision" : "action"), app: route?.app ?? step.apps?.[0],
+      ...(decision ? { decision: {
+        condition: route?.condition || "", if_yes: route?.links[0]?.description || "Destination not set", if_no: route?.links[1]?.description || "Destination not set",
+        yes_step_id: target(route?.links[0]?.target ?? null), no_step_id: target(route?.links[1]?.target ?? null),
+      } } : route ? { nextStepId: target(route.links[0]?.target ?? null) ?? "unmapped" } : {}),
+    };
+  }), [steps, routes]);
+  return <ProcedureFlowchart stages={stages} selected={`step-${selected}`} onSelect={key => {
+    const index = stages.findIndex(stage => stage.key === key);
+    if (index >= 0) choose(index);
+  }} layout={layout} onLayoutChange={changeLayout} />;
 }
 export function WorkflowReadingNavigation({ index, count, choose }: { index: number; count: number; choose: (index: number) => void }) {
   return <nav aria-label="Walkthrough navigation" className={styles.walkthroughNavigation}>

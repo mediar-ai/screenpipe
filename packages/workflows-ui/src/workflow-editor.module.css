@@ -226,11 +226,11 @@
 .walkthrough .step:hover .stepControls > .grip, .walkthrough .step:focus-within .stepControls > .grip { opacity: 1; pointer-events: auto; }
 .walkthrough .stepMenu { left: 24px; }
 .walkthrough .stepBehavior { margin-left: 0; }
-.mapView .stepLayout { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: start; gap: 20px; }
-.map { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; color: var(--muted); }
-.editor .map > button { justify-content: flex-start; text-align: left; width: 100%; min-height: 64px; padding: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; gap: 12px; }
-.editor .map > button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
-.map > button > span { color: var(--muted); font: 11px var(--mono-font, monospace); }
+.mapView { max-width: 1280px; }
+.mapView .stepLayout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; align-items: start; gap: 20px; }
+.focusMap .stepLayout { grid-template-columns: 380px minmax(0, 1fr); }
+.mapView .step { border-radius: 8px; overflow: clip; }
+.mapView .steps { position: sticky; top: 64px; }
 .mapView .stepBody { grid-template-columns: minmax(0, 1fr); }
 .mapView .instructions { grid-column: 1; grid-row: 1; }
 .mapView .source { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--line); }
@@ -238,11 +238,8 @@
   .walkthrough .stepBody { grid-template-columns: minmax(0, 1fr); }
   .walkthrough .instructions { grid-column: 1; grid-row: 1; padding: 16px; }
   .walkthrough .source { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--line); padding: 16px; }
-  .mapView .stepLayout { grid-template-columns: minmax(0, 1fr); }
+  .mapView .stepLayout, .focusMap .stepLayout { grid-template-columns: minmax(0, 1fr); }
+  .mapView .steps { position: static; }
   .stepsHeading { gap: 8px; }
   .editor .viewTools button { padding: 6px 8px; font-size: 12px; }
 }
-
-.mapRoutes { display: flex; flex-direction: column; gap: 4px; align-self: stretch; min-width: 0; padding: 0 8px 8px; font-size: 12px; overflow-wrap: anywhere; }
-.mapRoutes p { margin: 0 0 4px; color: var(--ink); }
-.editor .mapRoutes button { justify-content: flex-start; text-align: left; font-size: 12px; padding: 4px; white-space: normal; overflow-wrap: anywhere; }
