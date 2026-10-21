@@ -16,8 +16,11 @@ async fn main() -> anyhow::Result<()> {
     if args.next().is_some() {
         anyhow::bail!("unexpected storage command argument");
     }
-    let result =
-        screenpipe_db::storage::run_command(&command, &root, destination.as_deref()).await?;
+    // Poll the large storage lifecycle future away from Windows' small main stack.
+    let result = tokio::spawn(async move {
+        screenpipe_db::storage::run_command(&command, &root, destination.as_deref()).await
+    })
+    .await??;
     println!("{}", serde_json::to_string(&result)?);
     Ok(())
 }

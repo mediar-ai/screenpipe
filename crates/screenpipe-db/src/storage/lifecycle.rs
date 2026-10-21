@@ -931,6 +931,25 @@ async fn migrate_observed(
         super::diagnostics::stage("closing_retry_history");
         db.close().await;
         let (receipts, searches) = refreshed?;
+        if !index.is_file() {
+            let mut exclusive = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&source_path)
+                    .create_if_missing(false)
+                    .pragma("locking_mode", "EXCLUSIVE")
+                    .busy_timeout(std::time::Duration::from_secs(5)),
+            )
+            .await?;
+            let checkpoint = async {
+                sqlx::raw_sql("BEGIN EXCLUSIVE; COMMIT;")
+                    .execute(&mut exclusive)
+                    .await?;
+                super::schema::construction_checkpoint(&mut exclusive).await
+            }
+            .await;
+            exclusive.close().await?;
+            checkpoint?;
+        }
         journal.source = receipts;
         super::diagnostics::tables(&journal.source);
         journal.search_receipts = searches;
