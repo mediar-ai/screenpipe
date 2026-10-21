@@ -1336,8 +1336,8 @@ fn recreate_tray_on_main_thread(app: &AppHandle) {
             }
             return;
         }
+        #[cfg(target_os = "windows")]
         if crate::search_only::is_active() {
-            #[cfg(target_os = "windows")]
             if app.tray_by_id("screenpipe_main").is_some() {
                 info!("recreate_tray: search-only, removing instead");
                 let _old = app.remove_tray_by_id("screenpipe_main");

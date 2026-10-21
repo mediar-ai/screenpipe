@@ -24,6 +24,7 @@ type State = {
   webviews: string[];
   keep_search_after_quit: boolean;
   tray_registered: boolean;
+  platform: string;
 };
 async function request(
   base: string,
@@ -67,6 +68,8 @@ const counts = async () => {
 };
 
 const initial = await state();
+assert(initial.platform, "The E2E app must report its target platform");
+const windowsTray = initial.platform === "windows";
 assert(initial.keep_search_after_quit, "The preference defaults On");
 assert(
   initial.capture_intended && initial.capture_running,
@@ -89,7 +92,7 @@ for (let cycle = 0; cycle < 2; cycle++) {
       !s.capture_intended &&
       !s.capture_running &&
       s.webviews.length === 0 &&
-      !s.tray_registered
+      (!windowsTray || !s.tray_registered)
     );
   }, "Quit stops capture and destroys webviews");
   assert.equal(
@@ -97,18 +100,23 @@ for (let cycle = 0; cycle < 2; cycle++) {
     initial.pid,
     "Quit must retain the existing process",
   );
-  assert.equal(
-    (await state()).tray_registered,
-    false,
-    "Quit removes the native tray registration",
-  );
-  await request(control, "/e2e/search-only/recreate-tray", "POST");
-  await Bun.sleep(1_000);
-  assert.equal(
-    (await state()).tray_registered,
-    false,
-    "Explicit tray recreation cannot resurrect search-only tray UI",
-  );
+  if (windowsTray) {
+    assert.equal(
+      (await state()).tray_registered,
+      false,
+      "Quit removes the native tray registration",
+    );
+    assert.equal(
+      (await request(control, "/e2e/search-only/recreate-tray", "POST")).accepted,
+      true,
+      "Native tray recreation completed",
+    );
+    assert.equal(
+      (await state()).tray_registered,
+      false,
+      "Explicit tray recreation cannot resurrect search-only tray UI",
+    );
+  }
   assert(
     (await request(api, "/search?limit=1&content_type=all")).data.length > 0,
     "External history request succeeds after Quit",
@@ -200,7 +208,7 @@ await until(async () => {
       !s.capture_running &&
       !s.capture_intended &&
       s.webviews.length === 0 &&
-      !s.tray_registered
+      (!windowsTray || !s.tray_registered)
     );
   } catch {
     return false;

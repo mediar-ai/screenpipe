@@ -686,6 +686,7 @@ async fn e2e_search_only_state(State(state): State<ServerState>) -> impl IntoRes
         "webviews": app.webview_windows().keys().cloned().collect::<Vec<_>>(),
         "keep_search_after_quit": crate::search_only::keep_after_quit(app),
         "tray_registered": app.tray_by_id("screenpipe_main").is_some(),
+        "platform": std::env::consts::OS,
     }))
 }
 
@@ -729,7 +730,14 @@ async fn e2e_search_only_restart(State(state): State<ServerState>) -> impl IntoR
 #[cfg(feature = "e2e")]
 async fn e2e_search_only_recreate_tray(State(state): State<ServerState>) -> impl IntoResponse {
     crate::tray::recreate_tray(&state.app_handle);
-    Json(serde_json::json!({"accepted": true}))
+    // This barrier runs after the queued recreation, so callers can inspect
+    // the resulting native tray without guessing how long the main loop needs.
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let scheduled = state.app_handle.run_on_main_thread(move || {
+        let _ = tx.send(());
+    });
+    let completed = scheduled.is_ok() && rx.await.is_ok();
+    Json(serde_json::json!({"accepted": completed}))
 }
 
 /// Content-free updater state for the packaged e2e test: what the tray menu
