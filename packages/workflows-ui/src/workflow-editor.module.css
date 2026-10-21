@@ -37,14 +37,15 @@
 .intro .title { font-family: var(--heading-font); font-size: 30px; font-weight: 600; line-height: 1.25; letter-spacing: -.03em; margin-bottom: 4px; }
 .endpoint { display: block; color: var(--muted); font-size: 11px; padding: 6px 5px; }
 .endpoint textarea { margin-left: -5px; }
-.stepsHeading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 24px 0 16px; padding: 0; }
-.viewSwitch { display: flex; padding: 3px; gap: 3px; background: var(--soft); border: 1px solid var(--line); border-radius: 7px; }
-.editor .viewSwitch button { min-height: 36px; padding: 6px 12px; font-size: 14px; gap: 8px; }
-.viewSwitch button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px #00000012; font-weight: 550; }
-.stepsHeading select { min-width: 0; max-width: 100%; min-height: 32px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 12px; }
-.walkthroughNavigation { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-.editor .walkthroughNavigation button { min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); color: var(--ink); }
-.walkthroughNavigation span { color: var(--muted); font-size: 12px; }
+.stepsHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 48px 0 16px; padding: 0; min-height: 44px; border-bottom: 1px solid var(--line); }
+.editor:not(.localEditor) .stepsHeading { margin: 18px 0 8px; padding: 0 5px; min-height: 0; border: 0; }
+.workflowTab { align-self: stretch; display: flex; align-items: center; border-bottom: 2px solid var(--ink); color: var(--ink); font-size: 14px; font-weight: 550; }
+.viewTools, .viewSwitch { display: flex; align-items: center; gap: 2px; }
+.editor .viewTools button { min-height: 36px; min-width: 36px; padding: 6px 10px; font-size: 14px; gap: 8px; }
+.viewSwitch button[aria-pressed="true"], .viewTools > button[aria-expanded="true"] { background: var(--soft); color: var(--ink); }
+.walkthroughNavigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 12px; min-height: 44px; border-top: 1px solid var(--line); }
+.editor .walkthroughNavigation button { min-height: 44px; min-width: 44px; padding: 6px 8px; font-size: 12px; }
+.walkthroughNavigation span { color: var(--muted); font: 12px var(--mono-font, monospace); }
 .step[hidden], .insertion[hidden] { display: none; }
 .step[tabindex="-1"] { scroll-margin-top: 80px; }
 .stepsHeading strong { color: var(--muted); font-size: 11px; font-weight: 500; }
@@ -185,32 +186,59 @@
 
 .editor a[href^="#workflow-io-"] { color:var(--ink); background:var(--soft); border-bottom:1px dashed var(--muted);border-radius:3px;padding:1px 3px;text-decoration:none; }
 
-/* Both views retain the same instructions, source instances and draft. */
+/* Use the website's section toolbar, inspector card, and card footer. */
+.localEditor { max-width: 1024px; }
+.localEditor.withPanel { max-width: 1120px; }
+.metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.editor .metadata button { padding: 0; font-size: 14px; }
+.stepLayout { min-width: 0; }
 .stepBody { display: flex; flex-direction: column; }
 .instructions { display: contents; }
 .instructions > .stepTop { order: -2; }
 .instructions > [data-variable-field="description"] { margin-left: 24px; }
-.execution[hidden], .editor button[hidden], .endpoint[hidden] { display: none; }
+.execution[hidden], .editor button[hidden], .endpoint[hidden], .source[hidden] { display: none; }
 .execution { padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
 .execution > header { display: flex; justify-content: space-between; align-items: center; }
-.walkthrough { max-width: 1180px; }
+.editor .stepBehavior { margin: 4px 0 0 24px; padding: 4px; gap: 6px; min-height: 36px; }
+.expectedLabel { grid-column: 1; grid-row: 1; color: var(--muted); font-size: 12px; padding: 8px 5px 0; }
+.localEditor .block[data-kind="check"] > [data-testid="procedure-markdown"] { grid-row: 2; }
+.localEditor .block[data-kind="check"] > .kindLabel { grid-row: 2; }
 .walkthrough .steps { padding-left: 0; }
 .walkthrough .insertion { display: none; }
-.walkthrough .stepsHeading > select { flex-basis: 100%; width: 100%; min-height: 40px; font-size: 14px; }
-.walkthrough .stepBody { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); border: 1px solid var(--line); border-radius: 8px; }
-.walkthrough .instructions { display: block; min-width: 0; grid-column: 2; grid-row: 1; padding: 24px 24px 24px 44px; }
-.walkthrough .instructions:only-child { grid-column: 1 / -1; }
+.walkthrough .step { padding: 0; margin: 0; border: 1px solid var(--line); }
+.walkthrough .stepBody { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.walkthrough .instructions { display: block; min-width: 0; grid-column: 2; grid-row: 1; padding: 20px; }
+.walkthrough .instructions:only-child, .noEvidence .instructions { grid-column: 1 / -1; }
+.noEvidence .stepBody { grid-template-columns: minmax(0, 1fr); }
 .walkthrough .source { grid-column: 1; grid-row: 1; margin: 0; padding: 20px; background: var(--soft); border-right: 1px solid var(--line); }
-.walkthrough .step .title { font-size: 22px; line-height: 1.35; }
-.walkthrough .stepTop { margin-bottom: 12px; }
+.walkthrough .step .title { font-size: 18px; line-height: 1.5; font-weight: 600; }
+.walkthrough .stepTop { grid-template-columns: minmax(0, 1fr) auto; margin-bottom: 0; }
+.walkthrough .number { display: none; }
+.stepCounter { color: var(--muted); font: 12px var(--mono-font, monospace); margin: 0 0 12px; }
+.walkthrough .stepApps { margin: 6px 5px 20px; min-height: 24px; font-size: 12px; }
 .walkthrough .blocks, .walkthrough .instructions > [data-variable-field="description"] { margin-left: 0; }
 .walkthrough .block { grid-template-columns: minmax(0, 1fr); margin: 8px 0; }
-.walkthrough .kindLabel { grid-column: 1; grid-row: 2; opacity: 0; height: 0; overflow: hidden; }
+.walkthrough .kindLabel { grid-column: 1; grid-row: 3; opacity: 0; height: 0; overflow: hidden; }
+.walkthrough .block[data-kind="check"] > .kindLabel { grid-row: 3; }
 .walkthrough .block:hover .kindLabel, .walkthrough .block:focus-within .kindLabel { opacity: 1; height: auto; overflow: visible; }
-.walkthrough .stepControls > .grip { opacity: 1; pointer-events: auto; }
+.walkthrough .stepControls { left: -24px; }
+.walkthrough .stepControls > .grip { opacity: 0; pointer-events: none; }
+.walkthrough .step:hover .stepControls > .grip, .walkthrough .step:focus-within .stepControls > .grip { opacity: 1; pointer-events: auto; }
+.walkthrough .stepMenu { left: 24px; }
+.walkthrough .stepBehavior { margin-left: 0; }
+.mapView .stepLayout { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: start; gap: 20px; }
+.map { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; color: var(--muted); }
+.editor .map > button { justify-content: flex-start; text-align: left; width: 100%; min-height: 64px; padding: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; gap: 12px; }
+.editor .map > button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+.map > button > span { color: var(--muted); font: 11px var(--mono-font, monospace); }
+.mapView .stepBody { grid-template-columns: minmax(0, 1fr); }
+.mapView .instructions { grid-column: 1; grid-row: 1; }
+.mapView .source { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--line); }
 @container workflow-editor (max-width: 760px) {
   .walkthrough .stepBody { grid-template-columns: minmax(0, 1fr); }
-  .walkthrough .instructions { grid-column: 1; grid-row: 1; padding: 20px 16px 20px 38px; }
+  .walkthrough .instructions { grid-column: 1; grid-row: 1; padding: 16px; }
   .walkthrough .source { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--line); padding: 16px; }
-  .walkthroughNavigation { margin-left: 0; flex: 1; justify-content: space-between; }
+  .mapView .stepLayout { grid-template-columns: minmax(0, 1fr); }
+  .stepsHeading { gap: 8px; }
+  .editor .viewTools button { padding: 6px 8px; font-size: 12px; }
 }

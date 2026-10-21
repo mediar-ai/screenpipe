@@ -20,6 +20,9 @@ import {
   PanelsTopLeft,
   ListOrdered,
   X,
+  GitBranch,
+  Image,
+  ImageOff,
 } from "lucide-react";
 import type { WorkflowMap, WorkflowStage } from "./model";
 import {
@@ -94,10 +97,11 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
     return initial;
   });
   const exports = useWorkflowDocumentExports(draft, downloadDocument);
-  const [view, setView] = useState<"steps" | "walkthrough">("walkthrough");
+  const [view, setView] = useState<"steps" | "walkthrough" | "map">("walkthrough");
   const [selectedStep, setSelectedStep] = useState(draft.stages[0]?.key);
   const stepIndex = Math.max(0, draft.stages.findIndex(stage => stage.key === selectedStep));
-  const walkthrough = !stepsOnly && view === "walkthrough";
+  const walkthrough = !stepsOnly && view !== "steps";
+  const [showEvidence, setShowEvidence] = useState(true);
   const unchangedStages = draft.stages.length === workflow.stages.length && draft.stages.every((stage, index) => stage.sourceIndex === index && isUnchangedStage(stage, workflow.stages[index]));
   const [panel, setPanel] = useState<"variables" | "history" | "details" | null>(null);
   useEffect(()=>{
@@ -215,11 +219,11 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
     closeStepMenu(false);
     focusField(`Step ${index + 1} title`);
   }
-  function addDetail(index: number) {
+  function addDetail(index: number, kind: StageEdit["procedure"][number]["kind"] = singleCheck ? "check" : "action") {
     const stage = draft.stages[index];
     if (stage.procedure.length >= 100 || (singleCheck && stage.procedure.length)) return;
     stageChange(index, { ...stage, procedure: [...stage.procedure,
-      { key: crypto.randomUUID(), id: crypto.randomUUID(), sourceIndex: null, kind: singleCheck ? "check" : "action", text: "" }],
+      { key: crypto.randomUUID(), id: crypto.randomUUID(), sourceIndex: null, kind, text: "" }],
     });
     closeStepMenu(false);
     focusField(`Block ${stage.procedure.length + 1} in step ${index + 1}`);
@@ -311,7 +315,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
   return (
     <section
       ref={editorRoot}
-      className={`${styles.editor} ${walkthrough ? styles.walkthrough : ""} ${panel ? styles.withPanel : ""}`}
+      className={`${styles.editor} ${!stepsOnly ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${view === "map" && !stepsOnly ? styles.mapView : ""} ${!showEvidence || !renderSource ? styles.noEvidence : ""} ${panel ? styles.withPanel : ""}`}
       onMouseUp={event => {
         const selection = window.getSelection(); const value = selection?.toString().trim();
         if (!value || value.length > 1000 || !event.currentTarget.contains(selection?.anchorNode ?? null) || !event.currentTarget.contains(selection?.focusNode ?? null)) return;
@@ -381,29 +385,39 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
         <div className={styles.intro}>
           <div className={styles.titleRow}>
           {stepsOnly ? <h1 className={styles.title}>{workflow.title}</h1> : <Text title label="Workflow title" value={draft.title} onChange={title => change({ ...draft, title })} />}
-          <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={unchangedStages ? workflow.timing : null}
-            measured={unchangedStages && workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />
+          {stepsOnly && <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={unchangedStages ? workflow.timing : null}
+            measured={unchangedStages && workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />}
           </div>
-          {stepsOnly ? <p className={styles.readOnlyText}>{workflow.description}</p> : <Text label="Workflow description" value={draft.description} onChange={description => change({ ...draft, description })} />}
+          <div hidden={walkthrough}>{stepsOnly ? <p className={styles.readOnlyText}>{workflow.description}</p> : <Text label="Workflow description" value={draft.description} onChange={description => change({ ...draft, description })} />}</div>
+          {!stepsOnly && <div className={styles.metadata}>
+            <span>{draft.stages.length} steps</span>
+            {unchangedStages && (workflow.timing || workflow.durationSource === "measured-meeting") ? <TimingDisclosure showDuration label="Workflow timing" value={workflow.timing} measured={workflow.durationSource === "measured-meeting" ? {minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0} : undefined} /> : <span>Time not measured</span>}
+            <button type="button" onClick={() => setPanel(panel === "details" ? null : "details")} aria-expanded={panel === "details"}><Info size={16} />Workflow details</button>
+            {renderSource && <button type="button" aria-pressed={!showEvidence} onClick={() => setShowEvidence(value => !value)}>{showEvidence ? <Image size={16} /> : <ImageOff size={16} />}{showEvidence ? "Screenshots on" : "Screenshots off"}</button>}
+          </div>}
         </div>
         <label className={styles.endpoint} hidden={walkthrough}>
           Starts when
           {stepsOnly ? <span className={styles.readOnlyText}>{workflow.trigger}</span> : <Text label="Workflow trigger" value={draft.trigger} onChange={trigger => change({ ...draft, trigger })} />}
         </label>
         <div className={styles.stepsHeading}>
-          {stepsOnly ? <strong>Steps</strong> : <div role="group" aria-label="Workflow view" className={styles.viewSwitch}>
-            <button type="button" aria-pressed={view === "walkthrough"} onClick={() => setView("walkthrough")}><PanelsTopLeft size={16} aria-hidden="true" />Walkthrough</button>
-            <button type="button" aria-pressed={view === "steps"} onClick={() => setView("steps")}><ListOrdered size={16} aria-hidden="true" />Steps</button>
-          </div>}
-        {walkthrough && draft.stages.length > 0 && <nav aria-label="Walkthrough navigation" className={styles.walkthroughNavigation}>
-          <button type="button" disabled={stepIndex === 0} onClick={() => chooseStep(stepIndex - 1)}><ChevronLeft size={16} />Previous</button>
-          <span role="status" aria-live="polite">Step {stepIndex + 1} of {draft.stages.length}</span>
-          <button type="button" disabled={stepIndex === draft.stages.length - 1} onClick={() => chooseStep(stepIndex + 1)}>Next<ChevronRight size={16} /></button>
-        </nav>}
-          {walkthrough && draft.stages.length > 0 && <select aria-label="Walkthrough step" value={draft.stages[stepIndex].key} onChange={event => chooseStep(draft.stages.findIndex(stage => stage.key === event.target.value))}>
-            {draft.stages.map((stage, index) => <option key={stage.key} value={stage.key}>{index + 1}. {stage.name || "Untitled step"}</option>)}
-          </select>}
+          {stepsOnly ? <strong>Steps</strong> : <>
+            <span className={styles.workflowTab}>Workflow</span>
+            <div className={styles.viewTools}>
+              <div role="group" aria-label="Workflow view" className={styles.viewSwitch}>
+                {([{ value: "walkthrough", label: "Walkthrough", icon: PanelsTopLeft }, { value: "map", label: "Map", icon: GitBranch }, { value: "steps", label: "Steps", icon: ListOrdered }] as const).map(({value, label, icon: Icon}) => <button key={value} type="button" aria-label={label} title={label} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={16} aria-hidden="true" /><span hidden={view !== value}>{label}</span></button>)}
+              </div>
+              <button type="button" aria-label="Variables" title="Variables" aria-expanded={panel === "variables"} onClick={() => setPanel(panel === "variables" ? null : "variables")}><Braces size={16} /></button>
+            </div>
+          </>}
         </div>
+        <div className={styles.stepLayout}>
+        {!stepsOnly && view === "map" && <nav className={styles.map} aria-label="Workflow map">
+          {draft.stages.map((stage, index) => <Fragment key={stage.key}>
+            {index > 0 && <ArrowDown size={16} aria-hidden="true" />}
+            <button type="button" aria-label={`Go to step ${index + 1}: ${stage.name || "Untitled step"}`} aria-pressed={index === stepIndex} onClick={() => chooseStep(index)}><span>{String(index + 1).padStart(2,"0")}</span>{stage.name || "Untitled step"}</button>
+          </Fragment>)}
+        </nav>}
         <div className={styles.steps}>
           {draft.stages.map((stage, index) => (
             <Fragment key={stage.key}>
@@ -438,6 +452,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
             >
               <div className={styles.stepBody}>
               <div className={styles.instructions}>
+              {walkthrough && <p className={styles.stepCounter} role="status" aria-live="polite">Step {index + 1} of {draft.stages.length}</p>}
               <div className={styles.stepTop}>
                 <div data-step-actions data-open={stepMenu === stage.key || undefined} className={styles.stepControls}
                   onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setStepMenu(null); }}
@@ -486,6 +501,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
                 {stepMenu === stage.key && <div className={styles.stepMenu} role="dialog" aria-label={`Actions for step ${index + 1}`}>
                   <button type="button" disabled={draft.stages.length >= 100} onClick={() => addStage(index + 1)}><Plus size={15} />Add step below</button>
                   {(!singleCheck || !stage.procedure.length) && <button type="button" disabled={stage.procedure.length >= 100} onClick={() => addDetail(index)}><Plus size={15} />{singleCheck ? "Add expected result" : "Add block"}</button>}
+                  {!stepsOnly && !stage.procedure.some(block => block.kind === "check") && <button type="button" disabled={stage.procedure.length >= 100} onClick={() => addDetail(index, "check")}><Plus size={15} />Add expected result</button>}
                   {!stepsOnly && <button type="button" onClick={()=>{setExecutionOpen(stage.key);closeStepMenu(false);requestAnimationFrame(()=>editorRoot.current?.querySelector<HTMLElement>(`[aria-label="Details for step ${index + 1}"] [contenteditable=true]`)?.focus());}}>Execution details and links</button>}
                   <button type="button" aria-label={`Move step ${index + 1} up`} disabled={index === 0} onClick={() => { closeStepMenu(); moveStage(index, index - 1); }}><ArrowUp size={15} />Move up</button>
                   <button type="button" aria-label={`Move step ${index + 1} down`} disabled={index === draft.stages.length - 1} onClick={() => { closeStepMenu(); moveStage(index, index + 1); }}><ArrowDown size={15} />Move down</button>
@@ -513,6 +529,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
                 </div>
               </div>
 
+              {!stepsOnly && <p className={styles.stepApps}>{(stage.sourceIndex !== null ? workflow.stages[stage.sourceIndex]?.apps : [])?.join(" · ")}</p>}
               <div data-variable-field="description"><Text
                 rich
                 label={`Step ${index + 1} description`}
@@ -525,6 +542,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
               <div className={styles.blocks}>
                 {stage.procedure.map((detail, detailIndex) => (
                   <div
+                    data-kind={detail.kind}
                     className={`${styles.block} ${blockDragOver === `${index}:${detailIndex}` ? styles.blockDrop : ""}`}
                     data-variable-field={`block/${detail.id ?? `block-${detailIndex}`}`}
                     key={detail.key}
@@ -631,6 +649,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
                       </select>
                       <ChevronDown size={12} aria-hidden="true" />
                     </div>
+                    {!stepsOnly && detail.kind === "check" && <span className={styles.expectedLabel}>Expected result</span>}
                     <Text
                       rich
                       label={`Block ${detailIndex + 1} in step ${index + 1}`}
@@ -654,6 +673,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
                 disabled={stage.procedure.length >= 100} onClick={() => addDetail(index)}>
                 <Plus size={14} aria-hidden="true" />{singleCheck ? "Add expected result" : "Add detail"}
               </button>}
+              {!stepsOnly && <button type="button" className={styles.stepBehavior} aria-expanded={executionOpen === stage.key} onClick={event => {stepMenuTrigger.current = event.currentTarget;setExecutionOpen(executionOpen === stage.key ? null : stage.key);}}><Plus size={14} />Step behavior</button>}
               {!stepsOnly && <section className={styles.execution} hidden={executionOpen !== stage.key} aria-label={`Details for step ${index + 1}`} onKeyDown={event => { if (event.key === "Escape") { setExecutionOpen(null); stepMenuTrigger.current?.focus(); } }}>
                 <header><strong>Step details</strong><button type="button" aria-label="Close step details" onClick={() => {setExecutionOpen(null);stepMenuTrigger.current?.focus();}}><X size={16} /></button></header>
                 {Object.entries(executionFields).map(([field,label])=><div key={field} data-variable-field={field}><label>{label}</label><WorkflowRichText label={`${label} for step ${index+1}`} value={stage[field as keyof typeof executionFields] ?? ""} onChange={value=>stageChange(index,{...stage,[field]:value})}/></div>)}
@@ -661,13 +681,18 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
               </section>}
               {stage.linkedWorkflowId && <button type="button" disabled={dirty || saving || !relatedWorkflows.some(w=>w.id===stage.linkedWorkflowId)} onClick={()=>openRelated?.(stage.linkedWorkflowId!)}>Open linked workflow: {relatedWorkflows.find(w=>w.id===stage.linkedWorkflowId)?.title ?? "Unavailable"}</button>}
               </div>
-              {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && renderSource && <div className={styles.source} style={stage.imageLayout?.beforeText ? { order: -1 } : undefined}>{renderSource?.({ ...workflow.stages[stage.sourceIndex], imageLayout: stage.imageLayout }, layout => stageChange(index, { ...stage, imageLayout: layout }))}</div>}
+              {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && renderSource && <div className={styles.source} hidden={!stepsOnly && !showEvidence} style={stage.imageLayout?.beforeText ? { order: -1 } : undefined}>{renderSource?.({ ...workflow.stages[stage.sourceIndex], imageLayout: stage.imageLayout }, layout => stageChange(index, { ...stage, imageLayout: layout }))}</div>}
               </div>
+              {walkthrough && <nav aria-label="Walkthrough navigation" className={styles.walkthroughNavigation}>
+                <button type="button" disabled={index === 0} onClick={() => chooseStep(index - 1)}><ChevronLeft size={16} />Previous</button>
+                <span>{index + 1} / {draft.stages.length}</span>
+                <button type="button" disabled={index === draft.stages.length - 1} onClick={() => chooseStep(index + 1)}>Next<ChevronRight size={16} /></button>
+              </nav>}
             </article>
             </Fragment>
           ))}
         </div>
-
+        </div>
         <button
           type="button"
           className={styles.addStep}

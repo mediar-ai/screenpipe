@@ -34,7 +34,8 @@ it("shows one editable step, bounds navigation, and never saves a view change", 
   expect(title(3)).toBeVisible();
   expect(button("Next")).toBeDisabled();
   expect(screen.getByText("Step 3 of 3")).toBeVisible();
-  fireEvent.change(screen.getByRole("combobox", { name: "Walkthrough step" }), { target: { value: screen.getByRole("option", { name: /^1\./ }).getAttribute("value") } });
+  fireEvent.click(button("Previous"));
+  fireEvent.click(button("Previous"));
   expect(title(1)).toBeVisible();
   expect(change).not.toHaveBeenCalled();
   expect(save).not.toHaveBeenCalled();
@@ -114,6 +115,34 @@ it("keeps the same evidence mounted while switching presentation", () => {
   fireEvent.click(button("Next"));
   fireEvent.click(button("Previous"));
   expect(screen.getByRole("img", { name: source.stages[0].name })).toBe(image);
+});
+
+it("adds an expected result using the existing check-block save contract", () => {
+  const { change } = editor();
+  fireEvent.click(button("Step 1 actions"));
+  fireEvent.click(button("Add expected result"));
+  expect(screen.getByText("Expected result", { exact: true })).toBeVisible();
+  expect(change.mock.lastCall![0].stages[0].procedure.at(-1)).toMatchObject({ kind: "check", text: "" });
+});
+
+it("uses the same selected step in Map and lets screenshots be hidden without editing the draft", () => {
+  const source = workflow(), change = vi.fn();
+  render(<WorkflowEditor workflow={source} save={vi.fn()} onDraftChange={change} sessionRecovery={false} saveDisabled renderSource={stage => <img alt={stage.name} src={stage.screenshot!.dataUrl} />} />);
+  const image = screen.getByRole("img", { name: source.stages[0].name });
+  fireEvent.click(button("Screenshots on"));
+  expect(image).not.toBeVisible();
+  expect(button("Screenshots off")).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(button("Map"));
+  fireEvent.click(button(`Go to step 3: ${source.stages[2].name}`));
+  expect(title(3)).toBeVisible();
+  fireEvent.click(button("Walkthrough"));
+  expect(title(3)).toBeVisible();
+  expect(button("Next")).toBeDisabled();
+  fireEvent.click(button("Screenshots off"));
+  fireEvent.click(button("Previous"));
+  fireEvent.click(button("Previous"));
+  expect(screen.getByRole("img", { name: source.stages[0].name })).toBe(image);
+  expect(change).not.toHaveBeenCalled();
 });
 
 it("enlarges an existing screenshot without selecting, deleting or reordering it", () => {
