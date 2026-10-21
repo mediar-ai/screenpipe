@@ -15,12 +15,7 @@ import {
   Braces,
   History,
   Info,
-  ChevronLeft,
-  ChevronRight,
-  PanelsTopLeft,
-  ListOrdered,
   X,
-  GitBranch,
   Image,
   ImageOff,
 } from "lucide-react";
@@ -40,6 +35,7 @@ import { WorkflowVariablePanel, type VariableQuote } from "./workflow-variable-p
 import { WorkflowVersionPanel } from "./workflow-version-panel";
 import { executionFields, variableId } from "./workflow-variables";
 import styles from "./workflow-editor.module.css";
+import { WorkflowReadingControls, WorkflowReadingMap, WorkflowReadingNavigation, type WorkflowReadingView, type WorkflowMapRoute } from "./workflow-reading-views";
 import { WorkflowMoreActions, type WorkflowSecondaryAction } from "./workflow-more-actions";
 import { useWorkflowDocumentExports } from "./workflow-document-exports";
 import type { DownloadDocument } from "./document-export";
@@ -71,6 +67,9 @@ export type WorkflowEditorOptions = {
   relatedWorkflows?: WorkflowMap[];
   openRelated?: (id: string) => void;
   stepsOnly?: boolean;
+  /** Enable reading modes without enabling local-only document editing. */
+  readingModes?: boolean;
+  mapRoutes?: WorkflowMapRoute[];
   /** Canonical cloud steps have one expected-result field. */
   singleCheck?: boolean;
   initialDraft?: WorkflowEdit;
@@ -78,7 +77,7 @@ export type WorkflowEditorOptions = {
   sessionRecovery?: boolean;
   saveDisabled?: boolean;
 };
-export function WorkflowEditor({ workflow, save, actions, secondaryActions = [], downloadDocument, renderSource, relatedWorkflows = [], openRelated, stepsOnly = false, singleCheck = false, initialDraft, onDraftChange, sessionRecovery = true, saveDisabled = false }: WorkflowEditorOptions & {
+export function WorkflowEditor({ workflow, save, actions, secondaryActions = [], downloadDocument, renderSource, relatedWorkflows = [], openRelated, stepsOnly = false, readingModes, mapRoutes, singleCheck = false, initialDraft, onDraftChange, sessionRecovery = true, saveDisabled = false }: WorkflowEditorOptions & {
   workflow: WorkflowMap;
   save: (draft: WorkflowEdit) => Promise<WorkflowMap>;
   actions?: ReactNode;
@@ -97,10 +96,11 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
     return initial;
   });
   const exports = useWorkflowDocumentExports(draft, downloadDocument);
-  const [view, setView] = useState<"steps" | "walkthrough" | "map">("walkthrough");
+  const [view, setView] = useState<WorkflowReadingView>("walkthrough");
   const [selectedStep, setSelectedStep] = useState(draft.stages[0]?.key);
   const stepIndex = Math.max(0, draft.stages.findIndex(stage => stage.key === selectedStep));
-  const walkthrough = !stepsOnly && view !== "steps";
+  const viewsEnabled = readingModes ?? !stepsOnly;
+  const walkthrough = viewsEnabled && view !== "steps";
   const [showEvidence, setShowEvidence] = useState(true);
   const unchangedStages = draft.stages.length === workflow.stages.length && draft.stages.every((stage, index) => stage.sourceIndex === index && isUnchangedStage(stage, workflow.stages[index]));
   const [panel, setPanel] = useState<"variables" | "history" | "details" | null>(null);
@@ -315,7 +315,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
   return (
     <section
       ref={editorRoot}
-      className={`${styles.editor} ${!stepsOnly ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${view === "map" && !stepsOnly ? styles.mapView : ""} ${!showEvidence || !renderSource ? styles.noEvidence : ""} ${panel ? styles.withPanel : ""}`}
+      className={`${styles.editor} ${viewsEnabled ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${view === "map" && viewsEnabled ? styles.mapView : ""} ${!showEvidence || !renderSource ? styles.noEvidence : ""} ${panel ? styles.withPanel : ""}`}
       onMouseUp={event => {
         const selection = window.getSelection(); const value = selection?.toString().trim();
         if (!value || value.length > 1000 || !event.currentTarget.contains(selection?.anchorNode ?? null) || !event.currentTarget.contains(selection?.focusNode ?? null)) return;
@@ -400,24 +400,9 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
           Starts when
           {stepsOnly ? <span className={styles.readOnlyText}>{workflow.trigger}</span> : <Text label="Workflow trigger" value={draft.trigger} onChange={trigger => change({ ...draft, trigger })} />}
         </label>
-        <div className={styles.stepsHeading}>
-          {stepsOnly ? <strong>Steps</strong> : <>
-            <span className={styles.workflowTab}>Workflow</span>
-            <div className={styles.viewTools}>
-              <div role="group" aria-label="Workflow view" className={styles.viewSwitch}>
-                {([{ value: "walkthrough", label: "Walkthrough", icon: PanelsTopLeft }, { value: "map", label: "Map", icon: GitBranch }, { value: "steps", label: "Steps", icon: ListOrdered }] as const).map(({value, label, icon: Icon}) => <button key={value} type="button" aria-label={label} title={label} aria-pressed={view === value} onClick={() => setView(value)}><Icon size={16} aria-hidden="true" /><span hidden={view !== value}>{label}</span></button>)}
-              </div>
-              <button type="button" aria-label="Variables" title="Variables" aria-expanded={panel === "variables"} onClick={() => setPanel(panel === "variables" ? null : "variables")}><Braces size={16} /></button>
-            </div>
-          </>}
-        </div>
+        {viewsEnabled ? <WorkflowReadingControls view={view} change={setView} variables={!stepsOnly ? { open: panel === "variables", toggle: () => setPanel(panel === "variables" ? null : "variables") } : undefined} /> : <div className={styles.stepsHeading}><strong>Steps</strong></div>}
         <div className={styles.stepLayout}>
-        {!stepsOnly && view === "map" && <nav className={styles.map} aria-label="Workflow map">
-          {draft.stages.map((stage, index) => <Fragment key={stage.key}>
-            {index > 0 && <ArrowDown size={16} aria-hidden="true" />}
-            <button type="button" aria-label={`Go to step ${index + 1}: ${stage.name || "Untitled step"}`} aria-pressed={index === stepIndex} onClick={() => chooseStep(index)}><span>{String(index + 1).padStart(2,"0")}</span>{stage.name || "Untitled step"}</button>
-          </Fragment>)}
-        </nav>}
+        {viewsEnabled && view === "map" && <WorkflowReadingMap steps={draft.stages} selected={stepIndex} choose={chooseStep} routes={mapRoutes} />}
         <div className={styles.steps}>
           {draft.stages.map((stage, index) => (
             <Fragment key={stage.key}>
@@ -529,7 +514,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
                 </div>
               </div>
 
-              {!stepsOnly && <p className={styles.stepApps}>{(stage.sourceIndex !== null ? workflow.stages[stage.sourceIndex]?.apps : [])?.join(" · ")}</p>}
+              {viewsEnabled && <p className={styles.stepApps}>{(stage.sourceIndex !== null ? workflow.stages[stage.sourceIndex]?.apps : [])?.join(" · ")}</p>}
               <div data-variable-field="description"><Text
                 rich
                 label={`Step ${index + 1} description`}
@@ -649,7 +634,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
                       </select>
                       <ChevronDown size={12} aria-hidden="true" />
                     </div>
-                    {!stepsOnly && detail.kind === "check" && <span className={styles.expectedLabel}>Expected result</span>}
+                    {viewsEnabled && detail.kind === "check" && <span className={styles.expectedLabel}>Expected result</span>}
                     <Text
                       rich
                       label={`Block ${detailIndex + 1} in step ${index + 1}`}
@@ -683,11 +668,7 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
               </div>
               {stage.sourceIndex !== null && workflow.stages[stage.sourceIndex] && renderSource && <div className={styles.source} hidden={!stepsOnly && !showEvidence} style={stage.imageLayout?.beforeText ? { order: -1 } : undefined}>{renderSource?.({ ...workflow.stages[stage.sourceIndex], imageLayout: stage.imageLayout }, layout => stageChange(index, { ...stage, imageLayout: layout }))}</div>}
               </div>
-              {walkthrough && <nav aria-label="Walkthrough navigation" className={styles.walkthroughNavigation}>
-                <button type="button" disabled={index === 0} onClick={() => chooseStep(index - 1)}><ChevronLeft size={16} />Previous</button>
-                <span>{index + 1} / {draft.stages.length}</span>
-                <button type="button" disabled={index === draft.stages.length - 1} onClick={() => chooseStep(index + 1)}>Next<ChevronRight size={16} /></button>
-              </nav>}
+              {walkthrough && <WorkflowReadingNavigation index={index} count={draft.stages.length} choose={chooseStep} />}
             </article>
             </Fragment>
           ))}
@@ -743,17 +724,28 @@ export function WorkflowEditor({ workflow, save, actions, secondaryActions = [],
 /** Read-only workflows share the editor's document layout without mounting draft
  * recovery, autosave, or editable controls. Permission changes do not change the
  * reading experience. */
-export function WorkflowDocument({ workflow, actions, secondaryActions = [], downloadDocument, sourceLabel, renderSource }: {
+export function WorkflowDocument({ workflow, actions, secondaryActions = [], downloadDocument, sourceLabel, renderSource, readingModes = false, mapRoutes }: {
   workflow: WorkflowMap;
   actions?: ReactNode;
   secondaryActions?: WorkflowSecondaryAction[];
   downloadDocument?: DownloadDocument;
   sourceLabel?: string;
+  readingModes?: boolean;
+  mapRoutes?: WorkflowMapRoute[];
   renderSource?: (stage: WorkflowStage, onImageLayoutChange?: (layout: NonNullable<WorkflowStage["imageLayout"]>) => void) => ReactNode;
 }) {
   const [selected, select] = useState("");
+  const [view, setView] = useState<WorkflowReadingView>("walkthrough");
+  const [selectedStep, setSelectedStep] = useState(0);
+  const stepIndex = Math.min(selectedStep, Math.max(0, workflow.stages.length - 1));
+  const walkthrough = readingModes && view !== "steps";
+  const root = useRef<HTMLElement>(null);
+  const chooseStep = (index: number) => {
+    setSelectedStep(index);
+    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-document-step="${index}"]`)?.focus({ preventScroll: true }));
+  };
   const exports = useWorkflowDocumentExports(workflowEdit(workflow), downloadDocument);
-  return <section className={styles.editor} aria-label="Workflow document" onClickCapture={event=>{
+  return <section ref={root} className={`${styles.editor} ${readingModes ? styles.localEditor : ""} ${walkthrough ? styles.walkthrough : ""} ${readingModes && view === "map" ? styles.mapView : ""} ${!renderSource ? styles.noEvidence : ""}`} aria-label="Workflow document" onClickCapture={event=>{
     const link=(event.target as Element).closest("a"); const id=variableId(link?.getAttribute("href") ?? "");
     if(id) {event.preventDefault();select(id);}
   }}>
@@ -768,18 +760,23 @@ export function WorkflowDocument({ workflow, actions, secondaryActions = [], dow
         <TimingDisclosure hideWhenUnknown showDuration label="Workflow timing" value={workflow.timing}
           measured={workflow.durationSource === "measured-meeting" ? { minutes: workflow.totalMinutes, samples: workflow.durationSampleCount ?? 0 } : undefined} />
       </div>
-      <p className={styles.readOnlyText}>{workflow.description}</p>
+      <p hidden={walkthrough} className={styles.readOnlyText}>{workflow.description}</p>
     </div>
-    <div className={styles.endpoint}>Starts when<span className={styles.readOnlyText}>{workflow.trigger}</span></div>
-    <div className={styles.stepsHeading}><strong>Steps</strong></div>
+    <div className={styles.endpoint} hidden={walkthrough}>Starts when<span className={styles.readOnlyText}>{workflow.trigger}</span></div>
+    {readingModes ? <WorkflowReadingControls view={view} change={setView} /> : <div className={styles.stepsHeading}><strong>Steps</strong></div>}
+    <div className={styles.stepLayout}>
+    {readingModes && view === "map" && <WorkflowReadingMap steps={workflow.stages} selected={stepIndex} choose={chooseStep} routes={mapRoutes} />}
     <div className={styles.steps}>
-      {workflow.stages.map((stage, index) => <article className={styles.step} key={index} aria-label={`Step ${index + 1}`}>
+      {workflow.stages.map((stage, index) => <article className={styles.step} key={stage.id ?? index} aria-label={`Step ${index + 1}`} hidden={walkthrough && index !== stepIndex} tabIndex={walkthrough ? -1 : undefined} data-document-step={index}>
+        <div className={styles.stepBody}>
+        <div className={styles.instructions}>
+        {walkthrough && <p className={styles.stepCounter} role="status" aria-live="polite">Step {index + 1} of {workflow.stages.length}</p>}
         <div className={styles.stepTop}>
           <span className={styles.number}>{String(index + 1).padStart(2, "0")}</span>
           <h2 className={`${styles.title} ${styles.readOnlyText}`}>{stage.name}</h2>
           <div className={styles.stepActions}><TimingDisclosure hideWhenUnknown showDuration label={`Timing for step ${index + 1}`} value={stage.timing} /></div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        {readingModes && !!stage.apps.length && <p className={styles.stepApps}>{stage.apps.join(" · ")}</p>}
         {stage.description && <WorkflowRichText label={`Step ${index + 1} description`} value={stage.description} />}
         <div className={styles.blocks}>
           {stage.procedure?.map((detail, detailIndex) => {
@@ -787,9 +784,10 @@ export function WorkflowDocument({ workflow, actions, secondaryActions = [], dow
             // reference, but do not repeat the same paragraph in the document.
             const repeatsSummary = detail.kind === "action" && detail.text.trim() === stage.description.trim();
             return <div key={detailIndex}>
-              {!repeatsSummary && <div className={styles.block}>
+              {!repeatsSummary && <div className={styles.block} data-kind={detail.kind}>
+                {readingModes && detail.kind === "check" && <span className={styles.expectedLabel}>Expected result</span>}
                 <WorkflowRichText label={`Block ${detailIndex + 1} in step ${index + 1}`} value={detail.text} />
-                {detail.kind !== "action" && <span className={styles.readOnlyKind}>{detail.kind === "check" ? "Completion check" : detail.kind}</span>}
+                {!readingModes && detail.kind !== "action" && <span className={styles.readOnlyKind}>{detail.kind === "check" ? "Completion check" : detail.kind}</span>}
               </div>}
               {detail.quote && <details className={styles.reference}>
                 <summary>{detail.userEdited || stage.userEdited ? "Original reference" : "Source excerpt"} · {detail.app}</summary>
@@ -800,12 +798,15 @@ export function WorkflowDocument({ workflow, actions, secondaryActions = [], dow
           })}
         </div>
         {Object.entries(executionFields).map(([field,label])=>stage[field as keyof typeof executionFields] ? <div key={field}><h3>{label}</h3><WorkflowRichText label={`${label} for step ${index+1}`} value={stage[field as keyof typeof executionFields]!}/></div> : null)}
-        {!!stage.apps.length && <p className={styles.stepApps}>{stage.apps.join(" · ")}</p>}
+        {!readingModes && !!stage.apps.length && <p className={styles.stepApps}>{stage.apps.join(" · ")}</p>}
+        </div>
         {renderSource && <div className={styles.source} style={stage.imageLayout?.beforeText ? { order: -1 } : undefined}>{renderSource(stage)}</div>}
         </div>
+        {walkthrough && <WorkflowReadingNavigation index={index} count={workflow.stages.length} choose={chooseStep} />}
       </article>)}
     </div>
-    <div className={styles.endpoint}>Ends with<span className={styles.readOnlyText}>{workflow.outcome}</span></div>
+    </div>
+    <div className={styles.endpoint} hidden={walkthrough}>Ends with<span className={styles.readOnlyText}>{workflow.outcome}</span></div>
     {!!workflow.variables?.length && <WorkflowVariablePanel document={workflowEdit(workflow)} selected={selected} select={select} clearQuote={()=>{}} source={()=>{}}/>}
   </section>;
 }

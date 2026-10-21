@@ -196,7 +196,7 @@
 .instructions { display: contents; }
 .instructions > .stepTop { order: -2; }
 .instructions > [data-variable-field="description"] { margin-left: 24px; }
-.execution[hidden], .editor button[hidden], .endpoint[hidden], .source[hidden] { display: none; }
+.readOnlyText[hidden], .execution[hidden], .editor button[hidden], .endpoint[hidden], .source[hidden] { display: none; }
 .execution { padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
 .execution > header { display: flex; justify-content: space-between; align-items: center; }
 .editor .stepBehavior { margin: 4px 0 0 24px; padding: 4px; gap: 6px; min-height: 36px; }
@@ -242,3 +242,7 @@
   .stepsHeading { gap: 8px; }
   .editor .viewTools button { padding: 6px 8px; font-size: 12px; }
 }
+
+.mapRoutes { display: flex; flex-direction: column; gap: 4px; align-self: stretch; min-width: 0; padding: 0 8px 8px; font-size: 12px; overflow-wrap: anywhere; }
+.mapRoutes p { margin: 0 0 4px; color: var(--ink); }
+.editor .mapRoutes button { justify-content: flex-start; text-align: left; font-size: 12px; padding: 4px; white-space: normal; overflow-wrap: anywhere; }
