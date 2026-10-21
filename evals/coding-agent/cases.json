@@ -6888,6 +6888,42 @@
         ],
         "command": "node .eval-pipe-prompt/pipe-prompt.mjs && cargo test --locked -p screenpipe-core --lib eval_pipe_prompt -- --test-threads=1"
       }
+    },
+    {
+      "id": "app-cloud-procedure-terminal-routes",
+      "name": "Retain deliberate terminal destinations when saving a cloud procedure",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "d1d5c4cb020159628c0319527b4f7583a883e1e4"
+      },
+      "base_ref": "fea47cbda9708ea6cd84959e145a734e4f4478d9",
+      "oracle_ref": "d1d5c4cb020159628c0319527b4f7583a883e1e4",
+      "oracle_paths": [
+        "packages/workflows-ui/src/cloud-workflow.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/workflows-ui/src/cloud-workflow.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "workflows",
+        "data-integrity",
+        "routing"
+      ],
+      "prompt": "Saving an existing cloud workflow can erase a deliberate stop and change where the procedure continues. Repair the existing cloud procedure edit API so an ordinary step and either decision branch retain an explicit `end` destination. Preserve links to retained step IDs when steps are reordered, and clear only destinations whose step is missing or deleted. Keep absent routes absent, retain unrelated step, branch and document metadata, apply authored content edits and the expected revision, and leave the original procedure and edit input unchanged.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/cloud-terminal-routes.test.ts",
+            "destination_path": "packages/workflows-ui/src/cloud-terminal-routes.eval.test.ts"
+          }
+        ],
+        "command": "bun test ./packages/workflows-ui/src/cloud-terminal-routes.eval.test.ts"
+      }
     }
   ]
 }

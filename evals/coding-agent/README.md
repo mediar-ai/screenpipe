@@ -2086,3 +2086,20 @@ equivalent-channel, disconnected, preserved-behavior and setup-error controls.
 Fixtures appear only at grading, with no future build-cache links. This tests
 the executor boundary, not native Pi transport, live providers, permissions,
 durable database effects, enforced host isolation or model performance.
+
+
+## Cloud procedure terminal destinations
+
+`app-cloud-procedure-terminal-routes` covers saving a cloud procedure without
+losing an explicit terminal destination on an ordinary step or either decision
+branch. Eight outcomes also retain surviving IDs through reordering, clear
+missing/deleted destinations, preserve metadata and apply edits without mutating
+inputs. The historical parent fails three terminal-route assertions and preserves
+five outcomes; the known reference passes all eight.
+
+Run `bun test evals/coding-agent/calibrate-cloud-terminal-routes.test.js` for eleven
+controls, including an equivalent implementation, unused fix, invalid-link,
+metadata and input-mutation controls, and a missing-source infrastructure error.
+The grader executes the production edit projection with synthetic documents.
+UI navigation, backend persistence, authorization, native execution, enforced
+agent isolation and model improvement are outside this case's evidence.
