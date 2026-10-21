@@ -1488,6 +1488,10 @@ async fn main() {
                 std::io::Error::other(e)
             })?;
             let search_only_startup = crate::search_only::initialize(from_autostart);
+            #[cfg(target_os = "windows")]
+            if search_only_startup {
+                tray::sync_search_visibility(&app_handle)?;
+            }
 
             #[cfg(feature = "e2e")]
             e2e::seeds::apply_settings(app.handle(), &mut store);
@@ -2271,10 +2275,8 @@ async fn main() {
             app_handle.manage(update_manager.clone()); // Register for state::<Arc<UpdatesManager>>()
 
             // Setup tray
-            if let Some(_) = app_handle.tray_by_id("screenpipe_main") {
-                if let Err(e) = tray::setup_tray(&app_handle, update_manager.update_now_menu_item_ref()) {
-                    error!("Failed to setup tray: {}", e);
-                }
+            if let Err(e) = tray::setup_tray(&app_handle, update_manager.update_now_menu_item_ref()) {
+                error!("Failed to setup tray: {}", e);
             }
 
             // Log tray icon position for diagnostics.

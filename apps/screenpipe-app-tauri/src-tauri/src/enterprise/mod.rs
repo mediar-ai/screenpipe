@@ -14,3 +14,6 @@ pub mod device_config;
 
 #[cfg(feature = "enterprise-build")]
 pub mod managed_settings;
+
+#[cfg(feature = "enterprise-build")]
+pub(crate) mod recording_events;
