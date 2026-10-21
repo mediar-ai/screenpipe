@@ -16,8 +16,9 @@ export type WorkflowSecondaryAction = {
 };
 
 /** Occasional document tools follow the Studio's single overflow menu. */
-export function WorkflowMoreActions({ actions }: { actions: WorkflowSecondaryAction[] }) {
+export function WorkflowMoreActions({ actions, label = "More workflow actions", icon: TriggerIcon = MoreHorizontal, text, align = "end" }: { actions: WorkflowSecondaryAction[]; label?: string; icon?: LucideIcon; text?: string; align?: "start" | "end" }) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState({ above: false, height: 520 });
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -36,13 +37,25 @@ export function WorkflowMoreActions({ actions }: { actions: WorkflowSecondaryAct
   }
   useEffect(() => {
     if (!open) return;
+    const position = () => {
+      const bounds = trigger.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const below = window.innerHeight - bounds.bottom - 14;
+      const above = bounds.top - 14;
+      const desired = Math.min(menu.current?.scrollHeight ?? 520, 520);
+      const upwards = below < desired && above > below;
+      setPlacement({ above: upwards, height: Math.max(40, Math.min(520, upwards ? above : below)) });
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
     const items = choices();
     items[initialFocus.current === "last" ? items.length - 1 : 0]?.focus();
     const dismiss = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
+    return () => { document.removeEventListener("pointerdown", dismiss); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
   }, [open]);
   if (!actions.length) return null;
   return <div ref={root} className={styles.root} onBlur={event => {
@@ -50,14 +63,14 @@ export function WorkflowMoreActions({ actions }: { actions: WorkflowSecondaryAct
   }} onKeyDown={event => {
     if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); }
   }}>
-    <button ref={trigger} type="button" className={styles.trigger} aria-label="More workflow actions" title="More workflow actions" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
+    <button ref={trigger} type="button" className={`${styles.trigger} ${text ? styles.textTrigger : ""}`} aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       onClick={() => { initialFocus.current = "first"; setOpen(!open); }}
       onKeyDown={event => {
         if (["ArrowDown", "ArrowUp"].includes(event.key)) {
           event.preventDefault(); initialFocus.current = event.key === "ArrowUp" ? "last" : "first"; setOpen(true);
         }
-      }}><MoreHorizontal size={18} aria-hidden="true" /></button>
-    {open && <div ref={menu} id={id} className={styles.menu} role="menu" aria-label="Workflow actions" onKeyDown={event => {
+      }}><TriggerIcon size={18} aria-hidden="true" />{text && <span>{text}</span>}</button>
+    {open && <div ref={menu} id={id} className={`${styles.menu} ${align === "start" ? styles.startMenu : ""}`} style={{ top: placement.above ? "auto" : undefined, bottom: placement.above ? "calc(100% + 6px)" : undefined, maxHeight: placement.height }} role="menu" aria-label="Workflow actions" onKeyDown={event => {
       event.stopPropagation();
       if (event.key === "Escape") { event.preventDefault(); close(true); return; }
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
@@ -69,8 +82,8 @@ export function WorkflowMoreActions({ actions }: { actions: WorkflowSecondaryAct
         if (action && !action.disabled) { event.preventDefault(); select(action); }
       }
     }}>
-      {actions.map(action => <Fragment key={action.label}>
-        {action.separatorBefore && <div role="separator" className={styles.separator} />}
+      {actions.map((action, index) => <Fragment key={action.label}>
+        {index > 0 && action.separatorBefore && <div role="separator" className={styles.separator} />}
         <button type="button" role="menuitem" tabIndex={-1} disabled={action.disabled} aria-expanded={action.expanded} onClick={() => select(action)}>
           <action.icon size={16} aria-hidden="true" /><span>{action.label}</span>{action.shortcut && <kbd aria-hidden="true">{action.shortcut}</kbd>}
         </button>

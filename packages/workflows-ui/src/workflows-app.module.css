@@ -827,3 +827,23 @@
 .workflowContext { max-width: 1180px; margin: 20px auto 0; }
 .workflowContext > summary { width: fit-content; cursor: pointer; font-size: 12px; color: var(--muted); padding: 8px 0; }
 .workflowContext > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* The workflow document uses Studio's breadcrumb bar and content insets. */
+.detailMain { padding: 32px 32px 70px; background:var(--panel); }
+.workspace:has(.detailMain) { background:var(--panel); }
+.detailTopbar { background:var(--panel); gap:12px; }
+.workflowBreadcrumb { flex:1; min-width:0; font-size:12px; color:var(--muted); }
+.workflowBreadcrumb ol { display:flex; align-items:center; gap:8px; padding:0; margin:0; list-style:none; min-width:0; }
+.workflowBreadcrumb li { display:flex; align-items:center; gap:8px; min-width:0; }
+.workflowBreadcrumb button, .documentBreadcrumb button { min-height:36px; border:0; border-radius:4px; padding:0 4px; background:transparent; color:var(--ink); font:inherit; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:4px; cursor:pointer; }
+.workflowBreadcrumb button:hover, .documentBreadcrumb button:hover { text-decoration-color:var(--ink); }
+.currentCrumb { flex:1; }
+.currentCrumb [aria-current] { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.workflowBreadcrumb .sourceControl { flex:initial; margin:0; }
+.documentBreadcrumb { display:flex; align-items:center; gap:8px; margin:0 0 24px; font-size:12px; color:var(--muted); }
+.workflowSettings { position:relative; }
+.workflowSettings > summary { display:flex; align-items:center; justify-content:center; min-width:32px; min-height:36px; border-radius:6px; cursor:pointer; color:var(--muted); list-style:none; }
+.workflowSettings > summary::-webkit-details-marker { display:none; }
+.workflowSettings[open] > summary, .workflowSettings > summary:hover { background:var(--soft); color:var(--ink); }
+.workflowSettings > div { position:absolute; z-index:30; top:calc(100% + 6px); right:0; display:flex; flex-direction:column; align-items:stretch; gap:12px; width:240px; max-width:calc(100vw - 32px); border:1px solid var(--line); border-radius:8px; padding:16px; background:var(--panel); box-shadow:0 4px 16px #00000012; }
+@media(max-width:680px) { .detailMain { padding:24px 18px 55px; } .workflowBreadcrumb .sourceCrumb { display:none; } .detailTopbar { flex-wrap:nowrap; } }

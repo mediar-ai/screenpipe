@@ -1,7 +1,7 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CloudWorkflowEditor, type CloudProcedure } from "@screenpipe/workflows-ui";
 import { cloudProcedureEdit, cloudProcedureRoutes, cloudProcedureWorkflow } from "../../../../packages/workflows-ui/src/cloud-workflow";
@@ -64,6 +64,39 @@ describe("cloud workflow reading modes", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open chat" })).not.toBeInTheDocument();
     expect(request.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+  it("makes cloud step behavior available and applies edits without losing canonical routes", async () => {
+    const value = branching();
+    value.document.steps[0].caveat = "";
+    const request = view(value);
+    await screen.findByLabelText("Step 1 title");
+    expect(screen.getByText("3 steps")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Export workflow" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Add expected result to step 1" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Step behavior", exact: true }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Exceptions", exact: true }));
+    expect(screen.getByRole("textbox", { name: "Required access for step 1" })).toHaveTextContent("Orders access");
+    expect(screen.getByRole("textbox", { name: "Exceptions for step 1" })).toHaveTextContent("");
+    expect(screen.queryByLabelText("Linked workflow")).toBeNull();
+    expect(request.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    const edit = workflowEdit(cloudProcedureWorkflow(base, value));
+    Object.assign(edit.stages[0], { requiredAccess: "Supervisor access", exceptions: "Stop on mismatch", escalation: "Ask operations", responseTemplate: "Reviewed" });
+    const saved = cloudProcedureEdit(value, edit);
+    expect(saved.document.steps[0]).toMatchObject({ required_access: "Supervisor access", caveat: "Stop on mismatch", escalation: "Ask operations", response_template: "Reviewed", decision: value.document.steps[0].decision });
+    expect(saved.document.sop_document).toEqual(value.document.sop_document);
+  });
+  it("shows view-only metadata and details without mounting edit controls", async () => {
+    view({ ...branching(), can_edit: false });
+    await screen.findByRole("heading", { name: "Review order" });
+    const trigger = screen.getByRole("button", { name: "Workflow details", exact: true });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Workflow details" })).toBeVisible();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close workflow details" }));
+    expect(screen.queryByRole("dialog", { name: "Workflow details" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Step behavior", exact: true })).toBeNull();
+    expect(within(screen.getByRole("article", { name: "Step 1", exact: true })).getByText("Orders access")).toBeVisible();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
   it("preserves explicit ends and clears only deleted destinations when editing", () => {
     const value = branching();

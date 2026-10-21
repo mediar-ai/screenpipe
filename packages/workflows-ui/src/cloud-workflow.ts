@@ -127,7 +127,7 @@ export function cloudProcedureWorkflow(base: import("./model").WorkflowMap, valu
   return {
     ...base, revision: value.revision,
     stages: value.document.steps.map(step => ({
-      id: step.id, name: step.action, description: step.detail, apps: step.app ? [step.app] : [],
+      id: step.id, name: step.action, description: step.detail, requiredAccess: step.required_access, exceptions: step.caveat, escalation: step.escalation, responseTemplate: step.response_template, apps: step.app ? [step.app] : [],
       activeMinutes: 0, waitingMinutes: 0, durationSource: "unknown" as const,
       confidence: 0, observedOccurrences: 0, observedDays: 0, evidence: [],
       procedure: step.expected_result ? [{ kind: "check" as const, text: step.expected_result, app: step.app, quote: "", timestamp: "" }] : [],
@@ -139,9 +139,11 @@ export function cloudProcedureEdit(current: CloudProcedure, edit: import("./work
     const original = stage.sourceIndex === null ? undefined : current.document.steps[stage.sourceIndex];
     return {
       id: original?.id ?? crypto.randomUUID(), kind: original?.kind ?? "action" as const,
-      app: "", caveat: "", required_access: "", escalation: "", response_template: "",
+      app: "",
       ...original, action: stage.name, detail: stage.description,
       expected_result: stage.procedure.map(p => p.text).join("\n\n"),
+      required_access: stage.requiredAccess ?? original?.required_access ?? "", caveat: stage.exceptions ?? original?.caveat ?? "",
+      escalation: stage.escalation ?? original?.escalation ?? "", response_template: stage.responseTemplate ?? original?.response_template ?? "",
     };
   });
   const ids = new Set(steps.map(s => s.id));

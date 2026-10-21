@@ -51,6 +51,7 @@ import {
   Save,
   Search,
   SlidersHorizontal,
+  Settings2,
   Share2,
   Sparkles,
   Target,
@@ -60,7 +61,7 @@ import {
   X,
   Workflow,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AppView, isPrimaryAppView } from "./navigation";
 import {
   defaultWorkflowFilters,
@@ -255,8 +256,12 @@ export function CommandPalette({ open, commands, close }: { open: boolean; comma
   );
 }
 
+const WorkflowShellContext = createContext(false);
+
 export function AppShell({
   view,
+  workflowTitle,
+  workflowParents = [],
   navigate,
   runtime,
   workflowCount,
@@ -282,6 +287,8 @@ export function AppShell({
   children,
 }: {
   view: AppView;
+  workflowTitle?: string;
+  workflowParents?: { title: string; select: () => void }[];
   navigate: (view: AppView) => void;
   runtime: WorkflowRuntime | null;
   workflowCount: number;
@@ -397,10 +404,20 @@ export function AppShell({
         {!embedded && !navigationCollapsed && <div {...navigationWidth.separatorProps} className={`${styles.navigationResize} ${navigationWidth.resizing ? styles.navigationResizing : ""}`} />}
       </aside>
       <section className={styles.workspace} data-workflows-scroll-region>
-        <header className={`${styles.topbar} ${sourceControl ? styles.sourceTopbar : ""}`} data-tauri-drag-region>
+        <header className={`${styles.topbar} ${sourceControl ? styles.sourceTopbar : ""} ${view === "workflow" ? styles.detailTopbar : ""}`} data-tauri-drag-region>
           {!nativeMacWindow && navigationToggle}
+          {view === "workflow" ? <>
+            <nav className={styles.workflowBreadcrumb} aria-label="Workflow breadcrumb"><ol>
+              <li className={styles.sourceCrumb}>{sourceControl ? <div className={styles.sourceControl}>{sourceControl}</div> : <span>{runtime?.workspace?.name || activeScope?.label || "This device"}</span>}<span aria-hidden="true">/</span></li>
+              <li><button type="button" title="Return to workflow list" onClick={() => navigate("workflows")}>Workflows</button></li>
+              {workflowParents.map((parent, index) => <li key={index}><span aria-hidden="true">/</span><button type="button" onClick={parent.select}>{parent.title}</button></li>)}
+              <li className={styles.currentCrumb}><span aria-hidden="true">/</span><span aria-current="page" title={workflowTitle}>{workflowTitle || "Workflow"}</span></li>
+            </ol></nav>
+            <button type="button" className={styles.panelToggle} aria-label="Search workflows" onClick={openCommandPalette}><Search size={16} /></button>
+          </> : <>
           <div className={styles.search}><Search size={15} /><input data-workflows-search value={query} onChange={(event) => setQuery(event.target.value)} onFocus={() => navigate("workflows")} placeholder={ui("Search workflows")} aria-label={ui("Search workflows")} />{query ? <button type="button" onClick={() => setQuery("")} aria-label={ui("Clear search")}><X size={12} /></button> : <button type="button" className={styles.commandTrigger} onMouseDown={(event) => event.preventDefault()} onClick={openCommandPalette} aria-label={ui("Open command palette")}><CommandIcon size={12} /><kbd>⌘ K</kbd></button>}</div>
           {sourceControl && <div className={styles.sourceControl}>{sourceControl}</div>}
+          </>}
           {scopes.length > 1 && <label className={styles.scopeControl}>
             {activeScope?.kind === "organization" ? <Building2 size={13} /> : <Users size={13} />}
             <select value={activeScope?.id ?? ""} onChange={(event) => setScope(event.target.value)} aria-label={ui("Workflows scope")}>
@@ -408,8 +425,7 @@ export function AppShell({
             </select>
           </label>}
           {view === "time" && <div className={styles.profilePeriod}><CalendarRange size={13} /><span>{WORKFLOW_CATALOG_DAYS}-day profile</span></div>}
-          {toolbarAccessory && <div className={styles.toolbarAccessory}>{toolbarAccessory}</div>}
-          {modelControl}
+          {view === "workflow" ? (toolbarAccessory || modelControl) && <details className={styles.workflowSettings}><summary aria-label="Workflow settings" title="Workflow settings"><Settings2 size={16} /></summary><div>{toolbarAccessory}{modelControl}</div></details> : <>{toolbarAccessory && <div className={styles.toolbarAccessory}>{toolbarAccessory}</div>}{modelControl}</>}
           {recordingStatus ?? <Pill tone={runtime?.recording ? "green" : "plain"}><span className={styles.liveDot} />{statusLabel}</Pill>}
           {resolvedAssistant && !assistantDocked && assistantMode === "sidebar" && <button className={styles.panelToggle} data-workflows-assistant-toggle
             onClick={() => window.dispatchEvent(new Event("workflows:toggle-assistant"))}
@@ -424,7 +440,7 @@ export function AppShell({
             <button key={target} className={activeView === target ? styles.embeddedNavActive : ""} onClick={() => { navigate(target); if (window.innerWidth <= 680) setNavigationCollapsed(true); }}><Icon size={14} />{label}</button>
           ))}
         </nav>}
-        <main className={styles.main}>{children}</main>
+        <main className={`${styles.main} ${view === "workflow" ? styles.detailMain : ""}`}><WorkflowShellContext.Provider value={view === "workflow"}>{children}</WorkflowShellContext.Provider></main>
       </section>
       {resolvedAssistant && <WorkflowAssistant session={pageAssistant?.session} composerAccessory={composerAccessory} active={active} platform={assistantPlatform!} context={pageAssistant?.context ?? resolvedAssistant.context} promptRequest={pageAssistant?.promptRequest} onBusyChange={pageAssistant?.onBusyChange} onDockChange={setAssistantDocked} onWidthChange={setAssistantWidth} onOpenChange={setAssistantOpen} onModeChange={setAssistantMode} headerToggle />}
     </div></PageAssistantContext.Provider>
@@ -668,6 +684,7 @@ function WorkflowCorrection({ workflow, save }: { workflow: WorkflowMap; save: (
 
 // Saved coverage notes can contain legacy capture names. Keep source quotations intact.
 export function WorkflowDetail({ breadcrumb, relatedWorkflows, openRelated, editorOptions, sourceLabel, observationsAvailable = true, canSaveAnswers, composerAccessory, active, onAnswersSaved, workflow, navigate, platform, workProfile, saveCorrection, saveEdits, onShareWorkflow, onShareDocument, workflowAgentActions }: { breadcrumb?: React.ReactNode; relatedWorkflows?: WorkflowMap[]; openRelated?: (id: string) => void; editorOptions?: WorkflowEditorOptions; sourceLabel?: string; observationsAvailable?: boolean; canSaveAnswers: boolean; composerAccessory?: WorkflowsAppProps["composerAccessory"]; active: boolean; onAnswersSaved: (workflow: WorkflowMap) => void; workflow: WorkflowMap | null; navigate: (view: AppView) => void; platform: WorkflowsPlatform; workProfile: WorkProfile | null; saveCorrection?: (note: string) => Promise<void>; saveEdits?: (draft: WorkflowEdit) => Promise<WorkflowMap>; onShareWorkflow?: WorkflowsAppProps["onShareWorkflow"]; onShareDocument?: WorkflowsAppProps["onShareDocument"]; workflowAgentActions?: WorkflowsAppProps["workflowAgentActions"] }) {
+  const shellNavigation = useContext(WorkflowShellContext);
   const ui = useGT();
   const [guideOpen, setGuideOpen] = useState(false);
   const [hasGuide, setHasGuide] = useState(false);
@@ -743,9 +760,9 @@ export function WorkflowDetail({ breadcrumb, relatedWorkflows, openRelated, edit
   ];
   return (
     <>
-      <button className={styles.backButton} onClick={() => navigate("workflows")}><ArrowLeft size={14} />All workflows</button>
-      {breadcrumb}
-      {saveEdits ? <WorkflowEditor {...editorOptions} relatedWorkflows={relatedWorkflows} openRelated={openRelated} key={workflow.id || workflow.title} workflow={workflow} save={saveEdits} actions={workflowActions} secondaryActions={secondaryActions} downloadDocument={platform.library?.downloadDocument} renderSource={observationsAvailable ? (stage, onImageLayoutChange) => <WorkflowStepEvidence workflow={workflow} stage={stage} platform={platform} onImageLayoutChange={onImageLayoutChange} /> : undefined} /> : <WorkflowDocument workflow={workflow} actions={workflowActions} secondaryActions={secondaryActions} downloadDocument={platform.library?.downloadDocument} sourceLabel={sourceLabel} readingModes={editorOptions?.readingModes} mapRoutes={editorOptions?.mapRoutes}
+      {!shellNavigation && <nav className={styles.documentBreadcrumb} aria-label="Workflow breadcrumb"><button type="button" onClick={() => navigate("workflows")}>Workflows</button><span aria-hidden="true">/</span><span aria-current="page">{workflow.title}</span></nav>}
+      {!shellNavigation && breadcrumb}
+      {saveEdits ? <WorkflowEditor {...editorOptions} relatedWorkflows={relatedWorkflows} openRelated={openRelated} key={workflow.id || workflow.title} workflow={workflow} save={saveEdits} actions={workflowActions} secondaryActions={secondaryActions} downloadDocument={platform.library?.downloadDocument} renderSource={observationsAvailable ? (stage, onImageLayoutChange) => <WorkflowStepEvidence workflow={workflow} stage={stage} platform={platform} onImageLayoutChange={onImageLayoutChange} /> : undefined} /> : <WorkflowDocument workflow={workflow} actions={workflowActions} secondaryActions={secondaryActions} downloadDocument={platform.library?.downloadDocument} sourceLabel={sourceLabel} readingModes={editorOptions?.readingModes ?? !editorOptions?.stepsOnly} reviewLabel={editorOptions?.reviewLabel ?? (workflow.reviewStatus === "reviewed" ? "Reviewed" : workflow.reviewStatus === "needs-edits" ? "Needs edits" : "Unreviewed")} mapRoutes={editorOptions?.mapRoutes}
         renderSource={observationsAvailable ? stage => <WorkflowStepEvidence workflow={workflow} stage={stage} platform={platform} /> : undefined} />}
       <div className={styles.workflowNotes}>
       {saveCorrection && !platform.assistant?.saveFeedback && <WorkflowCorrection key={`correction:${workflow.title}`} workflow={workflow} save={saveCorrection} />}
@@ -763,7 +780,7 @@ export function WorkflowDetail({ breadcrumb, relatedWorkflows, openRelated, edit
           throw error;
         }
       } : undefined} />}
-      <details className={styles.workflowContext}>
+      {(workflow.variations.length > 0 || actionableFriction.length > 0 || constraints.length > 0) && <details className={styles.workflowContext}>
       <summary>Workflow context</summary>
       <p className={styles.workflowReviewState}>{workflow.userEditedAt ? ui("Edited by you · sources kept as references") : workflow.evidenceStatus === "supported-steps" ? ui("Source-backed steps · not execution-tested") : ui("Needs review")}</p>
       {!!workflow.variations.length && <section className={styles.panel}><h2>Variations</h2><ul className={styles.plainList}>{workflow.variations.map(item => <li key={item}>{item}</li>)}</ul></section>}
@@ -771,7 +788,7 @@ export function WorkflowDetail({ breadcrumb, relatedWorkflows, openRelated, edit
       {!!constraints.length && <section><div className={styles.sectionHeading}><div><h2>External and required constraints</h2></div></div><BottleneckList items={constraints.map((item) => ({ ...item, workflowTitle: workflow.title, repetitions: workflow.repetitions }))} numbered={false} /></section>}
 
 
-      </details>
+      </details>}
       </div>
       {skillOpen && <WorkflowSkillDialog workflow={workflow} draft={skillDraft} generating={skillGenerating} saving={skillSaving} saved={skillSaved} preview={platform.skillInstallMode === "preview"} progress={skillProgress} error={skillError} update={draft => {
         setSkillDraft(draft);
@@ -1303,7 +1320,7 @@ export function WorkflowsApp({ modelControl, readyWorkflowIds, reviewRequest, on
   }
 
   return <>
-    <AppShell sourceControl={sourceControl} hasLibrary={Boolean(platform.guides?.list || platform.library)} toolbarAccessory={toolbarAccessory} modelControl={modelControl ?? (platform.modelPreference ? <WorkflowModelControl preference={platform.modelPreference} /> : undefined)} composerAccessory={composerAccessory} active={active} fullscreen={fullscreen} navigationFooter={navigationFooter} navigationBrand={navigationBrand} recordingStatus={recordingStatus} view={view} navigate={navigate} runtime={runtime} workflowCount={knownWorkflows.length} query={query} setQuery={setQuery} activeScope={activeScope} scopes={scopes} setScope={selectScope} embedded={embedded} startWindowDrag={platform.startWindowDrag} openCommandPalette={() => setCommandPaletteOpen(true)} assistant={platform.assistant ? { platform: platform.assistant, context: view === "workflow" && activeWorkflow ? { key: `workflow:${activeWorkflow.title}`, title: activeWorkflow.title, workflow: activeWorkflow } : view === "profile" ? { key: "profile", title: ui("Context"), profile: workProfile } : { key: "workflows", title: ui("Your workflows"), catalog: workflows.map(({ title, description }) => ({ title, description })) } } : undefined}>{statusNotice}
+    <AppShell workflowTitle={activeWorkflow?.title} workflowParents={workflowTrail.map((id, i) => ({ title: workflows.find(w => w.id === id)?.title || "Previous workflow", select: () => { const index = workflows.findIndex(w => w.id === id); if (index >= 0) { setSelectedWorkflow(index); setWorkflowTrail(workflowTrail.slice(0, i)); navigate("workflow"); } } }))} sourceControl={sourceControl} hasLibrary={Boolean(platform.guides?.list || platform.library)} toolbarAccessory={toolbarAccessory} modelControl={modelControl ?? (platform.modelPreference ? <WorkflowModelControl preference={platform.modelPreference} /> : undefined)} composerAccessory={composerAccessory} active={active} fullscreen={fullscreen} navigationFooter={navigationFooter} navigationBrand={navigationBrand} recordingStatus={recordingStatus} view={view} navigate={navigate} runtime={runtime} workflowCount={knownWorkflows.length} query={query} setQuery={setQuery} activeScope={activeScope} scopes={scopes} setScope={selectScope} embedded={embedded} startWindowDrag={platform.startWindowDrag} openCommandPalette={() => setCommandPaletteOpen(true)} assistant={platform.assistant ? { platform: platform.assistant, context: view === "workflow" && activeWorkflow ? { key: `workflow:${activeWorkflow.title}`, title: activeWorkflow.title, workflow: activeWorkflow } : view === "profile" ? { key: "profile", title: ui("Context"), profile: workProfile } : { key: "workflows", title: ui("Your workflows"), catalog: workflows.map(({ title, description }) => ({ title, description })) } } : undefined}>{statusNotice}
       {/* Keep drafts, imports and the active fill alive when navigating away.
           A different scope must tear down the old request before accepting fields. */}
       <div key={`${activeScope?.kind ?? "personal"}:${activeScope?.id ?? ""}`} hidden={view !== "profile"}>
