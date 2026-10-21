@@ -236,6 +236,27 @@ async fn build_bundle(files: &[LogFile]) -> String {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn enterprise_retention_failure_survives_support_redaction() {
+        let root = tempfile::tempdir().unwrap();
+        let emitted = include_str!(
+            "../../../../crates/screenpipe-engine/tests/fixtures/retention-failure-diagnostic.txt"
+        );
+        tokio::fs::write(
+            root.path().join("screenpipe.2026-10-21.log"),
+            format!("{emitted}\npassword=hunter2\n"),
+        )
+        .await
+        .unwrap();
+        let bundle = collect_redacted_from_dirs(&[root.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(bundle.contains("retention: batch delete failed"));
+        assert!(bundle.contains("no such table: video_chunks"));
+        assert!(bundle.contains("2026-10-12 20:00:00"));
+        assert!(!bundle.contains("hunter2"));
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn required_pii_failure_survives_rotation_and_support_redaction() {
         use std::sync::Arc;
@@ -419,7 +440,9 @@ mod tests {
             .unwrap();
         assert!(report.contains("installer_elevation_failed: result=1223"));
         assert!(report.contains("recovery=original_app_relaunch_succeeded"));
-        assert!(report.contains("installer_migration_failed: operation=copy_enterprise_config windows_result=5"));
+        assert!(report.contains(
+            "installer_migration_failed: operation=copy_enterprise_config windows_result=5"
+        ));
         assert!(report.contains("recovery=original_app_relaunch_result_0"));
         assert!(!report.contains("private-person@example.com"));
     }
