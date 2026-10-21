@@ -2057,3 +2057,17 @@ including equivalent serialization, unused correct code, lost fields, lost text
 and missing-source classification. The hidden fixture needs no dependency links.
 This does not execute live SDK transport, Pi, billing or model trials, and does
 not establish enforced host isolation.
+
+### Manual pipe instructions
+
+`app-manual-pipe-instruction-preservation` runs the actual pipe manager with a
+synthetic executor across foreground, background and scheduled entrypoints.
+Fifteen outcomes cover authored Unicode instructions, preset context and the
+configured API endpoint, plus time context, run settings, output, working
+directory and empty/no-preset behavior. The parent fails six manual instruction
+outcomes and preserves nine; the historical reference passes fifteen. Run
+`bun test evals/coding-agent/calibrate-pipe-prompt.test.js` for correct, broken,
+equivalent-channel, disconnected, preserved-behavior and setup-error controls.
+Fixtures appear only at grading, with no future build-cache links. This tests
+the executor boundary, not native Pi transport, live providers, permissions,
+durable database effects, enforced host isolation or model performance.

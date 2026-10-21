@@ -6848,6 +6848,46 @@
         ],
         "command": "bun --no-env-file test packages/ai-gateway/eval-openrouter-stream.test.ts"
       }
+    },
+    {
+      "id": "app-manual-pipe-instruction-preservation",
+      "name": "Preserve pipe instructions across manual and scheduled execution",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "047d2286dbae0b5123f413bb6ae11991ac62789e"
+      },
+      "base_ref": "1b0e072719a157c83050ac92792cba4def7a33ae",
+      "oracle_ref": "047d2286dbae0b5123f413bb6ae11991ac62789e",
+      "oracle_paths": [
+        "crates/screenpipe-core/src/pipes/mod.rs"
+      ],
+      "trigger_paths": [
+        "crates/screenpipe-core/src/pipes/**",
+        "crates/screenpipe-core/src/agents/**"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "pipes",
+        "instruction-preservation"
+      ],
+      "prompt": "A manually started pipe can reach its executor without the instructions authored in pipe.md. Repair both the blocking manual entrypoint and the nonblocking background entrypoint. Preserve scheduled execution. The executor must receive the complete multiline and Unicode pipe body, the selected preset instructions and the configured local API endpoint. These may be carried in either prompt channel; no channel split or rendering helper is required. Preserve extra integration context, the current local date and the existing fresh ISO8601 time range (the preceding hour for an every-1h pipe), selected model/provider/URL/key, explicit history continuation and the default fresh-session behavior. Each invocation must complete once, successfully relay executor output and use that pipe directory. Empty bodies and pipes without a selected preset remain usable without inheriting another preset or body. Keep the existing PipeManager and AgentExecutor interfaces so synthetic executors can exercise the actual foreground, background and scheduler callers. Use only synthetic files and executors; do not run a real model, provider, capture hardware or customer data. Native Pi transport, permission enforcement, durable database effects and model quality are outside this task.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 180,
+        "fixtures": [
+          {
+            "local_path": "graders/pipe-prompt.mjs",
+            "destination_path": ".eval-pipe-prompt/pipe-prompt.mjs"
+          },
+          {
+            "local_path": "graders/pipe-prompt.fixture.rs",
+            "destination_path": ".eval-pipe-prompt/pipe-prompt.fixture.rs"
+          }
+        ],
+        "command": "node .eval-pipe-prompt/pipe-prompt.mjs && cargo test --locked -p screenpipe-core --lib eval_pipe_prompt -- --test-threads=1"
+      }
     }
   ]
 }
