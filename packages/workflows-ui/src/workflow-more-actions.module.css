@@ -12,3 +12,7 @@
 .root .menu kbd { font: inherit; font-size: 12px; }
 .root .separator { height: 1px; margin: 6px 0; background: var(--line); }
 .root button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+.root .textTrigger { width:auto; gap:8px; padding:8px; font:inherit; font-size:14px; white-space:nowrap; }
+
+.root .startMenu { right:auto; left:0; }

@@ -190,7 +190,7 @@ it("keeps update activity when opening a map and through missing or failed statu
   act(() => publish([{ id: "a", label: "Searched recordings", status: "complete" }]));
   fireEvent.click(screen.getAllByRole("button", { name: "Open map" })[0]);
   act(() => publish([{ id: "b", label: "Read saved workflows", status: "complete" }]));
-  fireEvent.click(screen.getByRole("button", { name: "All workflows" }));
+  fireEvent.click(screen.getByRole("button", { name: "Workflows", exact: true }));
   fireEvent.click(screen.getByRole("button", { name: /Show agent activity/ }));
   expect(screen.getByRole("region", { name: "Agent activity" })).toHaveTextContent("Searched recordings");
   expect(screen.getByRole("region", { name: "Agent activity" })).toHaveTextContent("Read saved workflows");

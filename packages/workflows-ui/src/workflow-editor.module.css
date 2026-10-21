@@ -187,7 +187,7 @@
 .editor a[href^="#workflow-io-"] { color:var(--ink); background:var(--soft); border-bottom:1px dashed var(--muted);border-radius:3px;padding:1px 3px;text-decoration:none; }
 
 /* Use the website's section toolbar, inspector card, and card footer. */
-.localEditor { max-width: 1024px; }
+.localEditor { max-width: 1280px; }
 .localEditor.withPanel { max-width: 1120px; }
 .metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; color: var(--muted); font-size: 12px; }
 .editor .metadata button { padding: 0; font-size: 14px; }
@@ -196,7 +196,7 @@
 .instructions { display: contents; }
 .instructions > .stepTop { order: -2; }
 .instructions > [data-variable-field="description"] { margin-left: 24px; }
-.execution[hidden], .editor button[hidden], .endpoint[hidden], .source[hidden] { display: none; }
+.readOnlyText[hidden], .execution[hidden], .editor button[hidden], .endpoint[hidden], .source[hidden] { display: none; }
 .execution { padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
 .execution > header { display: flex; justify-content: space-between; align-items: center; }
 .editor .stepBehavior { margin: 4px 0 0 24px; padding: 4px; gap: 6px; min-height: 36px; }
@@ -226,11 +226,11 @@
 .walkthrough .step:hover .stepControls > .grip, .walkthrough .step:focus-within .stepControls > .grip { opacity: 1; pointer-events: auto; }
 .walkthrough .stepMenu { left: 24px; }
 .walkthrough .stepBehavior { margin-left: 0; }
-.mapView .stepLayout { display: grid; grid-template-columns: 250px minmax(0, 1fr); align-items: start; gap: 20px; }
-.map { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; color: var(--muted); }
-.editor .map > button { justify-content: flex-start; text-align: left; width: 100%; min-height: 64px; padding: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; gap: 12px; }
-.editor .map > button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
-.map > button > span { color: var(--muted); font: 11px var(--mono-font, monospace); }
+.mapView { max-width: 1280px; }
+.mapView .stepLayout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; align-items: start; gap: 20px; }
+.focusMap .stepLayout { grid-template-columns: 380px minmax(0, 1fr); }
+.mapView .step { border-radius: 8px; overflow: clip; }
+.mapView .steps { position: sticky; top: 64px; }
 .mapView .stepBody { grid-template-columns: minmax(0, 1fr); }
 .mapView .instructions { grid-column: 1; grid-row: 1; }
 .mapView .source { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--line); }
@@ -238,7 +238,29 @@
   .walkthrough .stepBody { grid-template-columns: minmax(0, 1fr); }
   .walkthrough .instructions { grid-column: 1; grid-row: 1; padding: 16px; }
   .walkthrough .source { grid-column: 1; grid-row: 2; border-right: 0; border-top: 1px solid var(--line); padding: 16px; }
-  .mapView .stepLayout { grid-template-columns: minmax(0, 1fr); }
+  .mapView .stepLayout, .focusMap .stepLayout { grid-template-columns: minmax(0, 1fr); }
+  .mapView .steps { position: static; }
   .stepsHeading { gap: 8px; }
   .editor .viewTools button { padding: 6px 8px; font-size: 12px; }
 }
+
+.reviewLabel { display:inline-flex; align-items:center; gap:8px; color:var(--muted); font-size:14px; padding:8px; }
+.stepIdentity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 20px; margin:8px 5px 20px; color:var(--muted); font-size:12px; }
+.stepIdentity > span { display:inline-flex; align-items:center; gap:10px; }
+.stepKind { min-width:80px; }
+.detailsSheet { position:fixed; inset:0 0 0 auto; margin:0; width:400px; max-width:100vw; height:100dvh; max-height:100dvh; box-sizing:border-box; padding:24px; border:0; border-left:1px solid var(--line); background:var(--panel); color:var(--ink); overflow:auto; font:inherit; }
+.detailsSheet::backdrop { background:#00000030; }
+.detailsSheet > div { min-height:100%; }
+.detailsSheet header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.detailsSheet h2 { font-size:18px; margin:0; }
+.detailsSheet h3 { font-size:13px; margin:24px 0 8px; }
+.detailsSheet p, .detailsSheet small { font-size:12px; line-height:1.7; color:var(--muted); }
+.detailsSheet label { display:block; font-size:12px; margin:16px 0; }
+.detailsSheet select, .detailsSheet textarea { display:block; box-sizing:border-box; width:100%; min-height:36px; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); font:inherit; }
+
+.stepProperties { display:grid; gap:12px; margin:12px 5px; }
+.stepProperties:empty { display:none; }
+.stepProperties > div { min-width:0; }
+.stepProperties label, .stepProperties h3 { display:block; margin:0 0 4px; color:var(--muted); font-size:12px; font-weight:400; }
+.behaviorMenu { display:inline-block; margin:4px 0; }
+.editor .behaviorMenu > div > button { min-height:36px; padding:4px; font-size:12px; gap:6px; }

@@ -127,7 +127,7 @@ export function cloudProcedureWorkflow(base: import("./model").WorkflowMap, valu
   return {
     ...base, revision: value.revision,
     stages: value.document.steps.map(step => ({
-      name: step.action, description: step.detail, apps: step.app ? [step.app] : [],
+      id: step.id, name: step.action, description: step.detail, requiredAccess: step.required_access, exceptions: step.caveat, escalation: step.escalation, responseTemplate: step.response_template, apps: step.app ? [step.app] : [],
       activeMinutes: 0, waitingMinutes: 0, durationSource: "unknown" as const,
       confidence: 0, observedOccurrences: 0, observedDays: 0, evidence: [],
       procedure: step.expected_result ? [{ kind: "check" as const, text: step.expected_result, app: step.app, quote: "", timestamp: "" }] : [],
@@ -139,17 +139,33 @@ export function cloudProcedureEdit(current: CloudProcedure, edit: import("./work
     const original = stage.sourceIndex === null ? undefined : current.document.steps[stage.sourceIndex];
     return {
       id: original?.id ?? crypto.randomUUID(), kind: original?.kind ?? "action" as const,
-      app: "", caveat: "", required_access: "", escalation: "", response_template: "",
+      app: "",
       ...original, action: stage.name, detail: stage.description,
       expected_result: stage.procedure.map(p => p.text).join("\n\n"),
+      required_access: stage.requiredAccess ?? original?.required_access ?? "", caveat: stage.exceptions ?? original?.caveat ?? "",
+      escalation: stage.escalation ?? original?.escalation ?? "", response_template: stage.responseTemplate ?? original?.response_template ?? "",
     };
   });
   const ids = new Set(steps.map(s => s.id));
   return { ...current, revision: edit.expected_revision, document: { ...current.document, steps: steps.map(step => ({
-    ...step, next_step_id: step.next_step_id && ids.has(step.next_step_id) ? step.next_step_id : undefined,
+    ...step, next_step_id: step.next_step_id && (step.next_step_id === "end" || ids.has(step.next_step_id)) ? step.next_step_id : undefined,
     ...(step.decision ? { decision: { ...step.decision,
-      yes_step_id: step.decision.yes_step_id && ids.has(step.decision.yes_step_id) ? step.decision.yes_step_id : undefined,
-      no_step_id: step.decision.no_step_id && ids.has(step.decision.no_step_id) ? step.decision.no_step_id : undefined,
+      yes_step_id: step.decision.yes_step_id && (step.decision.yes_step_id === "end" || ids.has(step.decision.yes_step_id)) ? step.decision.yes_step_id : undefined,
+      no_step_id: step.decision.no_step_id && (step.decision.no_step_id === "end" || ids.has(step.decision.no_step_id)) ? step.decision.no_step_id : undefined,
     } } : {}),
   })) } };
+}
+
+/** Follow the cloud contract: explicit routes win, absent non-decision routes advance in document order. */
+export function cloudProcedureRoutes(value: CloudProcedure): import("./workflow-reading-views").WorkflowMapRoute[] {
+  const steps = value.document.steps;
+  const target = (id?: string): number | "end" | null => {
+    if (id === "end") return "end";
+    const index = steps.findIndex(step => step.id === id);
+    return index < 0 ? null : index;
+  };
+  return steps.map((step, index) => step.kind === "decision" ? {
+    condition: step.decision?.condition, kind: step.kind, app: step.app,
+    links: [{ label: "Yes", description: step.decision?.if_yes, target: target(step.decision?.yes_step_id) }, { label: "No", description: step.decision?.if_no, target: target(step.decision?.no_step_id) }],
+  } : { kind: step.kind, app: step.app, links: [{ label: "Then", target: target(step.next_step_id ?? steps[index + 1]?.id ?? "end") }] });
 }

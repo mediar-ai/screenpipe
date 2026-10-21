@@ -3,6 +3,8 @@
 import React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { WorkflowMoreActions } from "../../../../packages/workflows-ui/src/workflow-more-actions";
+import { Plus } from "lucide-react";
 import { WorkflowEditor } from "../../../../packages/workflows-ui/src/workflow-editor";
 import { WorkflowStepEvidence } from "../../../../packages/workflows-ui/src/workflow-step-evidence";
 import { createFixtureWorkflowsPlatform, fixtureWorkflowAnalysis } from "../../../../packages/workflows-ui/src/fixture-platform";
@@ -133,7 +135,7 @@ it("uses the same selected step in Map and lets screenshots be hidden without ed
   expect(image).not.toBeVisible();
   expect(button("Screenshots off")).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(button("Map"));
-  fireEvent.click(button(`Go to step 3: ${source.stages[2].name}`));
+  fireEvent.click(button(`03 ${source.stages[2].name}`));
   expect(title(3)).toBeVisible();
   fireEvent.click(button("Walkthrough"));
   expect(title(3)).toBeVisible();
@@ -166,4 +168,31 @@ it("enlarges an existing screenshot without selecting, deleting or reordering it
     if (originalShow) Object.defineProperty(prototype, "showModal", originalShow); else Reflect.deleteProperty(prototype, "showModal");
     if (originalClose) Object.defineProperty(prototype, "close", originalClose); else Reflect.deleteProperty(prototype, "close");
   }
+});
+
+it("keeps review, export and workflow details in the document header", () => {
+  const { change } = editor();
+  expect(button("Export workflow")).toBeVisible();
+  fireEvent.click(button("Review workflow"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Reviewed", exact: true }));
+  expect(change).toHaveBeenLastCalledWith(expect.objectContaining({ reviewStatus: "reviewed" }));
+  fireEvent.click(button("Workflow details"));
+  expect(screen.getByRole("dialog", { name: "Workflow details" })).toBeVisible();
+  fireEvent.click(button("Close workflow details"));
+  expect(screen.queryByRole("dialog", { name: "Workflow details" })).toBeNull();
+});
+
+it("keeps a low field menu within the viewport and restores focus on Escape", () => {
+  render(<WorkflowMoreActions label="Step behavior" actions={[{ label: "Expected result", icon: Plus, onSelect: vi.fn(), separatorBefore: true }]} />);
+  const trigger = button("Step behavior");
+  vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ top: 700, bottom: 736 } as DOMRect);
+  const height = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(200);
+  fireEvent.click(trigger);
+  const menu = screen.getByRole("menu");
+  expect(menu).toHaveStyle({ top: "auto", bottom: "calc(100% + 6px)", maxHeight: "520px" });
+  expect(within(menu).queryByRole("separator")).toBeNull();
+  fireEvent.keyDown(menu, { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(trigger).toHaveFocus();
+  height.mockRestore();
 });

@@ -8,7 +8,7 @@ import {
   isCloudProcedure,
   CloudWorkflowAccessError,
   type CloudProcedure,
-  cloudProcedureWorkflow, cloudProcedureEdit,
+  cloudProcedureWorkflow, cloudProcedureEdit, cloudProcedureRoutes,
   type CloudDraftStore,
   type CloudWorkflowIdentity,
 } from "./cloud-workflow";
@@ -226,7 +226,7 @@ export function CloudWorkflowEditor({
       canSaveAnswers={false} observationsAvailable={false} onAnswersSaved={() => {}}
       sourceLabel={`Your cloud workflow · Version ${saved.revision}`}
       saveEdits={editable ? save : undefined}
-      editorOptions={{ stepsOnly: true, singleCheck: true, sessionRecovery: false, saveDisabled: conflict || loading,
+      editorOptions={{ reviewLabel: saved.review.frozen || saved.review.status === "approved" ? "Approved" : saved.review.status === "unreviewed" ? "Unreviewed" : saved.review.status.replaceAll("_", " "), stepsOnly: true, readingModes: true, mapRoutes: cloudProcedureRoutes(value), singleCheck: true, sessionRecovery: false, saveDisabled: conflict || loading,
         initialDraft: workflowEdit(cloudProcedureWorkflow(workflow, value)),
         onDraftChange: edit => { if (base.current) setValue(convert(edit)); },
       }} />
