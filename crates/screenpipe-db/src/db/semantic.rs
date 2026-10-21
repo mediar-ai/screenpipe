@@ -945,7 +945,9 @@ fn semantic_context_query_builder(
              JOIN semantic_item_actors actor_sia ON actor_sia.item_id = actor_sri.item_id ",
         );
     }
-    sql.push("WHERE sr.status = 'handled' ");
+    // Spell out the partial-index predicate: SQLite does not infer it from
+    // the join. Unparsed capture history must not be scanned on every sync.
+    sql.push("WHERE f.semantic_run_id IS NOT NULL AND sr.status = 'handled' ");
     if let Some(frame_id) = query.frame_id {
         sql.push("AND f.id = ").push_bind(frame_id).push(" ");
     }
@@ -1317,4 +1319,78 @@ fn parse_identity_quality(value: &str) -> Result<IdentityQuality, sqlx::Error> {
 
 fn duration_micros_i64(duration: Duration) -> i64 {
     duration.as_micros().min(i64::MAX as u128) as i64
+}
+
+#[cfg(test)]
+mod parsed_sync_index_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn parsed_sync_does_not_scan_unparsed_capture_history() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("db.sqlite");
+        let db = DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap();
+        // Recent raw capture can be large while parsing has produced nothing.
+        db.execute_raw_sql_write("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<10000) INSERT INTO frames(timestamp) SELECT '2026-10-20T00:00:00Z' FROM n").await.unwrap();
+        for order in [Order::Ascending, Order::Descending] {
+            let query = SemanticContextQuery {
+                start_time: Some("2026-10-15T00:00:00Z".parse().unwrap()),
+                order,
+                limit: 100,
+                offset: 1,
+                ..Default::default()
+            };
+            let mut explain = semantic_context_query_builder(
+                "EXPLAIN QUERY PLAN SELECT DISTINCT f.id, f.timestamp",
+                &query,
+                None,
+            );
+            explain.push(match query.order {
+                Order::Ascending => "ORDER BY f.timestamp ASC,f.id ASC LIMIT 100 OFFSET 1",
+                Order::Descending => "ORDER BY f.timestamp DESC,f.id DESC LIMIT 100 OFFSET 1",
+            });
+            let plan: Vec<(i64, i64, i64, String)> =
+                explain.build_query_as().fetch_all(&db.pool).await.unwrap();
+            assert!(
+                plan.iter()
+                    .any(|row| row.3.contains("COVERING INDEX idx_frames_parsed_timestamp")),
+                "{plan:?}"
+            );
+            assert!(db.search_semantic_context(&query).await.unwrap().is_empty());
+            assert_eq!(db.count_semantic_context(&query).await.unwrap(), 0);
+        }
+        // Model an installed database that predates this index. Startup must
+        // apply the pending migration without changing its capture history.
+        db.execute_raw_sql_write("DROP INDEX idx_frames_parsed_timestamp")
+            .await
+            .unwrap();
+        db.execute_raw_sql_write("DELETE FROM _sqlx_migrations WHERE version=20261021170000")
+            .await
+            .unwrap();
+        db.close().await;
+        let db = DatabaseManager::new(path.to_str().unwrap(), Default::default())
+            .await
+            .unwrap();
+        let indexes: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sqlite_schema WHERE name='idx_frames_parsed_timestamp'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(indexes, 1);
+        let captures: i64 = sqlx::query_scalar("SELECT count(*) FROM frames")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(captures, 10000);
+        assert_eq!(
+            db.count_semantic_context(&SemanticContextQuery::default())
+                .await
+                .unwrap(),
+            0
+        );
+        db.close().await;
+    }
 }
