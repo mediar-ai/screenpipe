@@ -23,6 +23,7 @@ type State = {
   capture_running: boolean;
   webviews: string[];
   keep_search_after_quit: boolean;
+  tray_registered: boolean;
 };
 async function request(
   base: string,
@@ -71,6 +72,7 @@ assert(
   initial.capture_intended && initial.capture_running,
   "Start real capture before running this check",
 );
+assert(initial.tray_registered, "Normal recording has a native tray");
 const history = await request(api, "/search?limit=1&content_type=all");
 assert(
   history.data?.length > 0,
@@ -86,13 +88,26 @@ for (let cycle = 0; cycle < 2; cycle++) {
       !s.entering &&
       !s.capture_intended &&
       !s.capture_running &&
-      s.webviews.length === 0
+      s.webviews.length === 0 &&
+      !s.tray_registered
     );
   }, "Quit stops capture and destroys webviews");
   assert.equal(
     (await state()).pid,
     initial.pid,
     "Quit must retain the existing process",
+  );
+  assert.equal(
+    (await state()).tray_registered,
+    false,
+    "Quit removes the native tray registration",
+  );
+  await request(control, "/e2e/search-only/recreate-tray", "POST");
+  await Bun.sleep(1_000);
+  assert.equal(
+    (await state()).tray_registered,
+    false,
+    "Explicit tray recreation cannot resurrect search-only tray UI",
   );
   assert(
     (await request(api, "/search?limit=1&content_type=all")).data.length > 0,
@@ -136,6 +151,11 @@ for (let cycle = 0; cycle < 2; cycle++) {
     "Reopening resumes recording without a separate Start action",
   );
   assert.equal((await state()).pid, initial.pid);
+  assert.equal(
+    (await state()).tray_registered,
+    true,
+    "Manual reopen restores the native tray",
+  );
   await until(async () => {
     const resumed = await counts();
     return Date.parse(resumed.lastFrame) > Date.parse(stopped.lastFrame);
@@ -179,7 +199,8 @@ await until(async () => {
       s.search_only &&
       !s.capture_running &&
       !s.capture_intended &&
-      s.webviews.length === 0
+      s.webviews.length === 0 &&
+      !s.tray_registered
     );
   } catch {
     return false;
@@ -202,7 +223,12 @@ assert.deepEqual(
 await request(control, "/e2e/search-only/reopen", "POST");
 await until(async () => {
   const s = await state();
-  return !s.search_only && s.capture_running && s.capture_intended;
+  return (
+    !s.search_only &&
+    s.capture_running &&
+    s.capture_intended &&
+    s.tray_registered
+  );
 }, "Manual reopen after an updater restart resumes capture");
 const recordingBeforeUpdate = await state();
 await request(control, "/e2e/search-only/restart", "POST");
