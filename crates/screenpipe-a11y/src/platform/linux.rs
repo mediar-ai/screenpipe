@@ -39,6 +39,7 @@ use chrono::Utc;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use parking_lot::Mutex;
 use screenpipe_core::pii_removal::remove_pii;
+use std::collections::VecDeque;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -509,8 +510,15 @@ fn run_evdev_monitor(
     debug!("evdev monitor stopped");
 }
 
+/// How late the mouse loop can hand over a press it already read: it polls
+/// every 10 ms. A click is resolved only once the presses that happened
+/// during its settle window have reached the resolver.
+const PRESS_HANDOFF: Duration = Duration::from_millis(20);
+
 /// Emit each click once `CLICK_SETTLE` has passed, with the element it landed
-/// on. A focus change still being described is waited for until
+/// on. A focus change belongs to the last press before it: a click's window
+/// ends at the next press, so two nearby clicks never share one transition.
+/// A focus change still being described is waited for until
 /// `click + CLICK_SETTLE + ENRICH_BUDGET`; past that the click goes out
 /// without an element. A click that landed in an excluded app or window is
 /// dropped. Stops when the mouse thread drops its sender or `stop` is set.
@@ -520,23 +528,35 @@ fn run_click_resolver(
     stop: Arc<AtomicBool>,
     history: Arc<Mutex<FocusHistory>>,
 ) {
+    // Clicks already read from the channel, oldest first: they are the
+    // boundaries of the click being resolved.
+    let mut queued: VecDeque<(UiEvent, Instant)> = VecDeque::new();
     loop {
-        let (mut event, clicked_at) = match clicks.recv_timeout(Duration::from_millis(100)) {
-            Ok(click) => click,
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                if stop.load(Ordering::Relaxed) {
-                    break;
+        let (mut event, clicked_at) = match queued.pop_front() {
+            Some(click) => click,
+            None => match clicks.recv_timeout(Duration::from_millis(100)) {
+                Ok(click) => click,
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    continue;
                 }
-                continue;
-            }
-            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+            },
         };
-        let ready_at = clicked_at + CLICK_SETTLE;
+        let ready_at = clicked_at + CLICK_SETTLE + PRESS_HANDOFF;
         let now = Instant::now();
         if ready_at > now {
             thread::sleep(ready_at - now);
         }
-        match resolve_click(&history, clicked_at, &stop) {
+        queued.extend(clicks.try_iter());
+        let next_press = queued
+            .iter()
+            .map(|(_, at)| *at)
+            .filter(|at| *at > clicked_at)
+            .min();
+        match resolve_click(&history, clicked_at, next_press, &stop) {
             ClickTarget::Excluded => continue,
             ClickTarget::Element(element) => event.element = Some(element),
             ClickTarget::Nothing | ClickTarget::Wait => {}
@@ -559,14 +579,18 @@ fn press_instant(kernel_time: std::time::SystemTime) -> Instant {
 }
 
 /// The click's target, waiting for a focus record still being described.
+/// `next_press` closes the click's window (see `element_for_click_until`).
 fn resolve_click(
     history: &Mutex<FocusHistory>,
     clicked_at: Instant,
+    next_press: Option<Instant>,
     stop: &AtomicBool,
 ) -> ClickTarget {
     let deadline = clicked_at + CLICK_SETTLE + ENRICH_BUDGET;
     loop {
-        let target = history.lock().element_for_click(clicked_at);
+        let target = history
+            .lock()
+            .element_for_click_until(clicked_at, next_press);
         if !matches!(target, ClickTarget::Wait) {
             return target;
         }
@@ -1799,6 +1823,51 @@ mod tests {
         let waited = clicked_at.elapsed();
         assert!(waited >= CLICK_SETTLE + ENRICH_BUDGET, "{waited:?}");
         assert!(waited < CLICK_SETTLE + ENRICH_BUDGET + Duration::from_millis(300));
+    }
+
+    /// Louis's P3 (21/10), end to end: an empty-space click at 0 ms, a button
+    /// click at 80 ms, the button's focus at 100 ms. The first click goes out
+    /// with no element, the second with the button.
+    #[test]
+    fn nearby_clicks_through_the_resolver_get_one_element_each() {
+        use crate::platform::linux_focus::{Focus, FocusRecord};
+
+        let history = Arc::new(Mutex::new(FocusHistory::default()));
+        let empty_click = Instant::now();
+        let button_click = empty_click + Duration::from_millis(80);
+        history.lock().push(FocusRecord {
+            at: empty_click + Duration::from_millis(100),
+            key: ":1.42/org/a11y/atspi/accessible/9".to_string(),
+            app: Some("gedit".to_string()),
+            focus: Focus::Element(button("Save")),
+        });
+
+        let (click_tx, click_rx) = bounded(4);
+        let (tx, rx) = bounded(4);
+        let stop = Arc::new(AtomicBool::new(false));
+        let resolver = {
+            let stop = stop.clone();
+            let history = history.clone();
+            thread::spawn(move || run_click_resolver(click_rx, tx, stop, history))
+        };
+        for (x, at) in [(1, empty_click), (2, button_click)] {
+            let mut click = UiEvent::click(Utc::now(), 0, x, 0, 0, 1, 0);
+            click.app_name = Some("gedit".to_string());
+            click_tx.send((click, at)).unwrap();
+        }
+        drop(click_tx);
+        let first = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("first click");
+        let second = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("second click");
+        resolver.join().unwrap();
+
+        assert!(matches!(first.data, EventData::Click { x: 1, .. }));
+        assert!(first.element.is_none(), "{:?}", first.element);
+        assert!(matches!(second.data, EventData::Click { x: 2, .. }));
+        assert_eq!(second.element.and_then(|e| e.name).as_deref(), Some("Save"));
     }
 
     /// Louis's P1, end to end through the resolver: the observer still says

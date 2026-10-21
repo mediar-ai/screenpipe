@@ -12,10 +12,14 @@
 //! `object:state-changed:focused` on the AT-SPI2 bus when that happens.
 //!
 //! A [`FocusTracker`] lives exactly as long as a recording session. Its
-//! listener records every focus change the moment the signal arrives (as
-//! [`Focus::Pending`]), then enriches it under a total deadline
-//! ([`ENRICH_BUDGET`]). A click is attributed to the element that gains focus
-//! within [`CLICK_SETTLE`] after it. A click that moves no focus (empty space,
+//! listener only takes signals in: it records every focus change the moment
+//! the signal is read (as [`Focus::Pending`]) and makes no D-Bus call, so a
+//! slow app cannot shift the timestamps of the signals queued behind it. A
+//! separate enrichment thread describes each record under a total deadline
+//! ([`ENRICH_BUDGET`]) counted from the signal. A click is attributed to the
+//! element that gains focus within [`CLICK_SETTLE`] after it and before the
+//! next click: a focus change belongs to the last press before it, never to
+//! two clicks. A click that moves no focus (empty space,
 //! plain text, an element that is already focused) gets no element: the
 //! element that already had focus is not necessarily what was clicked, and an
 //! empty element is better than a wrong one. It is still dropped when focus
@@ -28,7 +32,9 @@
 //! Privacy, in the same order as the code:
 //!
 //! - exclusions are applied to the element's real owner (its AT-SPI2
-//!   application and top-level window), before any label is read. An element
+//!   application and top-level window), before any label is read, and on the
+//!   complete names: labels are truncated to [`MAX_LABEL_CHARS`] only once the
+//!   privacy decisions are taken, for what is recorded. An element
 //!   of an excluded app is recorded as [`Focus::Excluded`] with no content, and
 //!   a click resolved to it is dropped instead of being attributed to the app
 //!   the window observer last saw;
@@ -205,16 +211,32 @@ impl FocusHistory {
         self.records.clear();
     }
 
-    /// Where a click at `click_at` landed, once `CLICK_SETTLE` has elapsed.
+    /// Where a click at `click_at` landed, once `CLICK_SETTLE` has elapsed,
+    /// when no other press followed it.
+    #[cfg(test)]
     pub fn element_for_click(&self, click_at: Instant) -> ClickTarget {
+        self.element_for_click_until(click_at, None)
+    }
+
+    /// Where a click at `click_at` landed. `next_press` is the next button
+    /// press, if any: a focus change at or after it belongs to that press, so
+    /// each transition is attributed to one click only (the last press before
+    /// it). Without this, an empty-space click followed 80 ms later by a click
+    /// on a button would both receive the button.
+    pub fn element_for_click_until(
+        &self,
+        click_at: Instant,
+        next_press: Option<Instant>,
+    ) -> ClickTarget {
         // 1. The click moved focus: that element is what was clicked.
         //    Exceptions: any focus in an excluded app drops the click, and a
         //    click that activated a window gets no element (see module doc).
         let settle_end = click_at + CLICK_SETTLE;
+        let window_end = next_press.filter(|next| *next > click_at);
         let settled = || {
-            self.records
-                .iter()
-                .filter(move |r| r.at >= click_at && r.at <= settle_end)
+            self.records.iter().filter(move |r| {
+                r.at >= click_at && r.at <= settle_end && window_end.is_none_or(|end| r.at < end)
+            })
         };
         if settled().any(|r| matches!(r.focus, Focus::Excluded)) {
             return ClickTarget::Excluded;
@@ -411,6 +433,39 @@ fn listen(
     let messages = zbus::blocking::MessageIterator::for_match_rule(rule, &conn, Some(256))?;
     debug!("AT-SPI2 focus listener connected");
 
+    // Intake (this thread) and enrichment (a scoped thread) are separate:
+    // describing one element never delays reading, and timestamping, the
+    // signals queued behind it.
+    let (jobs, queued) = crossbeam_channel::bounded::<FocusSignal>(HISTORY_LEN);
+    thread::scope(|scope| {
+        let enricher = &conn;
+        scope.spawn(move || enrich(enricher, config, history, stop, queued));
+        let read = read_signals(messages, history, stop, &jobs);
+        // Closing the queue ends the enrichment thread once it is done with
+        // the record in hand.
+        drop(jobs);
+        read
+    })
+}
+
+/// A focus signal as read off the bus, waiting to be described.
+#[derive(Debug, Clone)]
+struct FocusSignal {
+    at: Instant,
+    target: Target,
+    /// detail1 of the signal; `None` when the body did not say (older
+    /// at-spi2-core), in which case the enrichment thread reads the state.
+    gained: Option<bool>,
+}
+
+/// The intake loop: timestamps each signal as it is read and records it. It
+/// makes no D-Bus call, so its timestamps stay true however slow apps are.
+fn read_signals(
+    messages: zbus::blocking::MessageIterator,
+    history: &Mutex<FocusHistory>,
+    stop: &AtomicBool,
+    jobs: &crossbeam_channel::Sender<FocusSignal>,
+) -> Result<()> {
     for message in messages {
         if stop.load(Ordering::Relaxed) {
             break;
@@ -435,8 +490,7 @@ fn listen(
             continue;
         }
         // The state that changed and detail1, gained (1) or lost (0). The
-        // body signature differs between at-spi2-core versions; when detail1
-        // cannot be read, the focused state is read instead.
+        // body signature differs between at-spi2-core versions.
         let (state, detail) = state_change(&message);
         if state.as_deref() == Some("active") {
             if detail == Some(true) {
@@ -449,21 +503,65 @@ fn listen(
         if state.as_deref() != Some("focused") {
             continue;
         }
-        let gained = detail.unwrap_or_else(|| is_focused(&conn, &target));
-        if !gained {
-            history.lock().focus_lost(at, &target.key());
-            continue;
-        }
-        // The transition is known now; describing it may take a while.
-        history.lock().focus_gained(at, &target.key());
-        let deadline = at + ENRICH_BUDGET;
-        let (app, focus) = describe_focus(&conn, &target, config, deadline);
+        take_in(
+            history,
+            jobs,
+            FocusSignal {
+                at,
+                target,
+                gained: detail,
+            },
+        );
+    }
+    Ok(())
+}
+
+/// Record a focus signal now and queue its description. Never blocks: when
+/// the enrichment thread is backlogged the record is left `Unknown`, so a
+/// click waiting on it gets no element rather than a stale one.
+fn take_in(
+    history: &Mutex<FocusHistory>,
+    jobs: &crossbeam_channel::Sender<FocusSignal>,
+    signal: FocusSignal,
+) {
+    let key = signal.target.key();
+    if signal.gained == Some(false) {
+        history.lock().focus_lost(signal.at, &key);
+        return;
+    }
+    let at = signal.at;
+    history.lock().focus_gained(at, &key);
+    if jobs.try_send(signal).is_err() {
+        history.lock().resolve(at, &key, None, Focus::Unknown);
+    }
+}
+
+/// The enrichment loop: describes queued records one by one, each under its
+/// own deadline counted from its signal. Ends when the intake closes the queue
+/// or the session stops.
+fn enrich<T: Tree + ?Sized>(
+    tree: &T,
+    config: &UiCaptureConfig,
+    history: &Mutex<FocusHistory>,
+    stop: &AtomicBool,
+    queued: crossbeam_channel::Receiver<FocusSignal>,
+) {
+    for signal in queued {
         if stop.load(Ordering::Relaxed) {
             break;
         }
-        history.lock().resolve(at, &target.key(), app, focus);
+        let key = signal.target.key();
+        let deadline = signal.at + ENRICH_BUDGET;
+        let (app, focus) = if signal.gained.is_none() && !tree.focused(&signal.target) {
+            (None, Focus::Lost)
+        } else {
+            describe_focus(tree, &signal.target, config, deadline)
+        };
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        history.lock().resolve(signal.at, &key, app, focus);
     }
-    Ok(())
 }
 
 /// The state named by an `object:state-changed:*` signal ("focused",
@@ -555,9 +653,13 @@ fn property(conn: &Connection, target: &Target, name: &str) -> Option<OwnedValue
     .ok()
 }
 
-fn string_property(conn: &Connection, target: &Target, name: &str) -> Option<String> {
+/// A string property, trimmed and complete. Privacy decisions (exclusions,
+/// password detection) are taken on this; [`non_empty_label`] bounds what is
+/// recorded afterwards.
+fn text_property(conn: &Connection, target: &Target, name: &str) -> Option<String> {
     let value: String = property(conn, target, name)?.try_into().ok()?;
-    non_empty_label(&value)
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
 fn non_empty_label(value: &str) -> Option<String> {
@@ -566,6 +668,40 @@ fn non_empty_label(value: &str) -> Option<String> {
         None
     } else {
         Some(trimmed.chars().take(MAX_LABEL_CHARS).collect())
+    }
+}
+
+/// The accessibility queries [`describe_focus`] makes. Implemented by the
+/// AT-SPI2 connection; tests describe a fake tree with it.
+trait Tree: Sync {
+    /// Name of the application owning `target`, complete.
+    fn application(&self, target: &Target) -> Option<String>;
+    fn parent(&self, target: &Target) -> Option<Target>;
+    fn role_name(&self, target: &Target) -> String;
+    fn role_id(&self, target: &Target) -> Option<u32>;
+    /// A string property, trimmed and complete (not truncated).
+    fn text(&self, target: &Target, name: &str) -> Option<String>;
+    fn focused(&self, target: &Target) -> bool;
+}
+
+impl Tree for Connection {
+    fn application(&self, target: &Target) -> Option<String> {
+        application_name(self, target)
+    }
+    fn parent(&self, target: &Target) -> Option<Target> {
+        parent(self, target)
+    }
+    fn role_name(&self, target: &Target) -> String {
+        role_name(self, target)
+    }
+    fn role_id(&self, target: &Target) -> Option<u32> {
+        role_id(self, target)
+    }
+    fn text(&self, target: &Target, name: &str) -> Option<String> {
+        text_property(self, target, name)
+    }
+    fn focused(&self, target: &Target) -> bool {
+        is_focused(self, target)
     }
 }
 
@@ -632,7 +768,7 @@ fn application_name(conn: &Connection, target: &Target) -> Option<String> {
     .body()
     .deserialize::<(String, OwnedObjectPath)>()
     .ok()?;
-    string_property(
+    text_property(
         conn,
         &Target {
             bus,
@@ -654,91 +790,95 @@ fn parent(conn: &Connection, target: &Target) -> Option<Target> {
 
 /// Describe a newly focused element: owner first, filters second, labels
 /// last. Every step checks `deadline`; past it the element is `Unknown`.
-fn describe_focus(
-    conn: &Connection,
+/// Filters and password detection see complete names; only what is recorded
+/// is truncated.
+fn describe_focus<T: Tree + ?Sized>(
+    tree: &T,
     target: &Target,
     config: &UiCaptureConfig,
     deadline: Instant,
 ) -> (Option<String>, Focus) {
     let late = || Instant::now() >= deadline;
+    // A record that waited in the queue past its deadline is not described.
+    if late() {
+        return (None, Focus::Unknown);
+    }
+    let label = |text: Option<String>| text.as_deref().and_then(non_empty_label);
 
     // 1. The owning application. Unknown owner: the filters cannot be
     //    applied, so nothing is described.
-    let Some(app) = application_name(conn, target) else {
+    let Some(app) = tree.application(target) else {
         return (None, Focus::Unknown);
     };
+    let recorded_app = non_empty_label(&app);
     if !config.should_capture_app(&app) {
-        return (Some(app), Focus::Excluded);
+        return (recorded_app, Focus::Excluded);
     }
     if late() {
-        return (Some(app), Focus::Unknown);
+        return (recorded_app, Focus::Unknown);
     }
 
     // 2. The ancestor chain (roles only), up to the application node. Its
     //    top-level window gives the title the window filters need.
     let mut hops: Vec<(Target, String)> = Vec::new();
-    let mut current = parent(conn, target);
+    let mut current = tree.parent(target);
     while let Some(node) = current {
         if hops.len() == MAX_ANCESTOR_WALK {
             break;
         }
         if late() {
-            return (Some(app), Focus::Unknown);
+            return (recorded_app, Focus::Unknown);
         }
-        let role = role_name(conn, &node);
+        let role = tree.role_name(&node);
         // The application node is the app itself, not part of the window.
         if role == "application" {
             break;
         }
-        current = parent(conn, &node);
+        current = tree.parent(&node);
         hops.push((node, role));
     }
+    // The complete title: an exclusion can match past MAX_LABEL_CHARS.
     let window_title = hops
         .iter()
         .rev()
         .find(|(_, role)| WINDOW_ROLES.contains(&role.as_str()))
-        .and_then(|(node, _)| string_property(conn, node, "Name"));
+        .and_then(|(node, _)| tree.text(node, "Name"));
     if !config.should_capture_target(&app, window_title.as_deref()) {
-        return (Some(app), Focus::Excluded);
+        return (recorded_app, Focus::Excluded);
     }
     if late() {
-        return (Some(app), Focus::Unknown);
+        return (recorded_app, Focus::Unknown);
     }
 
     // 3. The element itself. A password field stops here. Without its
     //    numeric role, a password entry cannot be ruled out: describe nothing.
-    let Some(role_id) = role_id(conn, target) else {
-        return (Some(app), Focus::Unknown);
+    let Some(role_id) = tree.role_id(target) else {
+        return (recorded_app, Focus::Unknown);
     };
     let secret = role_id == ROLE_PASSWORD_TEXT_ID;
-    let role = role_name(conn, target);
-    let name = string_property(conn, target, "Name");
+    let role = tree.role_name(target);
+    let name = tree.text(target, "Name");
     if is_password(config, &role, name.as_deref(), secret) {
+        // Decided on the complete name; passed on as `secret` so the
+        // truncated label is not checked again (and cannot slip through).
         return (
-            Some(app),
-            Focus::Element(element_context(
-                config,
-                role,
-                name,
-                None,
-                Vec::new(),
-                secret,
-            )),
+            recorded_app,
+            Focus::Element(element_context(config, role, None, None, Vec::new(), true)),
         );
     }
-    let description = string_property(conn, target, "Description");
+    let description = label(tree.text(target, "Description"));
     let mut named_hops = Vec::with_capacity(hops.len());
     for (node, role) in hops {
         if late() {
-            return (Some(app), Focus::Unknown);
+            return (recorded_app, Focus::Unknown);
         }
         named_hops.push(AncestorHop {
-            name: string_property(conn, &node, "Name"),
+            name: label(tree.text(&node, "Name")),
             role,
         });
     }
-    let element = element_context(config, role, name, description, named_hops, secret);
-    (Some(app), Focus::Element(element))
+    let element = element_context(config, role, label(name), description, named_hops, secret);
+    (recorded_app, Focus::Element(element))
 }
 
 /// `secret`: the numeric role says password entry (or could not be read).
@@ -1177,6 +1317,247 @@ mod tests {
             true,
         );
         assert_eq!(ctx.name.as_deref(), Some("Bank password"));
+    }
+
+    /// A fake AT-SPI2 tree for `describe_focus` and the enrichment thread.
+    /// Nodes are keyed by object path; `slow` delays the application lookup
+    /// of a node, like an app that answers late.
+    #[derive(Default)]
+    struct FakeTree {
+        nodes: std::collections::HashMap<String, FakeNode>,
+        slow: std::collections::HashMap<String, Duration>,
+    }
+
+    #[derive(Default, Clone)]
+    struct FakeNode {
+        app: Option<String>,
+        parent: Option<String>,
+        role: String,
+        role_id: u32,
+        name: Option<String>,
+    }
+
+    fn node(path: &str) -> Target {
+        Target {
+            bus: ":1.42".to_string(),
+            path: path.to_string(),
+        }
+    }
+
+    impl FakeTree {
+        fn add(&mut self, path: &str, parent: Option<&str>, role: &str, name: Option<&str>) {
+            self.nodes.insert(
+                path.to_string(),
+                FakeNode {
+                    app: Some("gedit".to_string()),
+                    parent: parent.map(str::to_string),
+                    role: role.to_string(),
+                    role_id: if role == ROLE_PASSWORD_TEXT {
+                        ROLE_PASSWORD_TEXT_ID
+                    } else {
+                        1
+                    },
+                    name: name.map(str::to_string),
+                },
+            );
+        }
+
+        /// gedit > window titled `title` > `role` element named `name` at "el".
+        fn window(title: &str, role: &str, name: &str) -> Self {
+            let mut tree = FakeTree::default();
+            tree.add("app", None, "application", Some("gedit"));
+            tree.add("win", Some("app"), "frame", Some(title));
+            tree.add("el", Some("win"), role, Some(name));
+            tree
+        }
+    }
+
+    impl Tree for FakeTree {
+        fn application(&self, target: &Target) -> Option<String> {
+            if let Some(delay) = self.slow.get(&target.path) {
+                thread::sleep(*delay);
+            }
+            self.nodes.get(&target.path)?.app.clone()
+        }
+        fn parent(&self, target: &Target) -> Option<Target> {
+            self.nodes.get(&target.path)?.parent.as_deref().map(node)
+        }
+        fn role_name(&self, target: &Target) -> String {
+            self.nodes
+                .get(&target.path)
+                .map_or_else(|| "unknown".to_string(), |n| n.role.clone())
+        }
+        fn role_id(&self, target: &Target) -> Option<u32> {
+            Some(self.nodes.get(&target.path)?.role_id)
+        }
+        fn text(&self, target: &Target, name: &str) -> Option<String> {
+            match name {
+                "Name" => self.nodes.get(&target.path)?.name.clone(),
+                _ => None,
+            }
+        }
+        fn focused(&self, _target: &Target) -> bool {
+            true
+        }
+    }
+
+    /// Louis's P1 (21/10): the title is checked complete. An exclusion marker
+    /// past MAX_LABEL_CHARS used to be cut off before the window filter ran.
+    #[test]
+    fn window_exclusion_matches_past_the_label_limit() {
+        let title = format!("{} SECRET-VAULT", "x".repeat(MAX_LABEL_CHARS + 20));
+        let tree = FakeTree::window(&title, "push button", "Copy");
+        let mut config = UiCaptureConfig {
+            excluded_window_pattern_strings: vec!["SECRET-VAULT".to_string()],
+            ..Default::default()
+        };
+        config.compile_patterns();
+        let later = Instant::now() + Duration::from_secs(5);
+
+        let (app, focus) = describe_focus(&tree, &node("el"), &config, later);
+        assert!(matches!(focus, Focus::Excluded), "{focus:?}");
+        assert_eq!(app.as_deref(), Some("gedit"));
+
+        // Same window, nothing excluded: recorded, its title truncated (the
+        // marker past the limit is not kept).
+        let (_, focus) = describe_focus(&tree, &node("el"), &UiCaptureConfig::default(), later);
+        let Focus::Element(element) = focus else {
+            panic!("expected an element, got {focus:?}");
+        };
+        assert_eq!(element.name.as_deref(), Some("Copy"));
+        let ancestors = element.ancestors.expect("ancestors");
+        assert!(ancestors.contains("\"frame\""), "{ancestors}");
+        assert!(ancestors.contains("xxxxxxxxxx"), "{ancestors}");
+        assert!(!ancestors.contains("SECRET-VAULT"), "{ancestors}");
+    }
+
+    /// Same rule for password detection: a keyword past MAX_LABEL_CHARS
+    /// still hides the field (the truncated name is not checked again).
+    #[test]
+    fn password_keyword_past_the_label_limit_hides_the_field() {
+        let name = format!("{} password", "x".repeat(MAX_LABEL_CHARS + 5));
+        let tree = FakeTree::window("Sign in", "text", &name);
+        let later = Instant::now() + Duration::from_secs(5);
+        let (_, focus) = describe_focus(&tree, &node("el"), &UiCaptureConfig::default(), later);
+        let Focus::Element(element) = focus else {
+            panic!("expected an element, got {focus:?}");
+        };
+        assert_eq!(element.name.as_deref(), Some("[password field]"));
+        assert_eq!(element.ancestors, None);
+    }
+
+    /// A record that waited in the queue past its deadline is not described.
+    #[test]
+    fn a_record_past_its_deadline_is_not_described() {
+        let tree = FakeTree::window("Doc", "push button", "Save");
+        let past = Instant::now() - Duration::from_millis(1);
+        let (app, focus) = describe_focus(&tree, &node("el"), &UiCaptureConfig::default(), past);
+        assert!(app.is_none());
+        assert!(matches!(focus, Focus::Unknown));
+    }
+
+    fn signal(path: &str, at: Instant) -> FocusSignal {
+        FocusSignal {
+            at,
+            target: node(path),
+            gained: Some(true),
+        }
+    }
+
+    /// Louis's P2 (21/10): a second focus signal arrives while the first is
+    /// being described. Intake records it at once, with its own time, so it
+    /// is not pushed into a later click's window.
+    #[test]
+    fn a_slow_description_does_not_shift_the_next_signal() {
+        let mut tree = FakeTree::default();
+        tree.add("app", None, "application", Some("gedit"));
+        tree.add("win", Some("app"), "frame", Some("Doc"));
+        tree.add("a", Some("win"), "push button", Some("A"));
+        tree.add("b", Some("win"), "push button", Some("B"));
+        tree.slow
+            .insert("a".to_string(), Duration::from_millis(200));
+        let config = UiCaptureConfig::default();
+        let history = Mutex::new(FocusHistory::default());
+        let stop = AtomicBool::new(false);
+        let (jobs, queued) = crossbeam_channel::bounded(HISTORY_LEN);
+
+        let first_click = Instant::now();
+        let b_at = thread::scope(|scope| {
+            let (tree, config, history, stop) = (&tree, &config, &history, &stop);
+            scope.spawn(move || enrich(tree, config, history, stop, queued));
+            thread::sleep(Duration::from_millis(20));
+            take_in(history, &jobs, signal("a", Instant::now()));
+            thread::sleep(Duration::from_millis(40)); // "a" is being described
+            let b_at = Instant::now();
+            take_in(history, &jobs, signal("b", b_at));
+            // Taken in without waiting for "a", at its own time.
+            assert!(b_at.elapsed() < Duration::from_millis(30));
+            let recorded = history.lock().records.iter().any(|r| {
+                r.key == node("b").key() && r.at == b_at && matches!(r.focus, Focus::Pending)
+            });
+            assert!(recorded, "b not recorded while a was described");
+            drop(jobs);
+            b_at
+        });
+        assert!(b_at - first_click < CLICK_SETTLE);
+
+        // Both described in the end. The click that caused them gets "A"; a
+        // click at +100 ms, after "b", gets nothing (before the fix "b" was
+        // stamped ~+220 ms, inside that click's window).
+        let history = history.into_inner();
+        let second_click = first_click + Duration::from_millis(100);
+        assert_eq!(
+            name_of(history.element_for_click_until(first_click, Some(second_click))).as_deref(),
+            Some("A")
+        );
+        assert!(matches!(
+            history.element_for_click(second_click),
+            ClickTarget::Nothing
+        ));
+    }
+
+    /// A backlogged enrichment thread never blocks intake: the record is left
+    /// Unknown, so a click waiting on it gets no element.
+    #[test]
+    fn intake_never_blocks_on_a_full_queue() {
+        let history = Mutex::new(FocusHistory::default());
+        let (jobs, _queued) = crossbeam_channel::bounded(0);
+        let at = Instant::now();
+        take_in(&history, &jobs, signal("a", at));
+        let history = history.into_inner();
+        assert!(matches!(history.records[0].focus, Focus::Unknown));
+        assert!(matches!(
+            history.element_for_click(at),
+            ClickTarget::Nothing
+        ));
+    }
+
+    /// Louis's P3 (21/10): empty-space click at 0 ms, button click at 80 ms,
+    /// button focus at 100 ms. Only the button click gets the button.
+    #[test]
+    fn nearby_clicks_do_not_share_one_focus_change() {
+        let empty_click = Instant::now();
+        let button_click = empty_click + Duration::from_millis(80);
+        let mut history = FocusHistory::default();
+        history.push(record(
+            empty_click + Duration::from_millis(100),
+            "btn",
+            "gedit",
+            el("push button", "Save"),
+        ));
+        assert!(matches!(
+            history.element_for_click_until(empty_click, Some(button_click)),
+            ClickTarget::Nothing
+        ));
+        assert_eq!(
+            name_of(history.element_for_click_until(button_click, None)).as_deref(),
+            Some("Save")
+        );
+        // A press at the same instant is not a boundary.
+        assert_eq!(
+            name_of(history.element_for_click_until(button_click, Some(button_click))).as_deref(),
+            Some("Save")
+        );
     }
 
     #[test]
