@@ -381,6 +381,10 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/e2e/search-only/resume", axum::routing::post(e2e_search_only_resume))
         .route("/e2e/search-only/stop-server", axum::routing::post(e2e_search_only_stop_server))
         .route("/e2e/search-only/restart", axum::routing::post(e2e_search_only_restart))
+        .route(
+            "/e2e/search-only/recreate-tray",
+            axum::routing::post(e2e_search_only_recreate_tray),
+        )
         .route("/e2e/updates/state", axum::routing::get(e2e_updates_state))
         .route("/e2e/updates/click", axum::routing::post(e2e_updates_click))
         .route(
@@ -681,6 +685,8 @@ async fn e2e_search_only_state(State(state): State<ServerState>) -> impl IntoRes
         "capture_running": recording.capture.lock().await.is_some(),
         "webviews": app.webview_windows().keys().cloned().collect::<Vec<_>>(),
         "keep_search_after_quit": crate::search_only::keep_after_quit(app),
+        "tray_registered": app.tray_by_id("screenpipe_main").is_some(),
+        "platform": std::env::consts::OS,
     }))
 }
 
@@ -719,6 +725,19 @@ async fn e2e_search_only_stop_server(State(state): State<ServerState>) -> impl I
 async fn e2e_search_only_restart(State(state): State<ServerState>) -> impl IntoResponse {
     let result = crate::updates::restart_for_update(state.app_handle, Some(10)).await;
     Json(serde_json::json!({"result": result}))
+}
+
+#[cfg(feature = "e2e")]
+async fn e2e_search_only_recreate_tray(State(state): State<ServerState>) -> impl IntoResponse {
+    crate::tray::recreate_tray(&state.app_handle);
+    // This barrier runs after the queued recreation, so callers can inspect
+    // the resulting native tray without guessing how long the main loop needs.
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let scheduled = state.app_handle.run_on_main_thread(move || {
+        let _ = tx.send(());
+    });
+    let completed = scheduled.is_ok() && rx.await.is_ok();
+    Json(serde_json::json!({"accepted": completed}))
 }
 
 /// Content-free updater state for the packaged e2e test: what the tray menu
