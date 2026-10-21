@@ -7,7 +7,9 @@
 .search { position:relative; min-width:0; flex:1 1 160px; }
 .searchIcon { pointer-events:none; position:absolute; left:10px; top:10px; width:16px; height:16px; color:var(--muted); }
 .root .input { height:36px; width:100%; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); padding:0 8px 0 32px; font:inherit; font-size:12px; }
-.root .layout { height:36px; max-width:100%; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); padding:0 8px; font:inherit; font-size:12px; }
+.layoutField { position:relative; flex:0 1 144px; min-width:0; max-width:100%; height:36px; }
+.layoutArrow { position:absolute; right:8px; top:11px; pointer-events:none; color:var(--muted); }
+.root .layout { appearance:none; -webkit-appearance:none; width:100%; height:36px; max-width:100%; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); padding:0 28px 0 8px; box-shadow:none; cursor:pointer; font:inherit; font-size:12px; }
 .root button.tool { display:inline-flex; height:36px; min-height:36px; min-width:36px; align-items:center; justify-content:center; border:0; border-radius:6px; padding:0 8px; background:transparent; color:var(--muted); font:inherit; font-size:12px; cursor:pointer; gap:6px; }
 .root button:hover { background:var(--soft); color:var(--ink); }
 .root button:disabled { opacity:.4; }

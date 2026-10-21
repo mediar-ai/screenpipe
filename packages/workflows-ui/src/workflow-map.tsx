@@ -7,7 +7,7 @@
 import { WorkflowMapAppIcon as WorkflowAppIcon } from "./workflow-map-app-icon";
 const WorkflowAppLabel = ({name}: {name: string}) => <span>{name}</span>;
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { GitBranch, Search, Minus, Plus, LocateFixed, X, ArrowRight, CircleCheck, Clock3, Play, Flag, Copy, Mail, Layers, FileText, AppWindow } from "lucide-react";
+import { GitBranch, Search, ChevronDown, Minus, Plus, LocateFixed, X, ArrowRight, CircleCheck, Clock3, Play, Flag, Copy, Mail, Layers, FileText, AppWindow } from "lucide-react";
 import styles from "./workflow-map.module.css";
 import { mapTiming } from "./workflow-map-timing";
 import {
@@ -171,19 +171,22 @@ export function ProcedureFlowchart({
           )}
         </div>
         {onLayoutChange && (
-          <select
-            aria-label="Map layout"
-            value={layout}
-            onChange={(event) =>
-              onLayoutChange(event.target.value as ProcedureMapLayout)
-            }
-            className={styles.layout}
-          >
-            <option value="flow">Flow</option>
-            <option value="apps">By app</option>
-            <option value="focus">Single column</option>
-            <option value="sections">Numbered sections</option>
-          </select>
+          <div className={styles.layoutField}>
+            <select
+              aria-label="Map layout"
+              value={layout}
+              onChange={(event) =>
+                onLayoutChange(event.target.value as ProcedureMapLayout)
+              }
+              className={styles.layout}
+            >
+              <option value="flow">Flow</option>
+              <option value="apps">By app</option>
+              <option value="focus">Single column</option>
+              <option value="sections">Numbered sections</option>
+            </select>
+            <ChevronDown className={styles.layoutArrow} size={14} aria-hidden="true" />
+          </div>
         )}
         <button
           type="button"
