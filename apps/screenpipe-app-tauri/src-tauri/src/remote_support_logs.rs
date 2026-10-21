@@ -11,10 +11,9 @@
 //! - upload the redacted logs-only bundle from [`crate::diagnostic_logs`].
 //!
 //! Enterprise builds keep their mandatory license-authenticated collector. This
-//! module is a compile-time no-op there, so a consumer preference can never
+//! collector checks the runtime mode, so a personal preference can never
 //! weaken an organization's managed policy.
 
-#[cfg(not(feature = "enterprise-build"))]
 mod imp {
     use std::collections::hash_map::DefaultHasher;
     use std::future::Future;
@@ -330,6 +329,9 @@ mod imp {
     }
 
     fn current_context(app: &AppHandle) -> Option<DeviceContext> {
+        if crate::app_mode::is_managed(app) {
+            return None;
+        }
         let settings = crate::store::SettingsStore::get(app).ok().flatten()?;
         let user_id = settings.user.id?.trim().to_string();
         if user_id.is_empty() {
@@ -817,10 +819,4 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "enterprise-build"))]
 pub use imp::spawn;
-
-/// Consumer remote support is intentionally absent from enterprise binaries;
-/// their license-authenticated log collection remains mandatory.
-#[cfg(feature = "enterprise-build")]
-pub fn spawn(_app: &tauri::AppHandle) {}

@@ -261,7 +261,10 @@ fn classify_authentication(
 /// immediate branch; otherwise only the build-specific credential check varies.
 fn resolve(app: &tauri::AppHandle, settings: &mut SettingsStore) -> AuthenticationStatus {
     let status = classify_authentication(!crate::should_skip_onboarding(), || {
-        if cfg!(feature = "enterprise-build") {
+        if !crate::app_mode::for_settings(settings) {
+            refresh_consumer_account(app, settings);
+        }
+        if crate::app_mode::for_settings(settings) {
             let authenticated = crate::enterprise_sync::authorize_startup(app);
             // Enterprise verification also persists the recording policy.
             // The first native recorder uses this bootstrap snapshot.
@@ -270,7 +273,6 @@ fn resolve(app: &tauri::AppHandle, settings: &mut SettingsStore) -> Authenticati
             }
             authenticated
         } else {
-            refresh_consumer_account(app, settings);
             settings.has_cloud_authentication()
         }
     });

@@ -81,7 +81,7 @@ mod enterprise;
 #[cfg(any(
     test,
     all(
-        feature = "enterprise-build",
+        feature = "enterprise-support",
         any(target_os = "macos", target_os = "windows")
     )
 ))]
@@ -89,6 +89,7 @@ mod enterprise_autostart;
 mod enterprise_config_file;
 mod enterprise_host_identity;
 mod enterprise_install_metadata;
+mod app_mode;
 mod enterprise_policy;
 mod enterprise_recording_access;
 mod enterprise_sync;
@@ -985,7 +986,7 @@ async fn main() {
         last_spawn_epoch: Arc::new(AtomicU64::new(0)),
         wants_recording: Arc::new(AtomicBool::new(false)),
         deferred_account_start: Default::default(),
-        #[cfg(feature = "enterprise-build")]
+        #[cfg(feature = "enterprise-support")]
         authorization_recovery: Default::default(),
         interrupted_meeting: Arc::new(tokio::sync::Mutex::new(None)),
         cloud_token: Arc::new(arc_swap::ArcSwap::new(Arc::new(initial_cloud_token))),
@@ -2330,7 +2331,7 @@ async fn main() {
             );
 
             #[cfg(all(
-                feature = "enterprise-build",
+                feature = "enterprise-support",
                 any(target_os = "macos", target_os = "windows")
             ))]
             enterprise_autostart::spawn(&app_handle);
@@ -2523,9 +2524,8 @@ async fn main() {
             // Enterprise accounts out while allowing Screenpipe's own org.
             data_sync::spawn(&app_handle);
 
-            // Standard builds: authenticated, default-enabled support logs.
-            // Enterprise builds compile this as a no-op because their managed
-            // license-authenticated collector above is mandatory.
+            // Personal mode uses authenticated support-log consent. Managed
+            // mode uses the license-authenticated collector above.
             remote_support_logs::spawn(&app_handle);
 
             // Disable removed Storage cloud backends if old settings enabled them.

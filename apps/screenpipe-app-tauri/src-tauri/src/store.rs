@@ -2650,6 +2650,13 @@ impl SettingsStore {
         if !requires_enterprise_app {
             return false;
         }
+        if self.user.enterprise_account.as_ref()
+            .and_then(|account| account.get("restrict_consumer_build_access"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            return true;
+        }
 
         let has_consumer_entitlement = self
             .user
@@ -3043,7 +3050,8 @@ pub fn init_store(app: &AppHandle) -> Result<SettingsStore, String> {
         }
     }
 
-    if restore_headed_mode_for_consumer(&mut store, cfg!(feature = "enterprise-build")) {
+    let managed_mode = crate::app_mode::for_settings(&store);
+    if restore_headed_mode_for_consumer(&mut store, managed_mode) {
         tracing::info!(
             "settings migration: restored headed UI and scheduled pipe runs for consumer install"
         );
@@ -3051,7 +3059,7 @@ pub fn init_store(app: &AppHandle) -> Result<SettingsStore, String> {
     }
 
     if can_run_settings_migrations
-        && migrate_timeline_visibility_to_sidebar(&mut store, cfg!(feature = "enterprise-build"))
+        && migrate_timeline_visibility_to_sidebar(&mut store, managed_mode)
     {
         should_save = true;
     }
@@ -3066,7 +3074,7 @@ pub fn init_store(app: &AppHandle) -> Result<SettingsStore, String> {
         should_save = true;
     }
 
-    if !cfg!(feature = "enterprise-build")
+    if !managed_mode
         && can_run_settings_migrations
         && migrate_remote_logs_default_enabled(&mut store)
     {
@@ -4189,6 +4197,11 @@ mod tests {
             "features": { "app": true }
         }));
         assert!(!store.requires_enterprise_app_for_consumer());
+        store.user.enterprise_account = Some(json!({
+            "requires_enterprise_app": true,
+            "restrict_consumer_build_access": true,
+        }));
+        assert!(store.requires_enterprise_app_for_consumer());
     }
 
     #[test]

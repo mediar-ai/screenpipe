@@ -47,7 +47,7 @@ fn configured_updater(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::Up
     let is_beta_build = app.config().identifier.contains("beta");
     // Packaged updater acceptance supplies a local signed fixture endpoint.
     // Keep that endpoint in E2E builds; shipping consumer builds use their channel.
-    if !is_enterprise_build(app) && !is_beta_build && !cfg!(feature = "e2e") {
+    if !cfg!(feature = "enterprise-build") && !is_beta_build && !cfg!(feature = "e2e") {
         let channel = consumer_update_channel(settings.as_ref());
         builder = builder.endpoints(vec![consumer_update_endpoint(channel).parse()?])?;
     }
@@ -253,8 +253,8 @@ pub fn is_source_build(_app: &tauri::AppHandle) -> bool {
 }
 
 /// Enterprise build: update transport is selected by the administrator policy.
-pub fn is_enterprise_build(_app: &tauri::AppHandle) -> bool {
-    cfg!(feature = "enterprise-build")
+pub fn is_enterprise_build(app: &tauri::AppHandle) -> bool {
+    crate::app_mode::is_managed(app)
 }
 
 fn enterprise_app_update_policy(app: &tauri::AppHandle) -> Option<serde_json::Value> {

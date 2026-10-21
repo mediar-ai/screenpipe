@@ -105,12 +105,12 @@ fn is_login_item_open_event(
 /// Apple includes the `keyAELaunchedAsLogInItem` (`lgit`) parameter in the
 /// initial kAEOpenApplication event when ServiceManagement launched the app as
 /// a login item. Absence is a normal manual launch, not an error.
-#[cfg(all(feature = "enterprise-build", target_os = "macos"))]
+#[cfg(all(feature = "enterprise-support", target_os = "macos"))]
 pub fn launched_as_macos_login_item() -> Result<bool, String> {
     macos::launched_as_login_item()
 }
 
-#[cfg(all(feature = "enterprise-build", target_os = "macos"))]
+#[cfg(all(feature = "enterprise-support", target_os = "macos"))]
 pub fn macos_main_app_is_enabled() -> Result<bool, String> {
     Ok(macos::main_app_status()? == EnrollmentStatus::Enabled)
 }
@@ -118,7 +118,7 @@ pub fn macos_main_app_is_enabled() -> Result<bool, String> {
 /// Apply an explicit employee choice after managed enforcement has been
 /// unlocked. Removing policy never calls this function, so it leaves existing
 /// registration untouched.
-#[cfg(all(feature = "enterprise-build", target_os = "macos"))]
+#[cfg(all(feature = "enterprise-support", target_os = "macos"))]
 pub fn set_macos_employee_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
     match employee_autostart_action(enabled) {
         EmployeeAutoStartAction::EnableLegacy => {
@@ -157,7 +157,7 @@ fn finish_employee_disable(
 
 /// Spawn after the autostart plugin and settings store have initialized.
 #[cfg(all(
-    feature = "enterprise-build",
+    feature = "enterprise-support",
     any(target_os = "macos", target_os = "windows")
 ))]
 pub fn spawn(app: &AppHandle) {
@@ -178,7 +178,8 @@ pub fn spawn(app: &AppHandle) {
         let mut last_failure = None;
 
         loop {
-            let enforce = crate::enterprise_policy::enforce_auto_start();
+            let enforce = crate::app_mode::is_managed(&app)
+                && crate::enterprise_policy::enforce_auto_start();
             if last_policy != Some(enforce) {
                 info!(
                     "enterprise: startup enrollment reconciler policy {}",

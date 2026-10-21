@@ -23,7 +23,7 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 mod authorized_start;
 
 pub const DEFAULT_LOCAL_API_PORT: u16 = 3030;
@@ -178,7 +178,7 @@ pub(crate) fn server_access_allowed(app: &tauri::AppHandle, store: &SettingsStor
         .try_state::<crate::startup_auth::AuthenticationStatus>()
         .map(|status| *status)
         .unwrap_or(crate::startup_auth::AuthenticationStatus::LoggedOut);
-    let authenticated_after_startup = if cfg!(feature = "enterprise-build") {
+    let authenticated_after_startup = if crate::app_mode::for_settings(store) {
         crate::enterprise_policy::recording_authorized()
     } else {
         store.has_cloud_authentication()
@@ -190,7 +190,7 @@ pub(crate) fn server_access_allowed(app: &tauri::AppHandle, store: &SettingsStor
     }
 
     server_access_policy(
-        cfg!(feature = "enterprise-build"),
+        crate::app_mode::for_settings(store),
         cfg!(debug_assertions),
         store.local_plan_policy() != LocalPlanPolicy::Unknown,
         crate::enterprise_policy::recording_authorized(),
@@ -198,9 +198,8 @@ pub(crate) fn server_access_allowed(app: &tauri::AppHandle, store: &SettingsStor
     )
 }
 
-/// Consumer builds allow signed-in accounts to record on the free plan.
-/// Enterprise builds keep their native entitlement guard, and consumer builds
-/// still reject accounts that are required to use an enterprise binary.
+/// Personal accounts may record on a verified free plan. Managed accounts and
+/// deployments require native organization policy and seat authorization.
 pub(crate) fn recording_access_allowed(app: &tauri::AppHandle, store: &SettingsStore) -> bool {
     let trial_activation_paywall = !crate::should_skip_onboarding()
         && OnboardingStore::get(app)
@@ -218,7 +217,7 @@ pub(crate) fn recording_access_allowed(app: &tauri::AppHandle, store: &SettingsS
     // authorities used by the runtime guards.
     let authentication_status = if resolved_authentication
         == crate::startup_auth::AuthenticationStatus::LoggedOut
-        && if cfg!(feature = "enterprise-build") {
+        && if crate::app_mode::for_settings(store) {
             crate::enterprise_policy::recording_authorized()
         } else {
             store.has_cloud_authentication()
@@ -228,7 +227,7 @@ pub(crate) fn recording_access_allowed(app: &tauri::AppHandle, store: &SettingsS
         resolved_authentication
     };
     recording_access_policy(
-        cfg!(feature = "enterprise-build"),
+        crate::app_mode::for_settings(store),
         cfg!(debug_assertions),
         store.local_plan_policy() != LocalPlanPolicy::Unknown,
         crate::enterprise_policy::recording_authorized(),
@@ -352,7 +351,7 @@ pub struct RecordingState {
     /// — it's reset to 0 on a failed spawn too, and never sees the tray toggle.
     pub wants_recording: Arc<AtomicBool>,
     pub(crate) deferred_account_start: crate::startup_auth::DeferredAccountStart,
-    #[cfg(feature = "enterprise-build")]
+    #[cfg(feature = "enterprise-support")]
     pub(crate) authorization_recovery: authorized_start::Recovery,
     /// Recently active meeting to revive when capture is immediately restarted.
     pub(crate) interrupted_meeting: Arc<Mutex<Option<InterruptedMeeting>>>,
@@ -392,7 +391,7 @@ impl RecordingState {
         // An explicit start owns the lifecycle now; an explicit stop must not
         // be undone by a later background account refresh.
         self.deferred_account_start.cancel();
-        #[cfg(feature = "enterprise-build")]
+        #[cfg(feature = "enterprise-support")]
         self.authorization_recovery.cancel();
         self.wants_recording.store(
             on && !crate::search_only::capture_paused() && !crate::search_only::is_active(),
@@ -411,7 +410,7 @@ pub(crate) fn refresh_history_access_policy(
     settings: &SettingsStore,
 ) {
     policy.set_last_24_hours(history_access_restricted(
-        cfg!(feature = "enterprise-build"),
+        crate::app_mode::for_settings(settings),
         settings.is_free_or_unattributed_user(),
     ));
 }
@@ -1101,7 +1100,7 @@ pub(crate) fn resume_deferred_account_start(app: tauri::AppHandle) {
 
 /// Schedule one bounded native recovery request for this intent generation.
 /// Policy refresh remains free to revoke access while startup is retrying.
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 pub(crate) async fn resume_enterprise_recording(app: &tauri::AppHandle) {
     let generation = app
         .state::<RecordingState>()

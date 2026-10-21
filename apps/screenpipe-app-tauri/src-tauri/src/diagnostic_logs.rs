@@ -20,7 +20,6 @@ use std::path::Path;
 use std::time::Duration;
 
 use sysinfo::{System, SystemExt};
-#[cfg(not(feature = "enterprise-build"))]
 use tauri::AppHandle;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
@@ -51,7 +50,6 @@ pub(crate) fn device_metadata() -> DiagnosticDeviceMetadata {
 ///
 /// The filtering boundary never returns an entirely unprocessed chunk after
 /// both contextual and deterministic passes fail.
-#[cfg(not(feature = "enterprise-build"))]
 pub async fn collect_redacted(app: &AppHandle) -> Result<String, String> {
     let files = crate::log_files::get_log_files(app.clone())
         .await
@@ -63,7 +61,6 @@ pub async fn collect_redacted(app: &AppHandle) -> Result<String, String> {
 ///
 /// Enterprise's mandatory collector uses this entry point so both managed and
 /// opted-in builds share one filesystem, size, timeout, and redaction policy.
-#[cfg(any(test, feature = "enterprise-build"))]
 pub async fn collect_redacted_from_dirs(dirs: &[std::path::PathBuf]) -> Result<String, String> {
     let files = crate::log_files::collect_log_files(dirs).await;
     redact_files(&owned_log_files(files)).await

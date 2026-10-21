@@ -6,11 +6,11 @@ pub mod host_identity;
 pub mod install_metadata;
 pub mod policy;
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 pub mod sync;
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 pub mod device_config;
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 pub mod managed_settings;
