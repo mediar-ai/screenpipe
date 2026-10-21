@@ -19,7 +19,12 @@ function LegacySopScreenshot({ src, frameId, load, alt, onLoad, onError }: {
   useEffect(() => {
     if (!ref.current) return;
     if (typeof IntersectionObserver === "undefined") { setVisible(true); return; }
-    const observer = new IntersectionObserver(entries => setVisible(entries.some(entry => entry.isIntersecting)), { rootMargin: "200px" });
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      // Keep the original in place after loading so scrolling cannot swap sizes.
+      setVisible(true);
+      observer.disconnect();
+    }, { rootMargin: "200px" });
     observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);

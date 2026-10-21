@@ -17,7 +17,11 @@ export function useSourceScreenshot(stage: { evidence: Array<Pick<WorkflowEviden
     if (!ref.current) return;
     if (typeof IntersectionObserver === "undefined") { setVisible(true); return; }
     const observer = new IntersectionObserver(entries => {
-      setVisible(entries.some(entry => entry.isIntersecting));
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      // Visibility starts lazy loading; scrolling away must not remove the image
+      // and change the document height. The loading effect releases it on unmount.
+      setVisible(true);
+      observer.disconnect();
     }, { rootMargin: "200px" });
     observer.observe(ref.current);
     return () => observer.disconnect();
