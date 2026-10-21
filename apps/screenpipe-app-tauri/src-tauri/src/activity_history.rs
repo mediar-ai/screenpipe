@@ -556,7 +556,7 @@ fn restricted_history_in_range(
 
 fn activity_history_is_restricted(app: &AppHandle) -> bool {
     let settings = SettingsStore::get(app).ok().flatten().unwrap_or_default();
-    settings_restrict_activity_history(&settings, cfg!(feature = "enterprise-build"))
+    settings_restrict_activity_history(&settings, crate::app_mode::for_settings(&settings))
 }
 
 fn settings_restrict_activity_history(settings: &SettingsStore, is_enterprise_build: bool) -> bool {

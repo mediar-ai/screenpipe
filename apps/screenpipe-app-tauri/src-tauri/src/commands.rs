@@ -1168,6 +1168,14 @@ pub async fn set_cloud_token(
     if supplied_non_empty && normalized.is_none() {
         return Err("invalid_cloud_session_token".to_string());
     }
+    let previous_token = state.cloud_token.load_full();
+    let account_changed = match (
+        previous_token.as_deref().and_then(crate::acquisition_handoff::subject),
+        normalized.as_deref().and_then(crate::acquisition_handoff::subject),
+    ) {
+        (Some(previous), Some(next)) => previous != next,
+        _ => previous_token.as_ref() != &normalized,
+    };
     let should_clear_pi_auth = normalized.is_none();
     // Unblock cloud calls for THIS session first — the ArcSwap + cache are the
     // runtime source of truth, so a failed durable write below never breaks an
@@ -1175,6 +1183,14 @@ pub async fn set_cloud_token(
     state
         .cloud_token
         .store(std::sync::Arc::new(normalized.clone()));
+
+    // Entering managed mode must stop a personal recording before native
+    // organization/seat verification can grant the new account access.
+    if crate::app_mode::is_managed(&app)
+        && (account_changed || !crate::enterprise_policy::recording_authorized())
+    {
+        crate::enterprise_recording_access::revoke_enterprise_recording(&app).await?;
+    }
 
     // Sign-out: scrub the screenpipe token from pi's auth files before the
     // fallible secret-store write so the on-disk copies never outlive the
@@ -1201,7 +1217,7 @@ pub async fn set_cloud_token(
         // Missing/corrupt settings are unattributed on consumer builds.
         state
             .history_access
-            .set_last_24_hours(!cfg!(feature = "enterprise-build"));
+            .set_last_24_hours(!crate::app_mode::is_managed(&app));
     }
     let pipe_manager = {
         let server = state.server.lock().await;
@@ -5183,10 +5199,10 @@ pub fn set_autostart(app_handle: tauri::AppHandle, enabled: bool) -> Result<(), 
             .map_err(|error| error.to_string());
     }
 
-    #[cfg(all(feature = "enterprise-build", target_os = "macos"))]
+    #[cfg(all(feature = "enterprise-support", target_os = "macos"))]
     crate::enterprise_autostart::set_macos_employee_autostart(&app_handle, enabled)?;
 
-    #[cfg(not(all(feature = "enterprise-build", target_os = "macos")))]
+    #[cfg(not(all(feature = "enterprise-support", target_os = "macos")))]
     {
         let manager = app_handle.autolaunch();
         if enabled {

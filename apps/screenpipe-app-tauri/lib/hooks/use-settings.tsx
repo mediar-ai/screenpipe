@@ -39,6 +39,7 @@ import {
 	type ManagedSettingValue,
 } from "./managed-settings";
 import {
+	invalidateEnterpriseBuildStatus,
 	isResolvedConsumerBuild,
 	resolveEnterpriseBuild,
 } from "./use-is-enterprise-build";
@@ -1658,8 +1659,24 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 		loadSettings();
 
-		// Listen for changes
+		// Native mode follows persisted account truth, including changes from
+		// another window. Invalidate before managed settings can be edited.
+		const modeKey = (user: Settings["user"]) => {
+			const entitlement = user?.entitlement;
+			const source = entitlement && typeof entitlement === "object" && !Array.isArray(entitlement)
+				? entitlement.source : null;
+			return JSON.stringify([
+				user?.id, user?.enterprise_account,
+				getLocalPlanPolicy(user as any), source,
+			]);
+		};
+		let previousUser = modeKey(settings.user);
 		const unsubscribe = settingsStore.listen((newSettings) => {
+			const nextUser = modeKey(newSettings.user);
+			if (nextUser !== previousUser) {
+				previousUser = nextUser;
+				invalidateEnterpriseBuildStatus();
+			}
 			setSettings(newSettings);
 		});
 

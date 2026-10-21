@@ -13,13 +13,13 @@
 //!   - resolves the app data dir for the cursor file
 //!   - spawns the long-running task with a tokio shutdown channel
 //!
-//! Everything is gated by `#[cfg(feature = "enterprise-build")]` — consumer
-//! builds compile this file as a no-op.
+//! Managed capabilities compile into the standard app. Runtime account and
+//! deployment checks keep personal installs out of enrollment and uploads.
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 use crate::enterprise::sync as ee_sync;
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 mod imp {
     use super::ee_sync;
     use crate::recording::local_api_context_from_app;
@@ -2006,6 +2006,10 @@ mod imp {
                 tokio::time::sleep(startup_delay).await;
             }
             loop {
+                if !crate::app_mode::is_managed(&app) {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    continue;
+                }
                 let was_hidden = crate::enterprise_policy::is_app_ui_hidden();
                 let device_id = settings_device_id(&app).unwrap_or_else(|| "unknown".to_string());
                 // Re-resolve the live instance port and auth key each turn:
@@ -2276,6 +2280,10 @@ mod imp {
             //      so the next tick starts sync with zero manual config.
             const CONFIG_POLL_SECS: u64 = 60;
             let cfg = loop {
+                if !crate::app_mode::is_managed(&auth_gate_app) {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    continue;
+                }
                 let file_cfg = crate::commands::get_enterprise_file_config();
                 if let Some(cfg) = EnterpriseSyncConfig::from_env_with_fallback(
                     app_data_dir.clone(),
@@ -3479,16 +3487,16 @@ mod imp {
     }
 }
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 pub use imp::{configure_telemetry_context, spawn};
 
-#[cfg(feature = "enterprise-build")]
+#[cfg(feature = "enterprise-support")]
 pub(crate) use imp::{authorize_startup, verify_recording_authorization};
 
-#[cfg(not(feature = "enterprise-build"))]
+#[cfg(not(feature = "enterprise-support"))]
 pub fn configure_telemetry_context(_app: &tauri::AppHandle) {}
 
-#[cfg(not(feature = "enterprise-build"))]
+#[cfg(not(feature = "enterprise-support"))]
 pub(crate) async fn verify_recording_authorization(
     _app: &tauri::AppHandle,
     _credential_type: Option<&str>,
@@ -3497,13 +3505,13 @@ pub(crate) async fn verify_recording_authorization(
     Err("enterprise recording authorization requires an Enterprise build".to_string())
 }
 
-#[cfg(not(feature = "enterprise-build"))]
+#[cfg(not(feature = "enterprise-support"))]
 pub(crate) fn authorize_startup(_app: &tauri::AppHandle) -> bool {
     unreachable!("consumer startup authentication does not use Enterprise policy")
 }
 
 /// No-op stub for non-enterprise builds. Returns None so callers can ignore.
-#[cfg(not(feature = "enterprise-build"))]
+#[cfg(not(feature = "enterprise-support"))]
 pub fn spawn(_app: &tauri::AppHandle) -> Option<tokio::sync::watch::Sender<bool>> {
     None
 }

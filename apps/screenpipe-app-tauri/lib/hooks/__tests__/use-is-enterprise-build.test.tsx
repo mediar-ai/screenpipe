@@ -151,4 +151,56 @@ describe("useEnterpriseBuildStatus", () => {
     });
     expect(mocks.isEnterpriseBuildCmd).toHaveBeenCalledTimes(2);
   });
+  it("switches mounted consumers to managed mode after account invalidation", async () => {
+    mocks.isEnterpriseBuildCmd.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const { invalidateEnterpriseBuildStatus } = await import("@/lib/hooks/use-is-enterprise-build");
+    const first = renderHook(() => useEnterpriseBuildStatus());
+    const second = renderHook(() => useEnterpriseBuildStatus());
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(first.result.current.isEnterprise).toBe(false);
+    expect(mocks.isEnterpriseBuildCmd).toHaveBeenCalledTimes(1);
+
+    act(() => invalidateEnterpriseBuildStatus());
+    expect(first.result.current.resolved).toBe(false);
+    expect(second.result.current.resolved).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(first.result.current).toEqual({ isEnterprise: true, resolved: true, error: false });
+    expect(second.result.current).toEqual(first.result.current);
+    expect(mocks.isEnterpriseBuildCmd).toHaveBeenCalledTimes(2);
+  });
+
+  it("cannot overwrite the new account's managed result with a stale personal lookup", async () => {
+    let finishOld!: (value: boolean) => void;
+    mocks.isEnterpriseBuildCmd
+      .mockImplementationOnce(() => new Promise<boolean>((resolve) => { finishOld = resolve; }))
+      .mockResolvedValueOnce(true);
+    const { invalidateEnterpriseBuildStatus, isResolvedConsumerBuild } = await import("@/lib/hooks/use-is-enterprise-build");
+    const { result } = renderHook(() => useEnterpriseBuildStatus());
+    await act(async () => {
+      invalidateEnterpriseBuildStatus();
+      await vi.advanceTimersByTimeAsync(0);
+      finishOld(false);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current).toEqual({ isEnterprise: true, resolved: true, error: false });
+    await expect(isResolvedConsumerBuild()).resolves.toBe(false);
+  });
+
+  it("keeps policy unresolved when the new account's native lookup fails", async () => {
+    mocks.isEnterpriseBuildCmd.mockResolvedValueOnce(false);
+    const { invalidateEnterpriseBuildStatus, isResolvedConsumerBuild } = await import("@/lib/hooks/use-is-enterprise-build");
+    const { result } = renderHook(() => useEnterpriseBuildStatus());
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    mocks.isEnterpriseBuildCmd.mockRejectedValue(new Error("native unavailable"));
+    await act(async () => {
+      invalidateEnterpriseBuildStatus();
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(result.current.resolved).toBe(false);
+    expect(result.current.error).toBe(true);
+    const check = isResolvedConsumerBuild();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await expect(check).resolves.toBe(false);
+  });
+
 });

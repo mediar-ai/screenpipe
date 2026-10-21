@@ -44,9 +44,13 @@ static ENFORCE_AUTO_START: Lazy<AtomicBool> =
     Lazy::new(|| AtomicBool::new(read_persisted_enforce_auto_start()));
 // Missing policy preserves automatic setup, including managed hidden installs.
 static AUTO_CONNECT_AI_TOOLS: Lazy<AiToolPolicy> = Lazy::new(|| {
+    #[cfg(feature = "enterprise-build")]
+    let initial_refresh_complete = false;
+    #[cfg(not(feature = "enterprise-build"))]
+    let initial_refresh_complete = !crate::app_mode::deployment_or_session_is_managed();
     AiToolPolicy::new(
         read_auto_connect_ai_tools_at(&user_enterprise_config_path()),
-        !cfg!(feature = "enterprise-build"),
+        initial_refresh_complete,
     )
 });
 
@@ -626,7 +630,7 @@ pub fn recording_authorized() -> bool {
 /// Current startup enrollment policy. The first read restores the last
 /// successfully persisted server decision so enforcement survives an offline
 /// restart. Only an explicit cached boolean `true` enables it.
-#[cfg(any(test, feature = "enterprise-build"))]
+#[cfg(any(test, feature = "enterprise-support"))]
 pub fn enforce_auto_start() -> bool {
     ENFORCE_AUTO_START.load(Ordering::SeqCst)
 }
@@ -697,7 +701,7 @@ pub fn set_activity_sync_enabled(activities: bool) {
     }
 }
 
-#[cfg(any(test, feature = "enterprise-build"))]
+#[cfg(any(test, feature = "enterprise-support"))]
 pub fn set_starred_sync_enabled(starred: bool) {
     if let Ok(mut guard) = SYNC_STREAMS.write() {
         guard.starred = starred;
@@ -710,9 +714,8 @@ pub fn set_starred_sync_enabled(starred: bool) {
 //
 // Available under `enterprise-build` (the sync state machine in
 // enterprise_sync::run_one_sync reads it on every tick) and under `test`.
-// Consumer builds never reach the sync path, so it stays gated out there to
-// avoid an unused-function warning.
-#[cfg(any(test, feature = "enterprise-build"))]
+// Builds without managed capabilities never reach the sync path.
+#[cfg(any(test, feature = "enterprise-support"))]
 pub fn current_sync_streams() -> SyncStreams {
     SYNC_STREAMS.read().map(|guard| *guard).unwrap_or_default()
 }

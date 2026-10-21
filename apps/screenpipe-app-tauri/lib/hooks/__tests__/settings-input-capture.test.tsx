@@ -8,8 +8,11 @@ import { SettingsProvider, createDefaultSettingsObject, useSettings } from "../u
 const state = vi.hoisted(() => ({
   enterprise: true,
   settings: undefined as Record<string, unknown> | undefined,
+  listeners: new Set<(settings: Record<string, unknown>) => Promise<void>>(),
+  invalidate: vi.fn(),
 }));
 vi.mock("../use-is-enterprise-build", () => ({
+  invalidateEnterpriseBuildStatus: state.invalidate,
   resolveEnterpriseBuild: async () => state.enterprise,
   isResolvedConsumerBuild: async () => !state.enterprise,
 }));
@@ -18,7 +21,10 @@ vi.mock("@tauri-apps/plugin-store", () => ({
     get: async () => state.settings,
     set: async (_key: string, value: Record<string, unknown>) => { state.settings = value; },
     save: async () => {},
-    onKeyChange: async () => () => {},
+    onKeyChange: async (_key: string, callback: (settings: Record<string, unknown>) => Promise<void>) => {
+      state.listeners.add(callback);
+      return () => { state.listeners.delete(callback); };
+    },
   }) },
 }));
 vi.mock("@tauri-apps/api/path", () => ({ homeDir: async () => "/tmp" }));
@@ -31,6 +37,7 @@ vi.mock("@/lib/utils/tauri", () => ({
   commands: {
     getScreenpipeBaseDir: async () => ({ status: "ok", data: "/tmp" }),
     getCloudToken: async () => null,
+    setCloudToken: async () => {},
     reencryptStore: async () => {},
     setBrowserCookieAccessState: async () => {},
   },
@@ -46,6 +53,8 @@ async function loadSettings() {
 describe("stored input capture defaults", () => {
   beforeEach(() => {
     state.enterprise = true;
+    state.invalidate.mockClear();
+    state.listeners.clear();
     state.settings = { ...createDefaultSettingsObject(), deviceId: "test-device" };
   });
 
@@ -129,6 +138,72 @@ describe("stored input capture defaults", () => {
     expect(state.settings!.asyncPiiRedaction).toBe(false);
     expect(state.settings!.asyncImagePiiRedaction).toBe(false);
     expect(state.settings!.piiBackend).toBe("local");
+  });
+
+  it("invalidates native mode when a persisted account becomes organization-managed", async () => {
+    state.enterprise = false;
+    await loadSettings();
+    const next = {
+      ...state.settings!,
+      user: { id: "org-member", enterprise_account: {
+        requires_enterprise_app: true, restrict_consumer_build_access: true,
+      } },
+    };
+    await act(async () => {
+      for (const listener of state.listeners) await listener(next);
+    });
+    expect(state.invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not recheck native mode for unrelated writes or same-account token refreshes", async () => {
+    state.enterprise = false;
+    const user = {
+      id: "personal-subscriber", token: "old-session", app_entitled: true,
+      subscription_plan: "standard", enterprise_account: null,
+      entitlement: {
+        active: true, source: "subscription", plan: "standard",
+        checked_at: new Date().toISOString(), features: { app: true },
+      },
+    };
+    state.settings = { ...state.settings!, user };
+    await loadSettings();
+    // Establish the already-persisted identity in the native store listener.
+    await act(async () => {
+      for (const listener of state.listeners) await listener(state.settings!);
+    });
+    state.invalidate.mockClear();
+    await act(async () => {
+      for (const listener of state.listeners) await listener({
+        ...state.settings!, fontSize: "large", user: {
+          ...user, token: "refreshed-session",
+          entitlement: { ...user.entitlement, checked_at: new Date().toISOString() },
+        },
+      });
+    });
+    expect(state.invalidate).not.toHaveBeenCalled();
+  });
+
+  it("rechecks native mode on sign-out and when an org removes the personal-plan opt-out", async () => {
+    state.enterprise = false;
+    const user = { id: "member", enterprise_account: {
+      requires_enterprise_app: true, restrict_consumer_build_access: false,
+    } };
+    state.settings = { ...state.settings!, user };
+    await loadSettings();
+    await act(async () => {
+      for (const listener of state.listeners) await listener(state.settings!);
+    });
+    state.invalidate.mockClear();
+    await act(async () => {
+      for (const listener of state.listeners) await listener({ ...state.settings!, user: {
+        ...user, enterprise_account: { ...user.enterprise_account, restrict_consumer_build_access: true },
+      } });
+    });
+    expect(state.invalidate).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      for (const listener of state.listeners) await listener({ ...state.settings!, user: null });
+    });
+    expect(state.invalidate).toHaveBeenCalledTimes(2);
   });
 
 });

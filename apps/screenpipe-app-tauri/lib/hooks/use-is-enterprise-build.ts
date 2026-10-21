@@ -7,9 +7,18 @@
 import { useState, useEffect } from "react";
 import { commands } from "@/lib/utils/tauri";
 
-// Module-level cache: one IPC call shared across all components.
+// One native mode lookup shared across components, invalidated on account changes.
 let cachedResult: boolean | null = null;
 let pendingPromise: Promise<boolean> | null = null;
+let generation = 0;
+const subscribers = new Set<() => void>();
+
+export function invalidateEnterpriseBuildStatus(): void {
+  generation += 1;
+  cachedResult = null;
+  pendingPromise = null;
+  for (const refresh of subscribers) refresh();
+}
 
 // Tauri invokes can remain pending when WebKit's content process is replaced
 // during startup. A bounded attempt lets the shared promise clear so the next
@@ -66,6 +75,7 @@ export async function resolveEnterpriseBuild(): Promise<boolean> {
   if (cachedResult !== null) return cachedResult;
   if (pendingPromise) return pendingPromise;
 
+  const attemptGeneration = generation;
   const attempt = (async () => {
     for (let i = 0; i < 3; i++) {
       try {
@@ -73,6 +83,9 @@ export async function resolveEnterpriseBuild(): Promise<boolean> {
           commands.isEnterpriseBuildCmd(),
           ENTERPRISE_BUILD_IPC_TIMEOUT_MS,
         );
+        if (attemptGeneration !== generation) {
+          return resolveEnterpriseBuild();
+        }
         cachedResult = result;
         if (i === 0) {
           console.log(`[enterprise] isEnterpriseBuild = ${result}`);
@@ -133,8 +146,11 @@ export function useEnterpriseBuildStatus(): EnterpriseBuildStatus {
   useEffect(() => {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
+    let request = 0;
 
     const check = () => {
+      const currentRequest = ++request;
+      if (retryTimer) clearTimeout(retryTimer);
       if (cachedResult !== null) {
         setStatus({
           isEnterprise: cachedResult,
@@ -144,33 +160,27 @@ export function useEnterpriseBuildStatus(): EnterpriseBuildStatus {
         return;
       }
 
+      setStatus((previous) => ({ ...previous, resolved: false, error: false }));
       resolveEnterpriseBuild()
         .then((result) => {
-          if (!cancelled) {
+          if (!cancelled && currentRequest === request) {
             setStatus({ isEnterprise: result, resolved: true, error: false });
           }
         })
         .catch((error) => {
           console.error("[enterprise] build policy check failed", error);
-          if (!cancelled) {
+          if (!cancelled && currentRequest === request) {
             setStatus({ isEnterprise: false, resolved: false, error: true });
             retryTimer = setTimeout(check, 5_000);
           }
         });
     };
 
-    if (cachedResult !== null) {
-      setStatus({
-        isEnterprise: cachedResult,
-        resolved: true,
-        error: false,
-      });
-      return;
-    }
-
+    subscribers.add(check);
     check();
     return () => {
       cancelled = true;
+      subscribers.delete(check);
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, []);
@@ -178,7 +188,7 @@ export function useEnterpriseBuildStatus(): EnterpriseBuildStatus {
   return status;
 }
 
-/** True when running the enterprise build (updates managed by IT). */
+/** True when the current account or deployment requires managed policy. */
 export function useIsEnterpriseBuild(): boolean {
   return useEnterpriseBuildStatus().isEnterprise;
 }
