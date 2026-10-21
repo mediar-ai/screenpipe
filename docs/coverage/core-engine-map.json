@@ -684,6 +684,7 @@
         "src/db/feedback.rs",
         "src/db/maintenance.rs",
         "src/db/planner_stats_tests.rs",
+        "src/db/semantic.rs",
         "src/db/setup.rs",
         "src/db/source_identity.rs",
         "src/db/tests.rs",
