@@ -34,7 +34,7 @@ builds is governed by the Screenpipe Terms of Service at
 https://screenpi.pe/terms and by the terms of your subscription or other
 app license.
 
-For clarity: one subscription or lifetime license per person, covering
+For official builds: one subscription or lifetime license per person, covering
 that person's own devices, including that person's own work use. Up to
 four (4) individual licenses may be used within a single company; five
 (5) or more users at one company require a Screenpipe Team or Enterprise
@@ -42,12 +42,16 @@ plan, regardless of who pays for the individual licenses. Machines not
 tied to an individual licensed user (servers, shared or unattended
 machines) require a commercial agreement with the Licensor.
 
-## 4. Commercial Use Requires a Paid License
+## 4. Commercial Use Requires Enterprise
 
-Any Commercial Use of the Licensed Work requires a separate paid commercial
-license from the Licensor. This applies regardless of company size,
-headcount, revenue, or funding. Contact sales@screenpi.pe or visit
-https://screenpi.pe/commercial-license.
+Any Commercial Use of the Licensed Work, including source code you modify
+and binaries you or a third party compile from source, requires a paid
+Screenpipe Enterprise plan and a commercial license from the Licensor
+expressly covering that use. Free, Basic, and Business plans do not grant
+these rights. This applies regardless of company size, headcount, revenue,
+or funding. The free uses in Section 2 remain permitted.
+
+Contact sales@screenpi.pe or visit https://screenpi.pe/commercial-license.
 
 ## 5. Prohibited Without a Commercial License
 
