@@ -253,6 +253,19 @@ fn crash_migration(root: &Path, point: &str) {
     );
 }
 
+#[test]
+fn storage_cli_reports_invalid_operation_on_default_windows_stack() {
+    let root = tempfile::tempdir().unwrap();
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_screenpipe-storage"))
+        .arg("not-an-operation")
+        .arg(root.path())
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("unknown storage operation"), "{stderr}");
+}
+
 #[tokio::test]
 async fn recovery_child() {
     if let Ok(root) = std::env::var("SCREENPIPE_TEST_SOURCE_RECOVERY_ROOT") {
