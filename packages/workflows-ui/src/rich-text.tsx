@@ -6,7 +6,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Slice } from "prosemirror-model";
-import { EditorState } from "prosemirror-state";
+import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { wrapInList } from "prosemirror-schema-list";
@@ -197,10 +197,12 @@ export function WorkflowRichText({
     { label: "Undo", icon: Undo2, command: undo },
     { label: "Redo", icon: Redo2, command: redo },
   ] : [];
+  const selection = view.current?.state.selection;
+  const hasTextSelection = selection instanceof TextSelection && !selection.empty;
 
   return (
     <div className={`${styles.root} ${className}`} data-testid="procedure-markdown">
-      {editable && fullDocument && <div className={styles.toolbar} role="toolbar" aria-label={`${label} formatting`}>
+      {editable && fullDocument && hasTextSelection && <div className={styles.toolbar} role="toolbar" aria-label={`${label} formatting`}>
         {controls.map(control => <button key={control.label} type="button" aria-label={control.label} title={control.label} aria-pressed={control.active}
           disabled={!view.current || !control.command(view.current.state)}
           onMouseDown={event => event.preventDefault()}
