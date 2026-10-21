@@ -2242,7 +2242,9 @@ mod imp {
         // Point the stalled-upload watchdog at the real app-log dirs. App logs
         // live in the screenpipe data dir (RollingFileAppender), NOT Tauri's
         // app_data_dir — so the from_env default would miss them.
-        let mut log_dirs = Vec::new();
+        // Lifecycle outbox diagnostics live with settings, which can differ
+        // from the engine's current recording directory after a data move.
+        let mut log_dirs = vec![crate::config::app_data_dir().to_path_buf()];
         if let Ok(d) = crate::log_files::get_screenpipe_data_dir(app) {
             log_dirs.push(d);
         }
