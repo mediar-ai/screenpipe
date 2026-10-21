@@ -6,6 +6,16 @@
 .figure { position: relative; max-width: 100%; margin: 0 0 20px; }
 .figure .imageButton { display: block; padding: 0; position: relative; width: 100%; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--soft); cursor: pointer; }
 .imageButton img { display: block; width: 100%; height: auto; object-fit: contain; }
+.imageSurface { position: relative; }
+.evidence .enlarge { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.evidence .enlarge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.viewer { box-sizing: border-box; width: min(1280px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); margin: auto; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.viewer::backdrop { background: #0009; }
+.viewerToolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.viewerToolbar button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.viewerToolbar button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.viewer > img { display: block; max-width: 100%; max-height: calc(100vh - 108px); width: auto; height: auto; object-fit: contain; margin: 0 auto; }
+@media (pointer: coarse) { .evidence .enlarge, .viewerToolbar button { width: 44px; height: 44px; } }
 .figure figcaption { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; line-height: 1.5; color: var(--muted); }
 .figure figcaption > span { min-width: 0; overflow-wrap: anywhere; }
 .links { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 12px; font-size: 11px; color: var(--muted); }

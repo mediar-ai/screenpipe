@@ -257,6 +257,36 @@ mod tests {
         assert!(!bundle.contains("hunter2"));
     }
 
+    #[cfg(feature = "enterprise-build")]
+    #[tokio::test]
+    async fn recording_event_missing_ack_survives_support_collection() {
+        let root = tempfile::tempdir().unwrap();
+        crate::enterprise::recording_events::bind(
+            root.path(),
+            "support-fixture",
+            "device",
+            "endpoint",
+        );
+        let (path, event) =
+            crate::enterprise::recording_events::pending("device", "endpoint").unwrap();
+        crate::enterprise::recording_events::acknowledge(
+            &path,
+            &event,
+            &serde_json::json!({"ok": true, "recording_event_error": "persistence_failed", "recording_event_storage_code": "42P01"}),
+        );
+        let report = collect_redacted_from_dirs(&[root.path().to_owned()])
+            .await
+            .unwrap();
+        assert!(report.contains("enterprise_recording_events_failed"));
+        assert!(report.contains("persistence_failed"));
+        assert!(report.contains("42P01"));
+        assert!(report.contains("delivery_pending"));
+        assert!(
+            path.exists(),
+            "support collection must preserve pending events"
+        );
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn required_pii_failure_survives_rotation_and_support_redaction() {
         use std::sync::Arc;

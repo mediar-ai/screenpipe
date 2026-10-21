@@ -823,3 +823,7 @@
 
 .catalogFilters { display:flex;flex-wrap:wrap;gap:16px;margin:0 0 20px;color:var(--muted);font-size:12px; }
 .catalogFilters select { background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:6px;font:inherit; }
+
+.workflowContext { max-width: 1180px; margin: 20px auto 0; }
+.workflowContext > summary { width: fit-content; cursor: pointer; font-size: 12px; color: var(--muted); padding: 8px 0; }
+.workflowContext > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
