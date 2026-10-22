@@ -361,10 +361,15 @@ pub fn is_engine_unsafe_for_cpu(engine: &str, tier: DeviceTier, has_avx2: bool) 
         return true;
     }
 
-    if engine == "bark" && !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+    if engine == "bark"
+        && !cfg!(any(
+            all(target_os = "macos", target_arch = "aarch64"),
+            all(target_os = "windows", target_arch = "x86_64")
+        ))
+    {
         return true;
     }
-    // Bark uses the same native MLX graph and expanded weight footprint.
+    // Bark expands to f32 on MLX and ONNX; retain the high-memory device gate.
     let is_parakeet = matches!(engine, "parakeet" | "parakeet-mlx" | "bark");
     if !is_parakeet {
         return false;
@@ -458,6 +463,26 @@ pub fn apply_tier_defaults(settings: &mut RecordingSettings, tier: DeviceTier) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bark_retains_expanded_weight_memory_gate() {
+        for tier in [super::DeviceTier::Low, super::DeviceTier::Mid] {
+            assert!(super::is_engine_unsafe_for_cpu("bark", tier, true));
+            assert!(super::is_engine_unsafe_for_cpu("bark", tier, false));
+        }
+        #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+        {
+            assert!(!super::is_engine_unsafe_for_cpu(
+                "bark",
+                super::DeviceTier::High,
+                true
+            ));
+            assert!(!super::is_engine_unsafe_for_cpu(
+                "bark",
+                super::DeviceTier::High,
+                false
+            ));
+        }
+    }
     use super::*;
 
     #[test]

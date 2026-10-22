@@ -77,7 +77,7 @@ pub enum CliAudioTranscriptionEngine {
     Qwen3Asr,
     #[clap(name = "parakeet")]
     Parakeet,
-    /// Underdog Bark 3.0: English, native MLX on Apple silicon
+    /// Underdog Bark 3.0: English, MLX on Apple silicon or ONNX/DirectML on Windows
     #[clap(name = "bark")]
     Bark,
     /// Disable transcription (audio capture only, no speech-to-text)

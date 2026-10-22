@@ -2837,7 +2837,7 @@ Your screen is a pipe. Everything you see, hear, and type flows through it. Scre
                       <SelectItem value="whisper-tiny-quantized">Whisper Tiny (fast)</SelectItem>
                       {!isMacOS && <SelectItem value="qwen3-asr">Qwen3-ASR</SelectItem>}
                       <SelectItem value="parakeet">Parakeet{isMacOS ? ui(" (experimental)") : ""}</SelectItem>
-                      {isMacOS && <SelectItem value="bark">Bark 3.0 (English)</SelectItem>}
+                      {(isMacOS || isWindows) && <SelectItem value="bark">Bark 3.0 (English)</SelectItem>}
                     </SelectGroup>
                     <SelectGroup>
                       <SelectLabel className="text-[10px] text-muted-foreground/70 normal-case tracking-wider">Other</SelectLabel>
@@ -2850,7 +2850,10 @@ Your screen is a pipe. Everything you see, hear, and type flows through it. Scre
             </div>
             {settings.audioTranscriptionEngine === "bark" && (
               <p className="mt-2 ml-[26px] text-xs text-muted-foreground">
-                English only. Requires Apple silicon, macOS 26 or later, and at least 24 GB of memory. The 163 MB download expands into larger weights in memory.
+                {isMacOS
+                  ? "English only. Requires Apple silicon, macOS 26 or later, and at least 24 GB of memory."
+                  : "English only. Runs locally on Windows, using GPU acceleration when available and CPU otherwise. Requires at least 24 GB of memory."}
+                {" "}The 163 MB download expands into larger weights in memory.
               </p>
             )}
             {audioEngineResolution.fallbackReason && (

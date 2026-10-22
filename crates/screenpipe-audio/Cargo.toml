@@ -209,7 +209,7 @@ directml = ["audiopipe?/directml"]
 vulkan = ["whisper-rs/vulkan"]
 pulseaudio = ["dep:libpulse-binding", "dep:libpulse-simple-binding"]
 qwen3-asr = ["dep:audiopipe", "audiopipe?/qwen3-asr", "audiopipe?/qwen3-asr-antirez-blas"]
-parakeet = ["dep:audiopipe"]
+parakeet = ["dep:audiopipe", "audiopipe?/bark-onnx"]
 parakeet-mlx = ["dep:audiopipe", "audiopipe?/parakeet-mlx", "dep:mlx-rs", "audiopipe?/bark-mlx"]
 
 [[example]]

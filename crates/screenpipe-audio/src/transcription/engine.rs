@@ -175,7 +175,7 @@ pub enum TranscriptionEngine {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
     },
-    #[cfg(feature = "parakeet-mlx")]
+    #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
     Bark {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
@@ -558,14 +558,27 @@ impl TranscriptionEngine {
             }
 
             AudioTranscriptionEngine::Bark => {
-                #[cfg(feature = "parakeet-mlx")]
+                #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
                 {
                     anyhow::ensure!(
                         languages.iter().all(|l| *l == Language::English),
                         "Bark 3.0 supports English only"
                     );
+                    #[cfg(all(target_os = "macos", feature = "parakeet-mlx"))]
                     const MODEL_NAME: &str = "bark-3.0-mlx";
+                    #[cfg(not(all(target_os = "macos", feature = "parakeet-mlx")))]
+                    const MODEL_NAME: &str = "bark-3.0";
                     let loaded = tokio::task::spawn_blocking(|| {
+                        #[cfg(all(target_os = "windows", feature = "directml"))]
+                        {
+                            let choice = super::parakeet_windows::choose_parakeet_provider();
+                            info!("Bark ONNX provider selection: {}", choice.reason);
+                            audiopipe::Model::from_pretrained_cache_only_with_provider(
+                                MODEL_NAME,
+                                choice.provider,
+                            )
+                        }
+                        #[cfg(not(all(target_os = "windows", feature = "directml")))]
                         audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
                     })
                     .await
@@ -576,6 +589,11 @@ impl TranscriptionEngine {
                     });
                     match loaded {
                         Ok(model) => {
+                            info!(
+                                "Bark active execution provider: {:?}",
+                                model.execution_provider()
+                            );
+                            #[cfg(feature = "parakeet-mlx")]
                             mlx_memory::set_cache_limit(2 * 1024 * 1024 * 1024);
                             Ok(Self::Bark {
                                 model: Arc::new(StdMutex::new(model)),
@@ -600,10 +618,10 @@ impl TranscriptionEngine {
                         }
                     }
                 }
-                #[cfg(not(feature = "parakeet-mlx"))]
+                #[cfg(not(any(feature = "parakeet-mlx", feature = "parakeet")))]
                 {
                     Err(anyhow!(
-                        "Bark requires an Apple silicon build with the 'parakeet-mlx' feature"
+                        "Bark requires the 'parakeet' (ONNX) or 'parakeet-mlx' feature"
                     ))
                 }
             }
@@ -913,7 +931,7 @@ impl TranscriptionEngine {
                 model: model.clone(),
                 vocabulary: merge_keyterms(vocabulary, extra_keyterms),
             }),
-            #[cfg(feature = "parakeet-mlx")]
+            #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
             Self::Bark { model, vocabulary } => Ok(TranscriptionSession::Bark {
                 model: model.clone(),
                 vocabulary: merge_keyterms(vocabulary, extra_keyterms),
@@ -971,7 +989,7 @@ impl TranscriptionEngine {
             Self::Parakeet { .. } => AudioTranscriptionEngine::Parakeet,
             #[cfg(feature = "parakeet-mlx")]
             Self::ParakeetMlx { .. } => AudioTranscriptionEngine::ParakeetMlx,
-            #[cfg(feature = "parakeet-mlx")]
+            #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
             Self::Bark { .. } => AudioTranscriptionEngine::Bark,
             Self::Deepgram { .. } => AudioTranscriptionEngine::Deepgram,
             Self::OpenAICompatible { .. } => AudioTranscriptionEngine::OpenAICompatible,
@@ -1008,7 +1026,7 @@ pub enum TranscriptionSession {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
     },
-    #[cfg(feature = "parakeet-mlx")]
+    #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
     Bark {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
@@ -1106,7 +1124,7 @@ impl TranscriptionSession {
     ) -> Result<String> {
         let transcription = match self {
             Self::Disabled => Ok(String::new()),
-            #[cfg(feature = "parakeet-mlx")]
+            #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
             Self::Bark { model, .. } => {
                 let resampled;
                 let audio = if sample_rate == 16000 {
@@ -1119,7 +1137,7 @@ impl TranscriptionSession {
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     model.transcribe(audio, audiopipe::TranscribeOptions::default())
                 }))
-                .map_err(|_| anyhow!("Bark MLX transcription panicked"))?
+                .map_err(|_| anyhow!("Bark transcription panicked"))?
                 .map(|result| result.text)
                 .map_err(|error| anyhow!("{error}"))
             }
@@ -1517,7 +1535,7 @@ impl TranscriptionSession {
                     Self::Parakeet { vocabulary, .. } => vocabulary,
                     #[cfg(feature = "parakeet-mlx")]
                     Self::ParakeetMlx { vocabulary, .. } => vocabulary,
-                    #[cfg(feature = "parakeet-mlx")]
+                    #[cfg(any(feature = "parakeet-mlx", feature = "parakeet"))]
                     Self::Bark { vocabulary, .. } => vocabulary,
                     Self::Deepgram { vocabulary, .. } => vocabulary,
                     Self::OpenAICompatible { vocabulary, .. } => vocabulary,
