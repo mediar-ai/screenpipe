@@ -21,11 +21,46 @@ function fixture(overrides: { capture?: unknown; training?: unknown; entitled?: 
   };
   return { transport, calls };
 }
-const probe = (transport: Fetcher, protocol: ProbeProtocol = 'chat') => runSyntheticProbe({ key, model: 'gpt-5.4-nano', protocol, allowSpend: true }, transport);
+const probe = (transport: Fetcher, protocol: ProbeProtocol = 'chat') => runSyntheticProbe({ key, model: 'gpt-5.4-nano', protocol, allowSpend: true, contentRetention: 'zdr' }, transport);
 describe('Experiential migration preparation', () => {
+  it.each(['chat', 'stream', 'tools', 'json-schema', 'responses', 'messages'] as ProbeProtocol[])('defaults %s to retaining requests', protocol => {
+    const model = protocol === 'messages' ? 'claude-sonnet-5' : protocol === 'responses' ? 'gpt-6-astra' : 'gpt-5.4-nano';
+    expect(syntheticRequest(model, protocol).body).not.toHaveProperty('provider');
+  });
+  it.each([undefined, 'false'] as const)('does not require a ZDR verdict in retaining mode (%s)', verdict => {
+    const { transport, calls } = fixture({ capture: true, entitled: false,
+      catalog: { data: [{ id: 'gpt-5.4-nano' }] },
+      reply: () => Response.json(completion, { headers: verdict ? { 'x-gateway-zdr': verdict } : {} }) });
+    return runSyntheticProbe({ key, model: 'gpt-5.4-nano', protocol: 'chat', allowSpend: true }, transport).then(result => {
+      expect(result).toMatchObject({ content_retention: 'retain', zdr_requested: false, zdr_response_confirmed: false });
+      const posted = calls.filter(c => c.init.method === 'POST');
+      expect(posted).toHaveLength(1);
+      expect(JSON.parse(posted[0].init.body as string)).not.toHaveProperty('provider');
+    });
+  });
+  it('cancels a conflicting retaining response before reading content or retrying', async () => {
+    let cancelled = false;
+    const { transport, calls } = fixture({ capture: true,
+      reply: () => new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers: { 'x-gateway-zdr': 'true' } }) });
+    await expect(runSyntheticProbe({ key, model: 'gpt-5.4-nano', protocol: 'chat', allowSpend: true }, transport))
+      .rejects.toMatchObject({ code: 'retention_response_conflict_no_retry' });
+    expect(cancelled).toBe(true);
+    expect(calls.filter(c => c.init.method === 'POST')).toHaveLength(1);
+  });
+  it.each([
+    { capture: false },
+    { capture: 'true' },
+    { capture: true, policy: { require_zdr: true, require_no_training: true } },
+    { capture: true, policy: { require_no_training: true } },
+  ])('refuses incompatible retaining settings %j before inference', async settings => {
+    const { transport, calls } = fixture(settings);
+    await expect(runSyntheticProbe({ key, model: 'gpt-5.4-nano', protocol: 'chat', allowSpend: true }, transport))
+      .rejects.toMatchObject({ code: 'privacy_preflight_failed' });
+    expect(calls.every(c => c.init.method === 'GET')).toBe(true);
+  });
   it.each(['chat', 'stream', 'tools', 'json-schema', 'responses', 'messages'] as ProbeProtocol[])('requires ZDR on every %s probe', protocol => {
     const model = protocol === 'messages' ? 'claude-sonnet-5' : protocol === 'responses' ? 'gpt-6-astra' : 'gpt-5.4-nano';
-    const { body } = syntheticRequest(model, protocol);
+    const { body } = syntheticRequest(model, protocol, 'zdr');
     expect(body.provider).toEqual({ zdr: true });
     expect(body.previous_response_id).toBeUndefined();
   });
@@ -116,7 +151,7 @@ describe('Experiential migration preparation', () => {
   });
   it.each(['auto', 'glm-5.3-flash-reap50-iq3m', 'screenpipe-event-classifier', 'argus-trace-1', 'gemma4-e4b', 'gpt-unreviewed', 'claude-unreviewed', 'GPT-5.4-nano'])('excludes %s', async model => {
     const { transport, calls } = fixture();
-    await expect(runSyntheticProbe({ key, model, protocol: 'chat', allowSpend: true }, transport)).rejects.toMatchObject({ code: 'unsupported_probe_model' });
+    await expect(runSyntheticProbe({ key, model, protocol: 'chat', allowSpend: true, contentRetention: 'zdr' }, transport)).rejects.toMatchObject({ code: 'unsupported_probe_model' });
     expect(calls).toHaveLength(0);
   });
   it('makes one bounded synthetic POST and does not claim settlement', async () => {
@@ -169,7 +204,7 @@ describe('Experiential migration preparation', () => {
   ] as const)('rejects unsuccessful native completion %s', async (protocol, model, reply) => {
     const { transport, calls } = fixture({ catalog: { data: [{ id: model, data_policy: { zdr_on_request: true } }] },
       reply: () => json({ ...reply, usage: { input_tokens: 7, output_tokens: 1 } }) });
-    await expect(runSyntheticProbe({ key, model, protocol, allowSpend: true }, transport)).rejects.toMatchObject({ code: `${protocol}_not_completed` });
+    await expect(runSyntheticProbe({ key, model, protocol, allowSpend: true, contentRetention: 'zdr' }, transport)).rejects.toMatchObject({ code: `${protocol}_not_completed` });
     expect(calls.filter(c => c.init.method === 'POST')).toHaveLength(1);
   });
   it('pins stateless Astra and keeps native Messages separate', () => {
@@ -184,7 +219,7 @@ describe('Experiential migration preparation', () => {
     const model = 'claude-sonnet-5';
     const { transport, calls } = fixture({ catalog: { data: [{ id: model, data_policy: { zdr: true } }] },
       reply: () => json({ content: [{ type: 'text', text: 'partial' }], stop_reason, usage: completion.usage }) });
-    await expect(runSyntheticProbe({ key, model, protocol: 'messages', allowSpend: true }, transport)).rejects.toMatchObject({ code: 'messages_not_completed' });
+    await expect(runSyntheticProbe({ key, model, protocol: 'messages', allowSpend: true, contentRetention: 'zdr' }, transport)).rejects.toMatchObject({ code: 'messages_not_completed' });
     expect(calls.filter(c => c.init.method === 'POST')).toHaveLength(1);
   });
   it.each([
@@ -198,7 +233,7 @@ describe('Experiential migration preparation', () => {
     const model = 'gpt-6-astra';
     const { transport, calls } = fixture({ catalog: { data: [{ id: model, data_policy: { zdr: true } }] },
       reply: () => json({ ...reply, usage: completion.usage }) });
-    await expect(runSyntheticProbe({ key, model, protocol: 'responses', allowSpend: true }, transport)).rejects.toMatchObject({ code: 'responses_not_completed' });
+    await expect(runSyntheticProbe({ key, model, protocol: 'responses', allowSpend: true, contentRetention: 'zdr' }, transport)).rejects.toMatchObject({ code: 'responses_not_completed' });
     expect(calls.filter(c => c.init.method === 'POST')).toHaveLength(1);
   });
   it.each(['content_filter', 'length', 'tool_calls', 'unknown', null])('rejects unsuccessful Chat finish reason %j for text and schema probes', async finish_reason => {
@@ -212,7 +247,7 @@ describe('Experiential migration preparation', () => {
     const model = 'claude-sonnet-5';
     const { transport } = fixture({ catalog: { data: [{ id: model, data_policy: { zdr: true } }] },
       reply: () => json({ content, stop_reason: 'end_turn', usage: completion.usage }) });
-    await expect(runSyntheticProbe({ key, model, protocol: 'messages', allowSpend: true }, transport)).rejects.toMatchObject({ code: 'messages_not_completed' });
+    await expect(runSyntheticProbe({ key, model, protocol: 'messages', allowSpend: true, contentRetention: 'zdr' }, transport)).rejects.toMatchObject({ code: 'messages_not_completed' });
   });
   it('accepts complete Messages and Responses with preceding reasoning', async () => {
     for (const protocol of ['messages', 'responses'] as ProbeProtocol[]) {
@@ -221,7 +256,7 @@ describe('Experiential migration preparation', () => {
         ? { content: [{ type: 'thinking', thinking: 'hidden' }, { type: 'text', text: 'OK' }], stop_reason: 'end_turn' }
         : { status: 'completed', output: [{ type: 'reasoning', summary: [] }, responseMessage] };
       const { transport, calls } = fixture({ catalog: { data: [{ id: model, data_policy: { zdr: true } }] }, reply: () => json({ ...reply, usage: completion.usage }) });
-      const result = await runSyntheticProbe({ key, model, protocol, allowSpend: true }, transport);
+      const result = await runSyntheticProbe({ key, model, protocol, allowSpend: true, contentRetention: 'zdr' }, transport);
       expect(result).toMatchObject({ output_tokens: 1, zdr_requested: true, zdr_response_confirmed: true, production_ready: false });
       const posts = calls.filter(c => c.init.method === 'POST'); expect(posts).toHaveLength(1);
       expect(JSON.parse(posts[0].init.body as string).provider).toEqual({ zdr: true });
