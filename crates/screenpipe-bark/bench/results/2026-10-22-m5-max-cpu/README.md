@@ -42,6 +42,6 @@ target/release/examples/bark_parakeet_bench bark crates/screenpipe-bark/bench/fi
 target/release/examples/bark_parakeet_bench parakeet crates/screenpipe-bark/bench/fixtures.json 3 cpu
 ```
 
-The normal Metal build was not validated locally because Apple's optional Metal
-Toolchain was unavailable. A GPU comparison remains pending. The CPU option is
-explicit and affects this benchmark build, not the application's release settings.
+A subsequent [Metal comparison](../2026-10-22-m5-max-metal) includes the installed
+toolchain and required upstream MLX compatibility backport. The CPU option is
+explicit and affects this benchmark build, not the application release settings.

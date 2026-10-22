@@ -86,6 +86,11 @@ ASR leaderboard or a claim that one model is more accurate generally. Review the
 transcripts alongside the scores. Run on an otherwise idle machine for stable
 timing; background workloads can affect results.
 
+Recorded comparisons: [CPU](bench/results/2026-10-22-m5-max-cpu) and
+[Metal](bench/results/2026-10-22-m5-max-metal). The Metal report documents the
+upstream MLX fence backport required by Xcode 27; an unmodified production
+Metal build is not validated with that toolchain.
+
 See [NOTICE](NOTICE) for NVIDIA, Moondream and Conway Research attribution, the
 upstream CC BY 4.0 terms, and the native loader changes. Model weights are not
 redistributed in this repository.
