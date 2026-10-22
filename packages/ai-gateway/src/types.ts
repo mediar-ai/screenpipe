@@ -153,6 +153,10 @@ export interface GeminiResponse {
 }
 
 export interface Env {
+	/** Disabled by default; only authenticated internal-service chat can opt in. */
+	EXPERIENTIAL_CANARY_MODE?: 'off' | 'internal';
+	/** Dedicated inference credential; never used for customer traffic. */
+	EXPERIENTIAL_API_KEY?: string;
 	AI: Ai;
 	/** GPT-5.6 prompt caching: `system` (default/kill switch) or `history`. */
 	GPT56_HISTORY_CACHE_MODE?: string;
