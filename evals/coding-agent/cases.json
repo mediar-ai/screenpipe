@@ -6924,6 +6924,54 @@
         ],
         "command": "bun test ./packages/workflows-ui/src/cloud-terminal-routes.eval.test.ts"
       }
+    },
+    {
+      "id": "app-retention-capture-during-cleanup",
+      "name": "Keep durable live captures available during local retention cleanup",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "d5046990b77565ad45db3587277d9e765b391dfd",
+        "pull_request": "https://github.com/screenpipe/screenpipe/pull/7734"
+      },
+      "base_ref": "9334c1f6368bda3c28a8f694b6b5624b092d9f7b",
+      "oracle_ref": "d5046990b77565ad45db3587277d9e765b391dfd",
+      "oracle_paths": [
+        "crates/screenpipe-engine/src/retention.rs",
+        "crates/screenpipe-db/src/db/maintenance.rs"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "crates/screenpipe-engine/src/retention.rs"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "durable-recording",
+        "retention",
+        "sqlite"
+      ],
+      "prompt": "When local retention removes an old archive from the recording database, live captures must remain available and durable throughout the cleanup. In All mode, seed 1,000 old frames with 100,000 associated accessibility elements, then run cleanup while continuing to insert captures. Cleanup must begin database processing within 15 seconds. Each capture must complete within the existing 15-second request deadline, at least one capture must be accepted during cleanup, and cleanup must remove the old frames and elements and reach its requested watermark. After closing and reopening the database, every accepted live capture must remain present and the latest display layout must remain preserved. Use a disposable synthetic database. Any implementation that meets these observable results is acceptable. This case does not cover migration authority, user pause policy, search behavior or live customer recordings.",
+      "agent_timeout_seconds": 1800,
+      "grader_dependency_links": [
+        {
+          "source_path": "target",
+          "destination_path": "target"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 300,
+        "fixtures": [
+          {
+            "local_path": "graders/retention-capture-durable.rs.txt",
+            "destination_path": ".eval-retention/retention-capture-durable.rs"
+          },
+          {
+            "local_path": "graders/retention-capture-durable.mjs",
+            "destination_path": ".eval-retention/retention-capture-durable.mjs"
+          }
+        ],
+        "command": "node .eval-retention/retention-capture-durable.mjs"
+      }
     }
   ]
 }
