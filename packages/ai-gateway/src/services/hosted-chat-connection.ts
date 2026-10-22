@@ -1,8 +1,10 @@
 // screenpipe — AI that knows everything you've seen, said, or heard
 // https://screenpipe.com
 
-import type { Env } from '../types';
+import type { Env, RequestBody } from '../types';
 import { getHostedChatGatewayConnection, type CloudflareGatewayProvider, type HostedChatGatewayContext } from './cloudflare-ai-gateway';
+import { getFlatGatewayTokenRates } from './cost-tracker';
+import { originalGatewayReason } from './experiential-routing-policy';
 
 export const EXPERIENTIAL_INFERENCE_ORIGIN = 'https://api.experientiallabs.ai';
 const EXPERIENTIAL_MODEL_ALIASES: Readonly<Record<string, string>> = {
@@ -14,13 +16,39 @@ const EXPERIENTIAL_MODEL_ALIASES: Readonly<Record<string, string>> = {
   'gpt-5.6': 'gpt-5.6-sol',
 };
 
-/** Internal-service canary only. Customer traffic retains its existing gateway
- * and allowance enforcement. Changing the binding back to off restores CF on
- * the next request; in-flight streams continue on their selected connection. */
+/** Hybrid routing keeps customer identity and spend enforcement on Cloudflare.
+ * Unsupported features retain their original native provider. The older direct
+ * Experiential mode remains an internal-service diagnostic canary only. */
 export async function resolveHostedChatConnection(
   env: Env, provider: CloudflareGatewayProvider, context: HostedChatGatewayContext, model: string,
+  body?: Pick<RequestBody, 'messages'>, forceOriginalReason?: string,
 ) {
-  if (env.EXPERIENTIAL_CANARY_MODE !== 'internal' || context.plan !== 'internal' ||
+  const hybrid = env.HOSTED_CHAT_GATEWAY === 'experiential';
+  const nativeProvider = provider === 'openai' || provider === 'anthropic';
+  const retainedReason = forceOriginalReason ?? (hybrid && nativeProvider ? originalGatewayReason(model, body) : null);
+  if (hybrid && nativeProvider && !retainedReason) {
+    const apiKey = env.EXPERIENTIAL_API_KEY?.trim();
+    const slug = env.CLOUDFLARE_EXPERIENTIAL_PROVIDER?.trim();
+    if (!apiKey || !/^xpl_[0-9a-f]{40}$/.test(apiKey) || !slug || !/^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ||
+        !env.CLOUDFLARE_AI_GATEWAY_TOKEN?.trim()) {
+      throw Object.assign(new Error('Experiential hybrid gateway credentials or custom provider are not configured'), { status: 503, transient: false });
+    }
+    const connection = await getHostedChatGatewayConnection(env, provider, context);
+    const url = new URL(connection.baseURL);
+    if (!url.pathname.endsWith(`/${provider}`)) throw new Error('Unexpected native Cloudflare provider URL');
+    url.pathname = url.pathname.slice(0, -provider.length) + slug + (provider === 'openai' ? '/v1' : '');
+    const defaultHeaders: Record<string, string | null> = { ...connection.defaultHeaders,
+      Authorization: `Bearer ${apiKey}`,
+      'cf-aig-custom-cost': JSON.stringify(getFlatGatewayTokenRates(model)),
+      ...(provider === 'anthropic' ? { 'x-api-key': null } : {}),
+    };
+    delete defaultHeaders['cf-aig-byok-alias'];
+    return { ...connection, baseURL: url.toString().replace(/\/$/, ''), apiKey, defaultHeaders,
+      model: EXPERIENTIAL_MODEL_ALIASES[model] ?? model,
+      gateway: 'experiential' as const, allowanceGateway: 'cloudflare' as const, gatewayReason: 'experiential_supported',
+    };
+  }
+  if (hybrid || env.HOSTED_CHAT_GATEWAY === 'cloudflare' || forceOriginalReason || env.EXPERIENTIAL_CANARY_MODE !== 'internal' || context.plan !== 'internal' ||
       (provider !== 'openai' && provider !== 'anthropic')) {
     const connection = await getHostedChatGatewayConnection(env, provider, context);
     // getUrl() returns an address, not authentication. Dedicated canaries do
@@ -47,7 +75,10 @@ export async function resolveHostedChatConnection(
             extraHeaders: Object.fromEntries(Object.entries(connection.defaultHeaders).filter(([name, value]) => name.startsWith('cf-aig-') && value !== null)),
           });
         }) as typeof fetch : undefined;
-    return { ...connection, ...(bindingFetch ? { fetch: bindingFetch } : {}), gateway: 'cloudflare' as const, model };
+    return { ...connection, ...(bindingFetch ? { fetch: bindingFetch } : {}), gateway: 'cloudflare' as const, model,
+      allowanceGateway: 'cloudflare' as const,
+      gatewayReason: retainedReason ?? (hybrid ? 'retained_provider' : 'original_gateway'),
+    };
   }
   const apiKey = env.EXPERIENTIAL_API_KEY?.trim();
   if (!apiKey || !/^xpl_[0-9a-f]{40}$/.test(apiKey)) {
@@ -65,5 +96,7 @@ export async function resolveHostedChatConnection(
     },
     model: EXPERIENTIAL_MODEL_ALIASES[model] ?? model,
     gateway: 'experiential' as const,
+    allowanceGateway: undefined,
+    gatewayReason: 'internal_canary',
   };
 }

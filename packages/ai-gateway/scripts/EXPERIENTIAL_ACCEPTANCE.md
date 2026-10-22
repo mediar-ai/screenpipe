@@ -3,12 +3,12 @@
 
 # Live Experiential acceptance
 
-This tests the existing Screenpipe Worker on loopback with migrated D1 and its
-installed provider SDKs. The Worker selects its actual Experiential connection for internal-service
-requests. Only its synthetic credential is replaced outside the Worker before
-live dispatch; endpoint selection and Haiku spelling now belong to runtime code. Authentication uses the harness's synthetic internal service token;
-this does not prove deployed routing or customer cutover. Customer JWT traffic
-retains Cloudflare enforcement even when the internal canary is enabled.
+The supported cutover is hybrid: use Experiential for working features, retain
+the same model on its original route for unavailable features, and report the
+actual route. Customer authentication, model access, spend rules and usage
+windows stay on the existing Cloudflare gateway. No allowance migration is
+needed. Production traffic changes only after deploying the reviewed source
+and selecting the server-owned routing flag.
 
 Load the authorized test credential into `EXPLABS_API_KEY` without printing it.
 From `packages/ai-gateway`, set `EXPERIENTIAL_ACCEPTANCE_ORG_ID` to the exact test
@@ -42,9 +42,7 @@ may use its existing fallback chain, and every attempted model is recorded.
 Failures produce a nonzero exit status and retain completed results incrementally.
 The temporary local Worker and database are disposed at the end.
 
-This supersedes the ad hoc direct-request matrix for cutover acceptance. The
-older ZDR-only scripts still test their historical contract and do not represent
-the user's requested retaining setup. Passing this harness alone does not enable
+This supersedes the ad hoc direct-request matrix for cutover acceptance. Historical ZDR fixtures remain explicit; both current smoke and acceptance commands default to retention. Passing this harness alone does not enable
 production traffic or establish that every original provider can be moved.
 
 For a focused recheck, set comma-separated `EXPERIENTIAL_ACCEPTANCE_MODELS` and
@@ -52,27 +50,55 @@ For a focused recheck, set comma-separated `EXPERIENTIAL_ACCEPTANCE_MODELS` and
 and feature manifest; omitted filters run every applicable case. Focused results
 do not replace evidence for the other cases.
 
-## Worker switch and rollback
+## Hybrid switch and rollback
 
-`EXPERIENTIAL_CANARY_MODE=internal` plus a dedicated `EXPERIENTIAL_API_KEY` secret
-selects Experiential only for requests already authenticated with Screenpipe's
-existing internal-service bearer. No client request field enables it. An omitted
-mode or `off` restores Cloudflare on the next request. Public customer plans,
-Vertex, confidential GLM, classifier and TTS keep their current paths. The key
-stays server-side; no Cloudflare credentials or ZDR preferences go to Experiential.
+Prepare these server-side bindings before selecting the new route:
 
-The real Worker integration test exercises Chat, Astra Responses, Auto through
-Claude Messages, and switching back to Cloudflare across a restart while
-preserving existing D1 state:
+- `EXPERIENTIAL_API_KEY`: a dedicated inference credential, kept in Worker secrets.
+- `CLOUDFLARE_EXPERIENTIAL_PROVIDER`: an account-owned `custom-...` provider whose
+  configured base URL is exactly `https://api.experientiallabs.ai`.
+- Existing `CLOUDFLARE_AI_GATEWAY_ID` and `CLOUDFLARE_AI_GATEWAY_TOKEN`: keep the
+  same gateway and spend counters. The token must allow native HTTP gateway calls.
+
+`HOSTED_CHAT_GATEWAY=experiential` enables the hybrid path for authenticated
+hosted chat. `HOSTED_CHAT_GATEWAY=cloudflare` rolls every request back to its
+original provider on the next dispatch, overriding any older internal-canary
+flag. In-flight streams finish on their selected transport. The default is the
+existing Cloudflare route; client headers or JSON cannot choose this flag.
+
+Features retained on original routes:
+
+- GPT-5.4 Pro: the destination refuses its existing no-training route setting.
+- Images on GPT-5.4 Mini/Nano and original GPT-5 Mini/Nano: destination routes
+  are text-only. Text and tools on those models can use Experiential.
+- Context-tier pricing models: retain native pricing rather than estimate the
+  threshold. The central pricing table identifies these models.
+- GPT-5.6 explicit prompt caching: preserve the native options and breakpoints
+  rather than remove them for a destination that rejects them.
+- Vertex, confidential/custom GLM, classifier, audio and background rescue:
+  retain their existing routes.
+
+A further explicit unsupported-request refusal can retry the same model on its
+original native route. Spend limits, quotas, safety refusals and uncertain paid
+outcomes do not trigger this transport retry. Existing Auto/model-cascade
+semantics remain separate. No different model is silently called an exact-model
+pass.
+
+Every hosted response carries `x-screenpipe-gateway` (`experiential` or
+`cloudflare`) and `x-screenpipe-gateway-reason`. Browser CORS exposes these
+headers; the normal route audit records `gateway_mode` and `gateway_reason`.
+Cloudflare custom-provider pricing comes from the same flat/cache rates as
+application settlement. Destination requests preserve the existing server-owned
+actor, plan, lane, workload and trial metadata, so native and Experiential
+requests share the same counters and rollback does not reset allowances.
 
 ```sh
-bun test src/test/hosted-chat-connection.unit.test.ts src/test/experiential-canary.integration.test.ts --timeout=30000
+bun test src/test/experiential-hybrid.unit.test.ts src/test/experiential-hybrid.integration.test.ts --timeout=30000
 ```
 
-This is a canary implementation, not permission to deploy or a customer cutover.
-Customer enforcement, current-period carry-in and a public traffic switch still
-need their own implementation and verification; enabling this binding does not
-silently route customer requests through the organization credential.
+The older `EXPERIENTIAL_CANARY_MODE=internal` direct route remains available for
+isolated diagnostics when the new routing flag is absent. It is not the hybrid
+customer switch. Legacy diagnostics still require their separate service bearer.
 
 ## Deployed canary acceptance
 
@@ -85,13 +111,20 @@ arbitrary URL. All six cases run against each applicable model, 108 total.
 
 In this mode the request goes to the deployed Worker with no local egress
 instrumentation. Reports identify `worker_request_id` as Cloudflare's CF-Ray,
-not an Experiential billing ID. The response must report the actual Experiential
+not an Experiential billing ID. The response must report its actual
 selector and satisfy the same model, content, tool, schema and SSE checks. Local
 instrumented runs separately retain the vendor request IDs. Do not conflate
 these evidence boundaries.
 
+For hybrid acceptance set `EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY=hybrid`.
+The same 108-case manifest verifies both the content and the policy-selected
+route. Each row names its actual gateway and reason. Known original-route cases
+are successful hybrid behavior, not Experiential coverage. GPT-5.4 Pro's native
+unsupported schema remains a separate unsupported case. A full passing run is
+107 supported cases plus that explicitly verified rejection.
+
 For a deployed Cloudflare rollback/baseline run, set
-`EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY=cloudflare` after disabling the canary.
+`EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY=cloudflare` after selecting `HOSTED_CHAT_GATEWAY=cloudflare`.
 The same case manifest and assertions then require the Cloudflare route. The
 report names that boundary explicitly; Cloudflare results never count as passed
 Experiential cases. A dedicated internal canary without a copied production

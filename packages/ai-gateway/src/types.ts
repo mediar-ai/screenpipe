@@ -153,9 +153,13 @@ export interface GeminiResponse {
 }
 
 export interface Env {
+	/** Hybrid cutover: unsupported features keep their original native route. */
+	HOSTED_CHAT_GATEWAY?: 'cloudflare' | 'experiential';
+	/** Account-owned custom provider with origin api.experientiallabs.ai. */
+	CLOUDFLARE_EXPERIENTIAL_PROVIDER?: string;
 	/** Disabled by default; only authenticated internal-service chat can opt in. */
 	EXPERIENTIAL_CANARY_MODE?: 'off' | 'internal';
-	/** Dedicated inference credential; never used for customer traffic. */
+	/** Server-side inference credential; customer limits stay on Cloudflare. */
 	EXPERIENTIAL_API_KEY?: string;
 	AI: Ai;
 	/** GPT-5.6 prompt caching: `system` (default/kill switch) or `history`. */

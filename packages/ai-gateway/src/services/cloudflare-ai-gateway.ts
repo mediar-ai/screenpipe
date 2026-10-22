@@ -39,6 +39,8 @@ export interface HostedChatAllowance {
 }
 
 export class HostedChatAllowanceExceededError extends Error {
+	gateway?: 'cloudflare' | 'experiential';
+	gatewayReason?: string;
 	status = 429;
 	code = 'hosted_ai_allowance_exceeded';
 	transient = false;

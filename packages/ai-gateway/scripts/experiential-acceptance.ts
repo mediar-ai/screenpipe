@@ -5,6 +5,8 @@
 // credential replacement is test instrumentation; the Worker selects its real
 // internal-service Experiential route. Customer traffic remains on Cloudflare.
 import { getHostedAiAllowedModels } from '../src/services/hosted-ai-policy';
+import { originalGatewayReason } from '../src/services/experiential-routing-policy';
+import { ensureScreenpipeHint } from '../src/handlers/chat';
 import { OPENAI_PRO_NATIVE_FEATURES } from '../src/providers/openai-pro';
 import { LocalGatewayHarness } from '../src/test/local-gateway-harness';
 import { writeFileSync, readFileSync } from 'node:fs';
@@ -49,7 +51,7 @@ if (policy.policy?.require_zdr !== false || capture.capture_prompt_content !== t
 const workerUrl = process.env.EXPERIENTIAL_ACCEPTANCE_WORKER_URL;
 const serviceToken = process.env.EXPERIENTIAL_ACCEPTANCE_SERVICE_TOKEN;
 const expectedGateway = process.env.EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY ?? 'experiential';
-if (!['cloudflare','experiential'].includes(expectedGateway) || (!workerUrl && expectedGateway !== 'experiential'))
+if (!['cloudflare','experiential','hybrid'].includes(expectedGateway) || (!workerUrl && expectedGateway !== 'experiential'))
   throw new Error('Expected gateway must match the local Experiential or deployed canary mode');
 if (workerUrl) {
   const url = new URL(workerUrl);
@@ -67,7 +69,7 @@ const harness = workerUrl ? {
     const body = JSON.parse(init.body as string);
     const response = await fetch(workerUrl + path, { ...init, headers, redirect: 'error' });
     attempts.push({ model: body.model, path, stream: body.stream === true, status: response.status,
-      gateway: response.headers.get('x-screenpipe-gateway'), worker_request_id: response.headers.get('cf-ray') });
+      gateway: response.headers.get('x-screenpipe-gateway'), gateway_reason: response.headers.get('x-screenpipe-gateway-reason'), worker_request_id: response.headers.get('cf-ray') });
     return response;
   },
   async dispose() {},
@@ -111,9 +113,17 @@ async function call(body: any) {
 		body: JSON.stringify(body),
 	});
 	const raw = await response.text();
-	if (response.ok) assert(response.headers.get('x-screenpipe-gateway') === expectedGateway, 'Response did not use the selected gateway');
+	const gateway = response.headers.get('x-screenpipe-gateway');
+  const gatewayReason = response.headers.get('x-screenpipe-gateway-reason');
+  if (response.ok) {
+    const expectedRoute = expectedGateway === 'hybrid'
+      ? (originalGatewayReason(response.headers.get('x-screenpipe-model') ?? body.model, ensureScreenpipeHint(body)) ? 'cloudflare' : 'experiential')
+      : expectedGateway;
+    assert(gateway === expectedRoute || (expectedGateway === 'hybrid' && gateway === 'cloudflare' && gatewayReason === 'experiential_unsupported_request'), 'Response did not use the selected gateway');
+    if (expectedGateway === 'hybrid') assert(gatewayReason, 'Hybrid response missing route reason');
+  }
 	assert(response.ok, 'Worker HTTP ' + response.status + ': ' + raw);
-	if (!body.stream) return { data: JSON.parse(raw), served: response.headers.get('x-screenpipe-model') };
+	if (!body.stream) return { data: JSON.parse(raw), served: response.headers.get('x-screenpipe-model'), gateway, gatewayReason };
 	const events = raw
 		.split('\n')
 		.filter((l) => l.startsWith('data:'))
@@ -144,7 +154,7 @@ async function call(body: any) {
 		events.some((e) => e.usage?.prompt_tokens >= 0 && e.usage?.completion_tokens >= 0),
 		'SSE missing usage',
 	);
-	return { data: { choices: [{ message: { role: 'assistant', content: text || null, ...(calls.size ? { tool_calls: [...calls.values()] } : {}) }, finish_reason: finish }] }, served: response.headers.get('x-screenpipe-model') };
+	return { data: { choices: [{ message: { role: 'assistant', content: text || null, ...(calls.size ? { tool_calls: [...calls.values()] } : {}) }, finish_reason: finish }] }, served: response.headers.get('x-screenpipe-model'), gateway, gatewayReason };
 }
 try {
 	for (const model of applicableModels.filter((model) => !selectedModels || selectedModels.includes(model))) {
@@ -168,13 +178,14 @@ try {
       const unsupportedSchema = mode === 'schema' &&
         OPENAI_PRO_NATIVE_FEATURES[model as keyof typeof OPENAI_PRO_NATIVE_FEATURES]?.structuredOutput === false;
 			try {
-				const { data, served } = await call(body);
+				const { data, served, gateway, gatewayReason } = await call(body);
+        Object.assign(row, {gateway, gateway_reason: gatewayReason});
 				const choice = data.choices?.[0];
 				row.served = served;
 				assert(model === 'auto' || served === model, 'Explicit model answered by fallback ' + served);
 				assert(
 					attempts.slice(start).some((a) => a.status === 200 && (workerUrl
-            ? a.worker_request_id && a.gateway === expectedGateway : a.request_id)),
+            ? a.worker_request_id && (expectedGateway === 'hybrid' ? ['experiential','cloudflare'].includes(a.gateway) : a.gateway === expectedGateway) : a.request_id)),
 					'No live gateway invocation proved this response',
 				);
 				if (mode === 'tools' || mode === 'stream-tools') {

@@ -22,6 +22,7 @@ type PrivateControlName = keyof typeof TEST_PRIVATE_COST_CONTROLS;
 export interface LocalGatewayHarnessOptions {
 	port?: number;
 	experientialCanary?: boolean;
+	experientialHybrid?: boolean;
 	privateCostControls?: Partial<Record<PrivateControlName, string | undefined>>;
 	providerReply?: string;
 	cloudflareSpendRules?: boolean;
@@ -195,6 +196,7 @@ export class LocalGatewayHarness {
 					...jsonBindings(options.privateCostControls),
 					...(options.ttsStatus !== undefined ? { TTS_ENABLED: 'true', ELEVENLABS_VOICE_ID: 'fictionalVoice123', ELEVENLABS_USD_PER_CHARACTER: '0.0001', SOP_TTS_USD_PER_CHARACTER: '0.0001' } : {}),
 					...(options.experientialCanary ? { EXPERIENTIAL_CANARY_MODE: 'internal', EXPERIENTIAL_API_KEY: `xpl_${'0'.repeat(40)}` } : {}),
+					...(options.experientialHybrid ? { HOSTED_CHAT_GATEWAY: 'experiential', CLOUDFLARE_EXPERIENTIAL_PROVIDER: 'custom-experiential-fixture', EXPERIENTIAL_API_KEY: `xpl_${'0'.repeat(40)}` } : {}),
 					OPENAI_API_KEY: 'screenpipe-local-e2e-only',
 					ADMIN_SECRET: 'screenpipe-local-e2e-admin-only',
 					AI_GATEWAY_SERVICE_TOKEN: LOCAL_GATEWAY_SERVICE_TOKEN,
@@ -435,6 +437,11 @@ export class LocalGatewayHarness {
 			...this.runtimeOptions.bindings, EXPERIENTIAL_CANARY_MODE: enabled ? 'internal' : 'off',
 			EXPERIENTIAL_API_KEY: `xpl_${'0'.repeat(40)}`,
 		} };
+		await this.restart();
+	}
+
+	async setHostedChatGateway(gateway: 'cloudflare' | 'experiential'): Promise<void> {
+		this.runtimeOptions = { ...this.runtimeOptions, bindings: { ...this.runtimeOptions.bindings, HOSTED_CHAT_GATEWAY: gateway } };
 		await this.restart();
 	}
 

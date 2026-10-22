@@ -664,6 +664,7 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
 					workload: latency,
 					gateway_mode: response.headers.has('x-screenpipe-background-fallback') ? 'direct'
 						: response.headers.get('x-screenpipe-gateway') === 'experiential' ? 'experiential' : 'cloudflare',
+					gateway_reason: response.headers.get('x-screenpipe-gateway-reason'),
 					fallback_model: response.headers.get('x-screenpipe-background-fallback'),
 					fallback_reason: response.headers.get('x-screenpipe-background-fallback-reason'),
 					latency_ms: latencyMs,
