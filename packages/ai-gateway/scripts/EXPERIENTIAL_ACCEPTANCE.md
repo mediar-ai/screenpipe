@@ -73,3 +73,19 @@ This is a canary implementation, not permission to deploy or a customer cutover.
 Customer enforcement, current-period carry-in and a public traffic switch still
 need their own implementation and verification; enabling this binding does not
 silently route customer requests through the organization credential.
+
+## Deployed canary acceptance
+
+Set `EXPERIENTIAL_ACCEPTANCE_WORKER_URL` to the isolated canary's HTTPS `/v1`
+base URL and `EXPERIENTIAL_ACCEPTANCE_SERVICE_TOKEN` to its dedicated test-service
+credential. Keep the same org preflight key and report path, then run the same
+command. The runner accepts only the Screenpipe canary prefix under the verified
+`louis-beaumont.workers.dev` account; it never sends the service bearer to an
+arbitrary URL. All six cases run against each applicable model, 108 total.
+
+In this mode the request goes to the deployed Worker with no local egress
+instrumentation. Reports identify `worker_request_id` as Cloudflare's CF-Ray,
+not an Experiential billing ID. The response must report the actual Experiential
+selector and satisfy the same model, content, tool, schema and SSE checks. Local
+instrumented runs separately retain the vendor request IDs. Do not conflate
+these evidence boundaries.

@@ -45,7 +45,30 @@ const capture: any = await (
 ).json();
 if (policy.policy?.require_zdr !== false || capture.capture_prompt_content !== true)
 	throw new Error('Test requires the authorized retention-enabled organization configuration');
-const harness = await LocalGatewayHarness.start({
+const workerUrl = process.env.EXPERIENTIAL_ACCEPTANCE_WORKER_URL;
+const serviceToken = process.env.EXPERIENTIAL_ACCEPTANCE_SERVICE_TOKEN;
+if (workerUrl) {
+  const url = new URL(workerUrl);
+  if (url.protocol !== 'https:' || !url.hostname.endsWith('.louis-beaumont.workers.dev') ||
+      !url.hostname.startsWith('ai-proxy-experiential-canary-') || url.pathname !== '/v1' ||
+      url.username || url.password || url.search || url.hash || !serviceToken) {
+    throw new Error('Deployed acceptance requires an exact Screenpipe canary /v1 URL and its dedicated service token');
+  }
+}
+const harness = workerUrl ? {
+  async fetch(path: string, init: RequestInit) {
+    const headers = new Headers(init.headers);
+    headers.set('authorization', `Bearer ${serviceToken}`);
+    headers.set('x-device-id', 'experiential-deployed-canary-acceptance');
+    const body = JSON.parse(init.body as string);
+    const response = await fetch(workerUrl + path, { ...init, headers, redirect: 'error' });
+    attempts.push({ model: body.model, path, stream: body.stream === true, status: response.status,
+      gateway: response.headers.get('x-screenpipe-gateway'), worker_request_id: response.headers.get('cf-ray') });
+    return response;
+  },
+  async dispose() {},
+  assertNoUnexpectedOutboundRequests() {},
+} : await LocalGatewayHarness.start({
 	captureBodies: false,
 	experientialCanary: true,
 	outboundResponse: async (request, body: any) => {
@@ -143,8 +166,9 @@ try {
 				row.served = served;
 				assert(model === 'auto' || served === model, 'Explicit model answered by fallback ' + served);
 				assert(
-					attempts.slice(start).some((a) => a.status === 200 && a.request_id),
-					'No live upstream request proved this response',
+					attempts.slice(start).some((a) => a.status === 200 && (workerUrl
+            ? a.worker_request_id && a.gateway === 'experiential' : a.request_id)),
+					'No live gateway invocation proved this response',
 				);
 				if (mode === 'tools' || mode === 'stream-tools') {
 					const c = choice?.message?.tool_calls?.[0];
@@ -182,7 +206,9 @@ try {
 				JSON.stringify(
 					{
 						boundary:
-							'real internal-service Experiential selector in local Worker with migrated D1 and live inference; only the test credential is replaced outside the Worker; not deployed customer routing',
+							workerUrl
+                ? 'deployed isolated Cloudflare canary using real Experiential inference; worker_request_id is CF-Ray, not a vendor request ID; not customer cutover'
+                : 'real internal-service Experiential selector in local Worker with migrated D1 and live inference; only the test credential is replaced outside the Worker; not deployed customer routing',
 						retained_routes: [...retainedModels],
 						results,
 					},
