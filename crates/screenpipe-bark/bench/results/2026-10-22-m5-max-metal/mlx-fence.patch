@@ -1,6 +1,0 @@
---- a/mlx/backend/metal/kernels/fence.metal
-+++ b/mlx/backend/metal/kernels/fence.metal
-@@ -6,0 +7 @@
-+#endif
-@@ -11 +11,0 @@
--#endif

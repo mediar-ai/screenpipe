@@ -478,7 +478,7 @@ dependencies = [
 [[package]]
 name = "antirez-asr-sys"
 version = "0.1.0"
-source = "git+https://github.com/EzraEllette/audiopipe.git?rev=b099a2e589d0dc4d8f22e3e8351efea9e1a359ac#b099a2e589d0dc4d8f22e3e8351efea9e1a359ac"
+source = "git+https://github.com/screenpipe/audiopipe.git?rev=c8d145d047f2992de55b3f78870f772fe05fa86b#c8d145d047f2992de55b3f78870f772fe05fa86b"
 dependencies = [
  "cc",
 ]
@@ -1004,11 +1004,14 @@ dependencies = [
 [[package]]
 name = "audiopipe"
 version = "0.2.0"
-source = "git+https://github.com/EzraEllette/audiopipe.git?rev=b099a2e589d0dc4d8f22e3e8351efea9e1a359ac#b099a2e589d0dc4d8f22e3e8351efea9e1a359ac"
+source = "git+https://github.com/screenpipe/audiopipe.git?rev=c8d145d047f2992de55b3f78870f772fe05fa86b#c8d145d047f2992de55b3f78870f772fe05fa86b"
 dependencies = [
  "antirez-asr-sys",
+ "anyhow",
+ "constriction",
  "half",
  "hf-hub 0.4.3",
+ "lzma-rs",
  "mlx-rs",
  "ndarray 0.17.2",
  "ort",
@@ -1018,6 +1021,7 @@ dependencies = [
  "safetensors 0.4.5",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -10082,7 +10086,7 @@ checksum = "478e0585659a122aa407eb7e3c0e1fa51b1d8a870038bd29f0cf4a8551eea972"
 [[package]]
 name = "qwen3-asr-sys"
 version = "0.1.0"
-source = "git+https://github.com/EzraEllette/audiopipe.git?rev=b099a2e589d0dc4d8f22e3e8351efea9e1a359ac#b099a2e589d0dc4d8f22e3e8351efea9e1a359ac"
+source = "git+https://github.com/screenpipe/audiopipe.git?rev=c8d145d047f2992de55b3f78870f772fe05fa86b#c8d145d047f2992de55b3f78870f772fe05fa86b"
 dependencies = [
  "cc",
  "cmake",
@@ -11480,7 +11484,6 @@ dependencies = [
  "reqwest 0.13.4",
  "rubato",
  "samplerate",
- "screenpipe-bark",
  "screenpipe-config",
  "screenpipe-core",
  "screenpipe-db",
@@ -11504,23 +11507,6 @@ dependencies = [
  "whisper-rs",
  "windows 0.58.0",
  "windows-core 0.58.0",
-]
-
-[[package]]
-name = "screenpipe-bark"
-version = "0.4.52"
-dependencies = [
- "anyhow",
- "audiopipe",
- "constriction",
- "half",
- "hf-hub 0.3.2",
- "lzma-rs",
- "mlx-rs",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tracing",
 ]
 
 [[package]]

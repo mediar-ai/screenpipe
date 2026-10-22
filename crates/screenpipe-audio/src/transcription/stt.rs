@@ -42,32 +42,14 @@ pub trait AlternateStt: Send {
 /// Optional alternate STT engine, wrapped for shared ownership + interior mutability.
 pub type AlternateSttEngine = Arc<StdMutex<Box<dyn AlternateStt + Send>>>;
 
-#[cfg(any(feature = "qwen3-asr", feature = "parakeet"))]
+#[cfg(any(feature = "qwen3-asr", feature = "parakeet", feature = "parakeet-mlx"))]
 impl AlternateStt for audiopipe::Model {
     fn transcribe(&mut self, audio: &[f32], sample_rate: u32) -> Result<String> {
-        #[cfg(feature = "parakeet-mlx")]
-        let _guard = screenpipe_bark::MLX_LOCK
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
         let opts = audiopipe::TranscribeOptions::default();
         let result = self
             .transcribe_with_sample_rate(audio, sample_rate, opts)
             .map_err(|e| anyhow::anyhow!("{}", e))?;
         Ok(result.text)
-    }
-}
-
-#[cfg(feature = "parakeet-mlx")]
-impl AlternateStt for screenpipe_bark::BarkModel {
-    fn transcribe(&mut self, audio: &[f32], sample_rate: u32) -> Result<String> {
-        let resampled;
-        let audio = if sample_rate == 16000 {
-            audio
-        } else {
-            resampled = crate::utils::audio::resample(audio, sample_rate, 16000)?;
-            &resampled
-        };
-        screenpipe_bark::BarkModel::transcribe(self, audio)
     }
 }
 

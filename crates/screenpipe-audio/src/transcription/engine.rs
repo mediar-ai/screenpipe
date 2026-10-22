@@ -177,7 +177,7 @@ pub enum TranscriptionEngine {
     },
     #[cfg(feature = "parakeet-mlx")]
     Bark {
-        model: Arc<StdMutex<screenpipe_bark::BarkModel>>,
+        model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
     },
     Deepgram {
@@ -447,9 +447,6 @@ impl TranscriptionEngine {
                     info!("transcription engine runtime: Parakeet (MLX / Metal GPU)");
                     const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3-mlx";
                     let load_result = tokio::task::spawn_blocking(|| {
-                        let _guard = screenpipe_bark::MLX_LOCK
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
                         audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
                     })
                     .await
@@ -567,37 +564,40 @@ impl TranscriptionEngine {
                         languages.iter().all(|l| *l == Language::English),
                         "Bark 3.0 supports English only"
                     );
-                    if let Some(path) = screenpipe_bark::cached_model() {
-                        *observed_path = Some(path.clone());
-                        let loaded = tokio::task::spawn_blocking(move || {
-                            screenpipe_bark::BarkModel::load(&path)
-                        })
-                        .await
-                        .map_err(|error| anyhow!("Bark model loading task failed: {error}"))
-                        .and_then(|result| result);
-                        let model = match loaded {
-                            Ok(model) => model,
-                            Err(error) => {
-                                warn!("Bark model unavailable ({error}); recording continues for reconciliation");
-                                *observed_status = "load_failed";
-                                return Ok(Self::Disabled);
-                            }
-                        };
-                        mlx_memory::set_cache_limit(2 * 1024 * 1024 * 1024);
-                        Ok(Self::Bark {
-                            model: Arc::new(StdMutex::new(model)),
-                            vocabulary,
-                        })
-                    } else {
-                        *observed_status = "downloading";
-                        screenpipe_core::health_diagnostics::transcription_model_state(
-                            model_generation,
-                            "downloading",
-                            None,
-                            None,
-                        );
-                        screenpipe_bark::spawn_download();
-                        Ok(Self::Disabled)
+                    const MODEL_NAME: &str = "bark-3.0-mlx";
+                    let loaded = tokio::task::spawn_blocking(|| {
+                        audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
+                    })
+                    .await
+                    .unwrap_or_else(|error| {
+                        Err(audiopipe::Error::Other(format!(
+                            "Bark model loading task failed: {error}"
+                        )))
+                    });
+                    match loaded {
+                        Ok(model) => {
+                            mlx_memory::set_cache_limit(2 * 1024 * 1024 * 1024);
+                            Ok(Self::Bark {
+                                model: Arc::new(StdMutex::new(model)),
+                                vocabulary,
+                            })
+                        }
+                        Err(error) if error.is_model_not_cached() => {
+                            *observed_status = "downloading";
+                            screenpipe_core::health_diagnostics::transcription_model_state(
+                                model_generation,
+                                "downloading",
+                                None,
+                                None,
+                            );
+                            audiopipe::Model::spawn_pretrained_download(MODEL_NAME);
+                            Ok(Self::Disabled)
+                        }
+                        Err(error) => {
+                            warn!("Bark model unavailable ({error}); recording continues for reconciliation");
+                            *observed_status = "load_failed";
+                            Ok(Self::Disabled)
+                        }
                     }
                 }
                 #[cfg(not(feature = "parakeet-mlx"))]
@@ -614,9 +614,6 @@ impl TranscriptionEngine {
                     info!("transcription engine runtime: Parakeet MLX (GPU)");
                     const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3-mlx";
                     let load_result = tokio::task::spawn_blocking(|| {
-                        let _guard = screenpipe_bark::MLX_LOCK
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
                         audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
                     })
                     .await
@@ -1013,7 +1010,7 @@ pub enum TranscriptionSession {
     },
     #[cfg(feature = "parakeet-mlx")]
     Bark {
-        model: Arc<StdMutex<screenpipe_bark::BarkModel>>,
+        model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
     },
     Deepgram {
@@ -1119,8 +1116,12 @@ impl TranscriptionSession {
                     &resampled
                 };
                 let mut model = model.lock().map_err(|e| anyhow!("Bark model lock: {e}"))?;
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| model.transcribe(audio)))
-                    .map_err(|_| anyhow!("Bark MLX transcription panicked"))?
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    model.transcribe(audio, audiopipe::TranscribeOptions::default())
+                }))
+                .map_err(|_| anyhow!("Bark MLX transcription panicked"))?
+                .map(|result| result.text)
+                .map_err(|error| anyhow!("{error}"))
             }
 
             Self::Deepgram {
@@ -1229,9 +1230,6 @@ impl TranscriptionSession {
 
             #[cfg(feature = "parakeet-mlx")]
             Self::ParakeetMlx { model, vocabulary } => {
-                let _guard = screenpipe_bark::MLX_LOCK
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
                 // GPU serialization is handled by audiopipe's Model::GPU_LOCK.
                 // The per-model mutex here just prevents concurrent Rust access
                 // to the same Model instance.

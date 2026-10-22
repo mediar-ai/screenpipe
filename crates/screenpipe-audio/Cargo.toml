@@ -96,7 +96,6 @@ knf-rs = "0.3.2"
 futures = { workspace = true }
 audiopipe = { workspace = true, features = ["parakeet"], optional = true }
 mlx-rs = { workspace = true, optional = true }
-screenpipe-bark = { path = "../screenpipe-bark", optional = true, features = ["mlx"] }
 bytes = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
 tokio-tungstenite = { workspace = true, features = ["native-tls"] }
@@ -211,7 +210,7 @@ vulkan = ["whisper-rs/vulkan"]
 pulseaudio = ["dep:libpulse-binding", "dep:libpulse-simple-binding"]
 qwen3-asr = ["dep:audiopipe", "audiopipe?/qwen3-asr", "audiopipe?/qwen3-asr-antirez-blas"]
 parakeet = ["dep:audiopipe"]
-parakeet-mlx = ["dep:audiopipe", "audiopipe?/parakeet-mlx", "dep:mlx-rs", "dep:screenpipe-bark"]
+parakeet-mlx = ["dep:audiopipe", "audiopipe?/parakeet-mlx", "dep:mlx-rs", "audiopipe?/bark-mlx"]
 
 [[example]]
 name = "screenpipe-audio"
