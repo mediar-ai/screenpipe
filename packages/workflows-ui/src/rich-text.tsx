@@ -48,6 +48,7 @@ export function WorkflowRichText({
   const emitted = useRef(value);
   const [expanded, setExpanded] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
+  const [hasTextSelection, setHasTextSelection] = useState(false);
   const [long, setLong] = useState(false);
   const [error, setError] = useState("");
   const [, refreshToolbar] = useState(0);
@@ -184,6 +185,42 @@ export function WorkflowRichText({
       );
   }, [value]);
 
+  useEffect(() => {
+    if (!editable || !fullDocument) {
+      setHasTextSelection(false);
+      return;
+    }
+    const syncTextSelection = () => {
+      const editor = view.current;
+      const selection = editor?.dom.ownerDocument.getSelection();
+      const selectedInsideEditor = Boolean(
+        editor && selection && !selection.isCollapsed && selection.rangeCount > 0 &&
+        selection.anchorNode && editor.dom.contains(selection.anchorNode) &&
+        selection.focusNode && editor.dom.contains(selection.focusNode),
+      );
+      if (editor && selection && selectedInsideEditor) {
+        // Keep the editor model aligned if the browser changed its native text selection first.
+        try {
+          const anchor = editor.posAtDOM(selection.anchorNode!, selection.anchorOffset);
+          const head = editor.posAtDOM(selection.focusNode!, selection.focusOffset);
+          const next = TextSelection.between(
+            editor.state.doc.resolve(anchor),
+            editor.state.doc.resolve(head),
+          );
+          if (!editor.state.selection.eq(next))
+            editor.dispatch(editor.state.tr.setSelection(next));
+        } catch {
+          // Ignore DOM selections that cannot map to a text position in this document.
+        }
+      }
+      setHasTextSelection(selectedInsideEditor);
+    };
+    const document = view.current?.dom.ownerDocument ?? window.document;
+    document.addEventListener("selectionchange", syncTextSelection);
+    syncTextSelection();
+    return () => document.removeEventListener("selectionchange", syncTextSelection);
+  }, [editable, fullDocument]);
+
   const schema = view.current?.state.schema;
   const marks = view.current ? view.current.state.storedMarks ?? view.current.state.selection.$from.marks() : [];
   const controls: Array<{ label: string; icon: typeof Bold; command: Command; active?: boolean }> = schema ? [
@@ -198,9 +235,6 @@ export function WorkflowRichText({
     { label: "Undo", icon: Undo2, command: undo },
     { label: "Redo", icon: Redo2, command: redo },
   ] : [];
-  const selection = view.current?.state.selection;
-  const hasTextSelection = selection instanceof TextSelection && !selection.empty;
-
   return (
     <div
       className={`${styles.root} ${className}`}
