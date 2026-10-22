@@ -162,6 +162,19 @@ describe('OpenAIProvider usage reporting', () => {
 		expect(calls[0].reasoning_effort).toBe('none');
 	});
 
+	for (const model of ['gpt-5-mini', 'gpt-5-nano']) {
+		for (const effort of [undefined, 'low'] as const) {
+			it(`uses a supported tool effort for ${model} with ${effort ?? 'default'} reasoning`, async () => {
+				const { provider, calls } = makeOpenAIProvider(async () => ({ choices: [{ message: { content: 'answer', role: 'assistant' } }] }));
+				await provider.createCompletion({ ...body, model, reasoning_effort: effort,
+					tools: [{ type: 'function', function: { name: 'confirm', parameters: { type: 'object' } } }],
+				});
+				expect(calls[0].reasoning_effort).toBe(effort ?? 'minimal');
+				expect(calls[0].tools[0].function.name).toBe('confirm');
+			});
+		}
+	}
+
 	it('does not disable reasoning for GPT-5.6 requests without tools', async () => {
 		async function* stream() {
 			yield { choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] };

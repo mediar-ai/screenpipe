@@ -30,6 +30,23 @@ describe('OpenAIProvider.createWithUnsupportedParamRetry', () => {
 		expect(calls.length).toBe(1);
 	});
 
+	it('repairs a gateway rejection of explicit cache options without losing prompt content', async () => {
+		const messages = [{ role: 'system', content: [{ type: 'text', text: 'Keep these instructions.', prompt_cache_breakpoint: { mode: 'explicit' } }] }, { role: 'user', content: 'Reply OK.' }];
+		const calls: any[] = [];
+		const result = await retry(provider, {
+			model: 'gpt-6-luna', messages, prompt_cache_key: 'synthetic-cache-key', prompt_cache_options: { mode: 'explicit' },
+		}, async (params) => {
+			calls.push(structuredClone(params));
+			if (params.prompt_cache_options) throw apiError(400, "The parameter 'prompt_cache_options' is not supported by this gateway profile. Remove the field and resend the request.");
+			return 'OK';
+		});
+		expect(result).toBe('OK');
+		expect(calls).toHaveLength(2);
+		expect(calls[1].prompt_cache_options).toBeUndefined();
+		expect(calls[1].prompt_cache_key).toBe('synthetic-cache-key');
+		expect(calls[1].messages).toEqual([{ role: 'system', content: [{ type: 'text', text: 'Keep these instructions.' }] }, { role: 'user', content: 'Reply OK.' }]);
+	});
+
 	it('strips an unsupported sampling param and retries (existing behavior)', async () => {
 		const calls: any[] = [];
 		const result = await retry(

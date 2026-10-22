@@ -316,6 +316,7 @@ export class OpenAIProvider implements AIProvider {
 		if (error?.status !== 400) return null;
 		const msg = String(error?.message ?? error?.error?.message ?? '');
 		const match =
+			msg.match(/The parameter '(prompt_cache_options)' is not supported by this gateway profile/i) ??
 			msg.match(/Unsupported value: '([\w.]+)'/i) ??
 			msg.match(/Unknown parameter: '([\w.]+)'/i) ??
 			msg.match(/Unrecognized request argument(?: supplied)?: ([\w.]+)/i);
@@ -379,6 +380,9 @@ export class OpenAIProvider implements AIProvider {
 				const unsupported = this.isUnsupportedSamplingParamError(error);
 				if (unsupported && current[unsupported] !== undefined) {
 					delete current[unsupported];
+					if (unsupported === 'prompt_cache_options') {
+						clearPromptCacheBreakpoints(current.messages);
+					}
 					continue;
 				}
 				if (this.isJsonMentionError(error)) {
@@ -408,7 +412,15 @@ export class OpenAIProvider implements AIProvider {
 	}
 
 	private applyToolCompatibilityOptions(params: ChatCompletionCreateParams, body: RequestBody): void {
-		// The GPT-5 and GPT-6 families accept function tools through Chat Completions
+		// Original GPT-5 Mini/Nano support tools with reasoning, but reject "none".
+		// Preserve a caller's supported effort; use their lowest effort by default.
+		if (/^gpt-5-(?:mini|nano)(?:$|-)/i.test(body.model) && body.tools?.length) {
+			if (body.reasoning_effort === undefined || body.reasoning_effort === 'none') {
+				Object.assign(params, { reasoning_effort: 'minimal' });
+			}
+			return;
+		}
+		// Newer GPT-5 and GPT-6 families accept function tools through Chat Completions
 		// only when reasoning_effort is "none" — including the 5.4 tier, which
 		// background pipes reach with an injected effort (applyBackgroundReasoningDefault).
 		// Pi speaks the Chat Completions protocol, so preserve tool support here
