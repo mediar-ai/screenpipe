@@ -332,7 +332,7 @@ async fn collect_migration_diagnostics(app: &AppHandle) -> String {
     collect_migration_diagnostics_from_root(root).await
 }
 
-async fn collect_migration_diagnostics_from_root(root: std::path::PathBuf) -> String {
+pub(crate) async fn collect_migration_diagnostics_from_root(root: std::path::PathBuf) -> String {
     match timeout(
         DIAGNOSTIC_PROBE_TIMEOUT,
         tokio::task::spawn_blocking(move || {
@@ -342,10 +342,43 @@ async fn collect_migration_diagnostics_from_root(root: std::path::PathBuf) -> St
                     json!({"error": format!("Could not read migration diagnostics: {error}")})
                 }
             };
+            // Read receipt metadata only: never open the recording database or
+            // include its contents, paths, privacy policy or settings.
+            let descriptor = screenpipe_db::storage::StorageDescriptor::read(&root);
+            let receipt = screenpipe_db::storage::migration_report(&root);
+            let pending = root.join("storage-migration.json").try_exists();
+            let completion = match (descriptor, receipt) {
+                (Ok(descriptor), Ok(receipt)) => json!({
+                    "active_storage": descriptor.as_ref().map(|d| json!({
+                        "database_id": d.database_id, "generation": d.generation, "mode": d.mode,
+                    })),
+                    "receipt": receipt.as_ref().map(|r| json!({
+                        "database_id": r.database_id, "generation": r.generation,
+                        "source_bytes": r.source_bytes, "index_bytes": r.index_bytes,
+                        "payload_bytes": r.payload_bytes,
+                    })),
+                    "receipt_matches_active_storage": descriptor.as_ref().zip(receipt.as_ref())
+                        .is_some_and(|(d, r)| d.database_id == r.database_id && d.generation == r.generation),
+                    "pending": pending.as_ref().ok().copied(),
+                    "pending_error": pending.err().map(|e| e.to_string()),
+                }),
+                (descriptor, receipt) => json!({
+                    "error": "Could not verify migration receipt and active storage",
+                    "descriptor_error": descriptor.err().map(|e| e.to_string()),
+                    "receipt_error": receipt.err().map(|e| e.to_string()),
+                }),
+            };
             // The retry block can predate attempt diagnostics. Include it even
             // if the snapshot directory is missing or unreadable.
             json!({
                 "attempts": attempts,
+                "completion": completion,
+                // Expose the observed native prerequisites, not a second copy
+                // of the automatic-migration arbitration or desired policy.
+                "automatic_migration_prerequisites": {
+                    "ui_hidden": crate::enterprise_policy::is_app_ui_hidden(),
+                    "recording_authorized": crate::enterprise_policy::recording_authorized(),
+                },
                 "sqlite_planner": match screenpipe_db::planner_stats::report(&root) {
                     Ok(report) => json!(report),
                     Err(_) => json!({"error": "Could not read SQLite planner maintenance diagnostics"}),
