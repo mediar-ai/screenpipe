@@ -6,8 +6,8 @@
 //!
 //! This module deliberately knows nothing about remote requests, users, or
 //! upload endpoints. It builds a small bundle from the app's own logs, including
-//! rotated panic logs, and passes every byte through the shared deterministic
-//! on-device filtering pipeline. The manual "send logs" flow can additionally
+//! rotated panic logs and persisted migration metadata, and passes every byte
+//! through the shared deterministic on-device filtering pipeline. The manual "send logs" flow can additionally
 //! use the Tinfoil enclave, but unattended diagnostics never send raw text to a
 //! third-party redaction service. Because no automated filter can guarantee
 //! removal of every name or path, the consent UI explicitly discloses that
@@ -54,7 +54,11 @@ pub async fn collect_redacted(app: &AppHandle) -> Result<String, String> {
     let files = crate::log_files::get_log_files(app.clone())
         .await
         .unwrap_or_default();
-    redact_files(&owned_log_files(files)).await
+    redact_files_with_migration(
+        &owned_log_files(files),
+        Some(crate::db_relaunch::active_data_dir()),
+    )
+    .await
 }
 
 /// Collect from explicit app-owned log directories.
@@ -62,8 +66,15 @@ pub async fn collect_redacted(app: &AppHandle) -> Result<String, String> {
 /// Enterprise's mandatory collector uses this entry point so both managed and
 /// opted-in builds share one filesystem, size, timeout, and redaction policy.
 pub async fn collect_redacted_from_dirs(dirs: &[std::path::PathBuf]) -> Result<String, String> {
+    collect_redacted_from_dirs_at_root(dirs, crate::db_relaunch::active_data_dir()).await
+}
+
+async fn collect_redacted_from_dirs_at_root(
+    dirs: &[std::path::PathBuf],
+    root: std::path::PathBuf,
+) -> Result<String, String> {
     let files = crate::log_files::collect_log_files(dirs).await;
-    redact_files(&owned_log_files(files)).await
+    redact_files_with_migration(&owned_log_files(files), Some(root)).await
 }
 
 fn owned_log_files(files: Vec<LogFile>) -> Vec<LogFile> {
@@ -132,8 +143,26 @@ fn is_dated_rolling_log(name: &str, prefix: &str) -> bool {
             })
 }
 
+#[cfg(test)]
 async fn redact_files(files: &[LogFile]) -> Result<String, String> {
-    let raw = build_bundle(files).await;
+    redact_files_with_migration(files, None).await
+}
+
+async fn redact_files_with_migration(
+    files: &[LogFile],
+    data_root: Option<std::path::PathBuf>,
+) -> Result<String, String> {
+    // Persistent evidence goes first so rolling logs cannot displace it at the
+    // existing redacted-bundle boundary. Reuse the manual support reader and
+    // send all bytes through the same local redaction as unattended logs.
+    let mut raw = match data_root {
+        Some(root) => format!(
+            "=== Storage migration diagnostics ===\n{}\n",
+            crate::feedback_upload::collect_migration_diagnostics_from_root(root).await
+        ),
+        None => String::new(),
+    };
+    raw.push_str(&build_bundle(files).await);
     let redacted = tokio::time::timeout(
         REDACTION_TIMEOUT,
         crate::feedback_redact::redact_diagnostics_locally(raw),
@@ -282,6 +311,86 @@ mod tests {
             path.exists(),
             "support collection must preserve pending events"
         );
+    }
+
+    #[tokio::test]
+    async fn unattended_migration_evidence_survives_missing_logs_and_redaction() {
+        use screenpipe_db::{storage, DatabaseManager};
+        let root = tempfile::tempdir().unwrap();
+        let db = DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap();
+        db.close().await;
+        let descriptor = storage::StorageDescriptor::read(root.path())
+            .unwrap()
+            .unwrap();
+        let receipt = serde_json::json!({
+            "database_id": descriptor.database_id, "generation": descriptor.generation,
+            "frames": 0, "tables": [], "source_bytes": 4096,
+            "index_bytes": 2048, "payload_bytes": 0,
+        });
+        let receipt_path = root.path().join("storage-migration-complete.json");
+        std::fs::write(&receipt_path, serde_json::to_vec(&receipt).unwrap()).unwrap();
+        // No rolling logs: a later process must still expose the matching
+        // durable receipt without reading the recording database.
+        let report = collect_redacted_from_dirs_at_root(&[], root.path().to_path_buf())
+            .await
+            .unwrap();
+        assert!(report.contains("\"receipt_matches_active_storage\": true"));
+        assert!(report.contains("\"pending\": false"));
+        assert!(report.contains(&descriptor.database_id));
+
+        // Interrupted/failed work must remain diagnosable even with a receipt
+        // from another generation and enough log text to fill the old bundle.
+        let mut mismatched = receipt;
+        mismatched["generation"] = serde_json::json!(uuid::Uuid::new_v4().to_string());
+        std::fs::write(&receipt_path, serde_json::to_vec(&mismatched).unwrap()).unwrap();
+        std::fs::write(root.path().join("storage-migration.json"), "{}").unwrap();
+        std::fs::write(root.path().join("storage-migration-error.txt"),
+            "archive verification failed; pending data retained; contact private.person@example.com").unwrap();
+        let logs = root.path().join("logs");
+        std::fs::create_dir(&logs).unwrap();
+        for day in 10..17 {
+            std::fs::write(
+                logs.join(format!("screenpipe.2026-10-{day}.log")),
+                "INFO normal recording resumed\n".repeat(8192),
+            )
+            .unwrap();
+        }
+        let report = collect_redacted_from_dirs_at_root(&[logs], root.path().to_path_buf())
+            .await
+            .unwrap();
+        assert!(report.contains("\"receipt_matches_active_storage\": false"));
+        assert!(report.contains("\"pending\": true"));
+        assert!(report.contains("archive verification failed"));
+        assert!(report.contains("pending data retained"));
+        assert!(!report.contains("private.person@example.com"));
+
+        // Verify the exact redacted bytes received by the support upload port,
+        // rather than only an unredacted snapshot or local tracing line.
+        use wiremock::{
+            matchers::{body_string_contains, method},
+            Mock, MockServer, ResponseTemplate,
+        };
+        let support = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(body_string_contains("archive verification failed"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&support)
+            .await;
+        reqwest::Client::new()
+            .put(support.uri())
+            .body(report)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        let uploads = support.received_requests().await.unwrap();
+        let received = String::from_utf8_lossy(&uploads[0].body);
+        assert!(received.contains("\"pending\": true"));
+        assert!(!received.contains("private.person@example.com"));
     }
 
     #[tokio::test(flavor = "current_thread")]
