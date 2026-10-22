@@ -79,8 +79,9 @@ export class AnthropicProvider implements AIProvider {
 		baseURL?: string,
 		defaultHeaders?: Record<string, string | null | undefined>,
 		maxRetries?: number,
+		fetchImpl?: typeof fetch,
 	) {
-		this.client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}), defaultHeaders, maxRetries });
+		this.client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}), defaultHeaders, maxRetries, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
 		// The Anthropic SDK validates auth omission against per-request headers,
 		// even when the constructor default already removed X-Api-Key. Repeat only
 		// that null marker here; Gateway metadata remains in defaultHeaders.

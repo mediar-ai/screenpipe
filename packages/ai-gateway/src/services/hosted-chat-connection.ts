@@ -22,7 +22,32 @@ export async function resolveHostedChatConnection(
 ) {
   if (env.EXPERIENTIAL_CANARY_MODE !== 'internal' || context.plan !== 'internal' ||
       (provider !== 'openai' && provider !== 'anthropic')) {
-    return { ...await getHostedChatGatewayConnection(env, provider, context), gateway: 'cloudflare' as const, model };
+    const connection = await getHostedChatGatewayConnection(env, provider, context);
+    // getUrl() returns an address, not authentication. Dedicated canaries do
+    // not copy production gateway tokens. Use the existing authenticated
+    // gateway binding for their rollback while preserving native SDK payloads.
+    // Customer traffic and token-configured production connections are unchanged.
+    const binding = context.plan === 'internal' && env.EXPERIENTIAL_API_KEY &&
+      !env.CLOUDFLARE_AI_GATEWAY_BASE_URL?.trim() && !env.CLOUDFLARE_AI_GATEWAY_TOKEN?.trim() &&
+      (provider === 'openai' || provider === 'anthropic')
+      ? env.AI.gateway(String(env.CLOUDFLARE_AI_GATEWAY_ID)) : undefined;
+    const bindingFetch = binding && typeof binding.run === 'function'
+      ? (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const prefix = connection.baseURL.replace(/\/$/, '') + '/';
+          if (!url.startsWith(prefix) || init?.method?.toUpperCase() !== 'POST' || typeof init.body !== 'string') {
+            throw new Error('Unexpected canary rollback SDK request');
+          }
+          const endpoint = url.slice(prefix.length);
+          if (!['chat/completions','responses','v1/messages'].includes(endpoint)) {
+            throw new Error('Unexpected canary rollback protocol');
+          }
+          const headers = Object.fromEntries([...new Headers(init.headers)].filter(([name]) => !name.startsWith('cf-aig-')));
+          return binding.run({ provider, endpoint, headers, query: JSON.parse(init.body) }, {
+            extraHeaders: Object.fromEntries(Object.entries(connection.defaultHeaders).filter(([name, value]) => name.startsWith('cf-aig-') && value !== null)),
+          });
+        }) as typeof fetch : undefined;
+    return { ...connection, ...(bindingFetch ? { fetch: bindingFetch } : {}), gateway: 'cloudflare' as const, model };
   }
   const apiKey = env.EXPERIENTIAL_API_KEY?.trim();
   if (!apiKey || !/^xpl_[0-9a-f]{40}$/.test(apiKey)) {

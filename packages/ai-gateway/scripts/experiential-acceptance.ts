@@ -5,6 +5,7 @@
 // credential replacement is test instrumentation; the Worker selects its real
 // internal-service Experiential route. Customer traffic remains on Cloudflare.
 import { getHostedAiAllowedModels } from '../src/services/hosted-ai-policy';
+import { OPENAI_PRO_NATIVE_FEATURES } from '../src/providers/openai-pro';
 import { LocalGatewayHarness } from '../src/test/local-gateway-harness';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -47,6 +48,9 @@ if (policy.policy?.require_zdr !== false || capture.capture_prompt_content !== t
 	throw new Error('Test requires the authorized retention-enabled organization configuration');
 const workerUrl = process.env.EXPERIENTIAL_ACCEPTANCE_WORKER_URL;
 const serviceToken = process.env.EXPERIENTIAL_ACCEPTANCE_SERVICE_TOKEN;
+const expectedGateway = process.env.EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY ?? 'experiential';
+if (!['cloudflare','experiential'].includes(expectedGateway) || (!workerUrl && expectedGateway !== 'experiential'))
+  throw new Error('Expected gateway must match the local Experiential or deployed canary mode');
 if (workerUrl) {
   const url = new URL(workerUrl);
   if (url.protocol !== 'https:' || !url.hostname.endsWith('.louis-beaumont.workers.dev') ||
@@ -107,7 +111,7 @@ async function call(body: any) {
 		body: JSON.stringify(body),
 	});
 	const raw = await response.text();
-	if (response.ok) assert(response.headers.get('x-screenpipe-gateway') === 'experiential', 'Response did not use the actual Experiential selector');
+	if (response.ok) assert(response.headers.get('x-screenpipe-gateway') === expectedGateway, 'Response did not use the selected gateway');
 	assert(response.ok, 'Worker HTTP ' + response.status + ': ' + raw);
 	if (!body.stream) return { data: JSON.parse(raw), served: response.headers.get('x-screenpipe-model') };
 	const events = raw
@@ -147,6 +151,7 @@ try {
 		for (const mode of modes.filter((mode) => !selectedModes || selectedModes.includes(mode))) {
 			const start = attempts.length;
 			const body: any = { model, max_tokens: 2048, max_completion_tokens: 2048, messages: [{ role: 'user', content: 'Reply OK.' }] };
+			if (model in OPENAI_PRO_NATIVE_FEATURES) body.reasoning_effort = 'medium';
 			if (mode === 'stream' || mode === 'stream-tools') body.stream = true;
 			if (mode === 'tools' || mode === 'stream-tools') Object.assign(body, { tools: [tool], tool_choice: { type: 'function', function: { name: 'confirm' } } });
 			if (mode === 'schema')
@@ -160,6 +165,8 @@ try {
 					{ type: 'image_url', image_url: { url: image } },
 				];
 			const row: any = { model, mode };
+      const unsupportedSchema = mode === 'schema' &&
+        OPENAI_PRO_NATIVE_FEATURES[model as keyof typeof OPENAI_PRO_NATIVE_FEATURES]?.structuredOutput === false;
 			try {
 				const { data, served } = await call(body);
 				const choice = data.choices?.[0];
@@ -167,7 +174,7 @@ try {
 				assert(model === 'auto' || served === model, 'Explicit model answered by fallback ' + served);
 				assert(
 					attempts.slice(start).some((a) => a.status === 200 && (workerUrl
-            ? a.worker_request_id && a.gateway === 'experiential' : a.request_id)),
+            ? a.worker_request_id && a.gateway === expectedGateway : a.request_id)),
 					'No live gateway invocation proved this response',
 				);
 				if (mode === 'tools' || mode === 'stream-tools') {
@@ -194,10 +201,15 @@ try {
 					}
 					if (mode === 'image') assert(/\b7429\b/.test(choice.message.content), 'Image digits incorrect: ' + choice.message.content);
 				}
+				assert(!unsupportedSchema, 'An unsupported native schema format was silently accepted');
 				row.passed = true;
 			} catch (e) {
-				row.passed = false;
-				row.error = String(e.message).replace(/xpl_[0-9a-f]{40}/g, '[REDACTED_SECRET]');
+        const message = String(e.message).replace(/xpl_[0-9a-f]{40}/g, '[REDACTED_SECRET]');
+        if (unsupportedSchema && message.startsWith('Worker HTTP 400:') && message.includes('does not support structured output')) {
+          row.supported = false;
+          row.rejection_verified = true;
+          row.reason = 'GPT-5.4 Pro does not support native structured output; reported separately, never counted as a passing feature';
+        } else { row.passed = false; row.error = message; }
 			}
 			row.attempts = attempts.slice(start);
 			results.push(row);
@@ -207,9 +219,11 @@ try {
 					{
 						boundary:
 							workerUrl
-                ? 'deployed isolated Cloudflare canary using real Experiential inference; worker_request_id is CF-Ray, not a vendor request ID; not customer cutover'
+                ? `deployed isolated Cloudflare canary using real ${expectedGateway} inference; worker_request_id is CF-Ray, not a vendor request ID; not customer cutover`
                 : 'real internal-service Experiential selector in local Worker with migrated D1 and live inference; only the test credential is replaced outside the Worker; not deployed customer routing',
-						retained_routes: [...retainedModels],
+						expected_gateway: expectedGateway,
+            worker_url: workerUrl ?? null,
+            retained_routes: [...retainedModels],
 						results,
 					},
 					null,
@@ -221,9 +235,9 @@ try {
 	}
 	harness.assertNoUnexpectedOutboundRequests();
 	console.log(
-		JSON.stringify({ summary: true, passed: results.filter((r) => r.passed).length, failed: results.filter((r) => !r.passed).length }),
+		JSON.stringify({ summary: true, passed: results.filter((r) => r.passed).length, failed: results.filter((r) => r.passed === false).length, unsupported: results.filter(r => r.supported === false).length }),
 	);
 } finally {
 	await harness.dispose();
 }
-process.exitCode = results.some((r) => !r.passed) ? 1 : 0;
+process.exitCode = results.some((r) => r.passed === false) ? 1 : 0;

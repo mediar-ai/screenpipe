@@ -11,10 +11,11 @@ import type { Message, RequestBody } from '../types';
  * protocol so existing desktop clients can select it without an app update. */
 export class AstraProvider extends OpenAIProvider {
 	private responsesClient: OpenAI;
+	protected responseModel: string = 'gpt-6-astra';
 
-	constructor(apiKey: string, baseURL?: string, defaultHeaders?: Record<string, string | null | undefined>, maxRetries?: number) {
-		super(apiKey, baseURL, defaultHeaders, maxRetries);
-		this.responsesClient = new OpenAI({ apiKey, baseURL, defaultHeaders, maxRetries });
+	constructor(apiKey: string, baseURL?: string, defaultHeaders?: Record<string, string | null | undefined>, maxRetries?: number, chatTemplateKwargs?: Record<string, unknown>, fetchImpl?: typeof fetch) {
+		super(apiKey, baseURL, defaultHeaders, maxRetries, chatTemplateKwargs, fetchImpl);
+		this.responsesClient = new OpenAI({ apiKey, baseURL, defaultHeaders, maxRetries, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
 	}
 
 	private input(messages: Message[]): any[] {
@@ -48,11 +49,11 @@ export class AstraProvider extends OpenAIProvider {
 		return input;
 	}
 
-	private parameters(body: RequestBody): ResponseCreateParamsNonStreaming {
+	protected parameters(body: RequestBody): ResponseCreateParamsNonStreaming {
 		// Build an allowlist rather than spreading the client body. Low and
 		// Standard are enforced here, including for background/Pipe requests.
 		const params: ResponseCreateParamsNonStreaming = {
-			model: 'gpt-6-astra', input: this.input(body.messages),
+			model: this.responseModel, input: this.input(body.messages),
 			reasoning: { effort: 'low' }, service_tier: 'default', store: false,
 		};
 		const budget = body.max_completion_tokens ?? body.max_tokens;
@@ -96,7 +97,7 @@ export class AstraProvider extends OpenAIProvider {
 			}
 		}
 		return {
-			id: response.id, object: 'chat.completion', model: 'gpt-6-astra', created: response.created_at,
+			id: response.id, object: 'chat.completion', model: this.responseModel, created: response.created_at,
 			choices: [{ index: 0, message: {
 				role: 'assistant', content: text.join('') || (refusals.join('') || null),
 				...(calls.length ? { tool_calls: calls } : {}),
@@ -114,6 +115,7 @@ export class AstraProvider extends OpenAIProvider {
 
 	async createStreamingCompletion(body: RequestBody): Promise<ReadableStream> {
 		const params: ResponseCreateParamsStreaming = { ...this.parameters(body), stream: true };
+		const responseModel = this.responseModel;
 		const upstream = await this.responsesClient.responses.create(params);
 		const iterator = upstream[Symbol.asyncIterator]();
 		const encoder = new TextEncoder();
@@ -123,7 +125,7 @@ export class AstraProvider extends OpenAIProvider {
 		let cancelled = false;
 		const calls = new Map<string, number>();
 		const chunk = (delta: any, finish_reason: string | null = null) => ({
-			id, object: 'chat.completion.chunk', created, model: 'gpt-6-astra',
+			id, object: 'chat.completion.chunk', created, model: responseModel,
 			choices: [{ index: 0, delta, finish_reason }],
 		});
 		const translate = (event: any): any[] => {
@@ -131,7 +133,7 @@ export class AstraProvider extends OpenAIProvider {
 				id = event.response.id;
 				created = event.response.created_at;
 			}
-			if (event.type === 'error') throw new Error(event.message ?? 'Astra stream failed');
+			if (event.type === 'error') throw new Error(event.message ?? `${responseModel} stream failed`);
 			if (event.type === 'response.failed') checkFailure(event.response);
 			if (event.type === 'response.output_item.added' && event.item.type === 'function_call') {
 				const index = calls.size;
@@ -141,7 +143,7 @@ export class AstraProvider extends OpenAIProvider {
 			}
 			if (event.type === 'response.function_call_arguments.delta') {
 				const index = calls.get(event.item_id);
-				if (index === undefined) throw new Error('Astra returned arguments without a tool call');
+				if (index === undefined) throw new Error(`${responseModel} returned arguments without a tool call`);
 				return [chunk({ tool_calls: [{ index, function: { arguments: event.delta } }] })];
 			}
 			if (event.type === 'response.output_text.delta') return [chunk({ role: 'assistant', content: event.delta })];
@@ -160,7 +162,7 @@ export class AstraProvider extends OpenAIProvider {
 		try {
 			while (!first.length) {
 				const next = await iterator.next();
-				if (next.done) throw new Error('Astra stream ended before completion');
+				if (next.done) throw new Error(`${responseModel} stream ended before completion`);
 				first = translate(next.value);
 			}
 		} catch (error) {
@@ -175,7 +177,7 @@ export class AstraProvider extends OpenAIProvider {
 					while (!terminal && !cancelled) {
 						const next = await iterator.next();
 						if (cancelled) return;
-						if (next.done) throw new Error('Astra stream ended before completion');
+						if (next.done) throw new Error(`${responseModel} stream ended before completion`);
 						translate(next.value).forEach(send);
 					}
 					if (!cancelled) {
@@ -185,7 +187,7 @@ export class AstraProvider extends OpenAIProvider {
 				} catch (error) {
 					if (!cancelled) {
 						// A failed partial response must never look like successful EOF.
-						send({ error: { message: 'Astra stream interrupted', type: 'upstream_error' } });
+						send({ error: { message: `${responseModel} stream interrupted`, type: 'upstream_error' } });
 						controller.error(error);
 					}
 				} finally {
@@ -199,7 +201,7 @@ export class AstraProvider extends OpenAIProvider {
 
 function checkFailure(response: any): void {
 	if (response.status === 'failed' || response.error) {
-		throw new Error(response.error?.message ?? 'Astra response failed');
+		throw new Error(response.error?.message ?? 'Responses request failed');
 	}
 }
 

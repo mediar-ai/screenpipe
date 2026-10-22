@@ -243,8 +243,9 @@ export class OpenAIProvider implements AIProvider {
 		defaultHeaders?: Record<string, string | null | undefined>,
 		maxRetries?: number,
 		chatTemplateKwargs?: Record<string, unknown>,
+		fetchImpl?: typeof fetch,
 	) {
-		this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}), defaultHeaders, maxRetries });
+		this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}), defaultHeaders, maxRetries, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
 		this.chatTemplateKwargs = chatTemplateKwargs;
 	}
 

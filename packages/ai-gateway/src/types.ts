@@ -169,7 +169,7 @@ export interface Env {
 	ELEVENLABS_USD_PER_CHARACTER?: string;
 	/** Local-dev only: Gateway root or compat chat URL when remote binding URL resolution is unavailable. */
 	CLOUDFLARE_AI_GATEWAY_BASE_URL?: string;
-	/** Local-dev only: authenticate provider-native fetches made off-platform. */
+	/** Gateway bearer for provider-native SDK fetches, including local development. */
 	CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
 	/** Cloudflare account that owns the hosted-chat Gateway and Analytics data. */
 	CLOUDFLARE_ACCOUNT_ID?: string;

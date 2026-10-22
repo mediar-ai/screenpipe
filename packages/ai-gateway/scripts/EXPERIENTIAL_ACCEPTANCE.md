@@ -89,3 +89,27 @@ not an Experiential billing ID. The response must report the actual Experiential
 selector and satisfy the same model, content, tool, schema and SSE checks. Local
 instrumented runs separately retain the vendor request IDs. Do not conflate
 these evidence boundaries.
+
+For a deployed Cloudflare rollback/baseline run, set
+`EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY=cloudflare` after disabling the canary.
+The same case manifest and assertions then require the Cloudflare route. The
+report names that boundary explicitly; Cloudflare results never count as passed
+Experiential cases. A dedicated internal canary without a copied production
+gateway token uses the authenticated gateway binding for rollback, preserving
+native SDK request/response formats and the existing metadata. Production
+connections with their configured gateway token keep their current transport.
+
+## Native Pro capabilities
+
+Both existing Pro models require Responses, so the Worker keeps its public Chat
+wire while reusing the Responses translator. GPT-5.5 Pro has no native stream;
+its SSE response is emitted after the provider finishes, with terminal reason,
+tool IDs and usage preserved. It does not claim incremental upstream tokens.
+GPT-5.4 Pro supports native streaming but has no native structured-output format.
+That schema case must return a clear unsupported-format error and is reported
+separately as unsupported, never as a passing inference feature. All supported
+Pro tests explicitly request their documented `medium` effort; the runtime
+preserves supported caller effort and native defaults when omitted.
+
+Capability references: [GPT-5.4 Pro](https://developers.openai.com/api/docs/models/gpt-5.4-pro)
+and [GPT-5.5 Pro](https://developers.openai.com/api/docs/models/gpt-5.5-pro).
