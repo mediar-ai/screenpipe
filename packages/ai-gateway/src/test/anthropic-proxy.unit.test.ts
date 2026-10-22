@@ -688,7 +688,7 @@ describe('AnthropicProvider.formatMessages', () => {
 					type: 'function' as const,
 					function: { name: 'search', arguments: argumentsValue },
 				}],
-			}]);
+			}, { role: 'tool', tool_call_id: 'call_1', content: 'result' }]);
 			const toolUse = (result[0].content as any[]).find((part: any) => part.type === 'tool_use');
 			expect(toolUse.input).toEqual({});
 		}
@@ -962,6 +962,7 @@ describe('AnthropicProvider.formatMessages tool_use.id sanitization', () => {
 					function: { name: 'search', arguments: '{}' },
 				}],
 			} as any,
+			{ role: 'tool', tool_call_id: 'toolu_01AbCdEf', content: 'result' },
 		]);
 		const toolUse = (result[0].content as any[]).find((c: any) => c.type === 'tool_use');
 		expect(toolUse.id).toBe('toolu_01AbCdEf');
@@ -972,8 +973,8 @@ describe('AnthropicProvider.formatMessages tool_use.id sanitization', () => {
 			{ role: 'tool', content: 'orphan result' } as any,
 		]);
 		const toolResult = (result[0].content as any[])[0];
-		expect(toolResult.type).toBe('tool_result');
-		expect(toolResult.tool_use_id).toBe('');
+		expect(toolResult.type).toBe('text');
+		expect(toolResult.text).toContain('orphan result');
 	});
 });
 

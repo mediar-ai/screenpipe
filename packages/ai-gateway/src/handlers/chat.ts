@@ -128,6 +128,8 @@ const SENTRY_SKIP_STATUSES = new Set([404, 429, 502, 503, 504, 524]);
 const USER_INPUT_TOO_LARGE_PATTERNS = [
   /prompt is too long/i,
   /maximum context length/i,
+  // Experiential rejects these before inference; preserve overflow recovery.
+  /prompt is at least[\s\S]*largest context window/i,
   /context length.*exceeded/i,
   /request payload size exceeds/i,
   /input tokens exceed the configured limit/i,
@@ -767,8 +769,8 @@ export async function trySafetyRefusalFallback(
 export function friendlyError(model: string, status: number, fellThrough: boolean): string {
   if (status === 413) {
     return fellThrough
-      ? `Your conversation is too long for the available models' context windows. Start a new conversation or trim the attached context.`
-      : `Your conversation is too long for ${model}'s context window. Start a new conversation, trim the attached context, or pick a model with a larger context window.`;
+      ? `The prompt is too long for the available models' context windows. Start a new conversation or trim the attached context.`
+      : `The prompt is too long for ${model}'s context window. Start a new conversation, trim the attached context, or pick a model with a larger context window.`;
   }
   if (status === 524 || status === 504 || status === 408) {
     return fellThrough
@@ -820,7 +822,7 @@ export function ensureScreenpipeHint(body: RequestBody): RequestBody {
 
 /** Render a final error response in the right format (SSE vs JSON). */
 function errorResponse(body: RequestBody, status: number, message: string, gateway?: 'cloudflare' | 'experiential', gatewayReason?: string): Response {
-  const payload = { error: { message, type: 'api_error', code: String(status) } };
+  const payload = { error: { message, type: status === 413 ? 'invalid_request_error' : 'api_error', code: status === 413 ? 'context_length_exceeded' : String(status) } };
   if (body.stream) {
     return addCorsHeaders(new Response(
       `data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`,

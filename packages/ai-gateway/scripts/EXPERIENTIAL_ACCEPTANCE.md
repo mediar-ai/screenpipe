@@ -68,15 +68,18 @@ existing Cloudflare route; client headers or JSON cannot choose this flag.
 
 Features retained on original routes:
 
-- GPT-5.4 Pro: the destination refuses its existing no-training route setting.
-- Images on GPT-5.4 Mini/Nano and original GPT-5 Mini/Nano: destination routes
-  are text-only. Text and tools on those models can use Experiential.
 - Context-tier pricing models: retain native pricing rather than estimate the
   threshold. The central pricing table identifies these models.
-- GPT-5.6 explicit prompt caching: preserve the native options and breakpoints
-  rather than remove them for a destination that rejects them.
 - Vertex, confidential/custom GLM, classifier, audio and background rescue:
   retain their existing routes.
+
+GPT-5.4 Pro, Mini/Nano image input (GPT-5.4 and GPT-5), and GPT-5.6 now
+use Experiential. OpenAI Chat requests use automatic prompt caching there;
+`prompt_cache_options` and explicit breakpoints remain specific to native routes.
+Cached token usage is still returned and metered. Extended cache lifetime is not
+requested. Context-limit refusals are returned as HTTP 413 with
+`context_length_exceeded` and wording recognized by the agent's existing
+compaction recovery; request history is not truncated by the gateway.
 
 A further explicit unsupported-request refusal can retry the same model on its
 original native route. Spend limits, quotas, safety refusals and uncertain paid
