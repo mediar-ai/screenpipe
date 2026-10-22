@@ -298,8 +298,7 @@ fn main() -> anyhow::Result<()> {
 
     let runtime = tokio::runtime::Runtime::new()?;
     #[cfg(target_os = "macos")]
-    if let Some(code) = runtime.block_on(screenpipe_audio::core::vpio_process::run_hidden_mode())
-    {
+    if let Some(code) = runtime.block_on(screenpipe_audio::core::vpio_process::run_hidden_mode()) {
         std::process::exit(code);
     }
 
