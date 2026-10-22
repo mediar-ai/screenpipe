@@ -27,7 +27,7 @@ for (let attempt=0; attempt<30 && !await page.getByRole('group',{name:'Switch wo
  if(await later.isVisible()) await later.click();
  await page.waitForTimeout(1000);
 }
-await page.getByRole('button', {name: /Workflows/, exact: true}).click();
+await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Workflows', exact: true}).click();
 await page.getByRole('combobox',{name:'Workflow source'}).selectOption('cloud');
 await page.getByRole('dialog',{name:'Turn off local workflow processing?'}).waitFor();
 await capture({animations:'disabled',style:'nextjs-portal { display: none; }',path:out+'/cloud-processing-choice.png'});
@@ -150,7 +150,7 @@ for (let attempt=0; attempt<30 && !await page.getByRole('group',{name:'Switch wo
  if(await later.isVisible()) await later.click();
  await page.waitForTimeout(1000);
 }
-await page.getByRole('button', {name: /Workflows/, exact: true}).click();
+await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Workflows', exact: true}).click();
 await page.getByRole('combobox',{name:'Workflow source'}).selectOption('cloud');
 await page.getByRole('heading',{name:'Your workflows',exact:true}).waitFor();
 assert((await page.locator('html').getAttribute('class')).includes('dark'));

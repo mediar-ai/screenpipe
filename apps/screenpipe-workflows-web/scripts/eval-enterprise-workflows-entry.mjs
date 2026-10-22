@@ -35,7 +35,7 @@ try {
   await authenticate();
   await page.getByRole('group', { name: 'Switch workspace', exact: true }).waitFor();
   await capture('enterprise-home-after');
-  await page.getByRole('button', {name: /^Workflows/, exact: true}).click();
+  await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Workflows', exact: true}).click();
   await page.getByRole('button', { name: 'Keep local processing', exact: true }).click();
   await page.getByRole('dialog', { name: 'Turn off local workflow processing?' }).waitFor({ state: 'hidden' });
   assert.equal(await page.getByRole('combobox', { name: 'Workflow source' }).inputValue(), 'cloud',
@@ -44,7 +44,7 @@ try {
   await capture('enterprise-cloud-after');
   await page.locator('article').filter({ has: page.getByRole('heading', { name: 'Research synthesis', exact: true }) }).getByRole('button', { name: 'Open map' }).click();
   await page.getByRole('heading', { name: 'Collect sources', exact: true }).waitFor();
-  await page.getByRole('button', {name: /^Memory/, exact: true}).click();
+  await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Memory', exact: true}).click();
   await page.getByRole('group', { name: 'Switch workspace', exact: true }).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Collect sources', exact: true }).isVisible(), false);
   await authenticate('/home?mode=workflows&cloudWorkflowState=error');
