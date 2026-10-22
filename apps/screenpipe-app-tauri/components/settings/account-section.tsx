@@ -550,7 +550,7 @@ export function AccountSection() {
 
         await openExternalUrl(data.url);
         posthog.capture("desktop_upgrade_checkout_opened", {
-          plan: "pro",
+          plan: targetPlan,
           interval: selection.interval,
           source: selection.source,
           destination_type: data.type || "checkout",

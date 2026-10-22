@@ -504,6 +504,38 @@ describe("AccountSection subscription/login gating", () => {
     );
   });
 
+  it.each([
+    ["standard", "checkout"],
+    ["standard", "portal"],
+    ["pro", "checkout"],
+    ["pro", "portal"],
+  ])("reports the selected %s plan when opening %s", async (plan, destination) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ url: "https://billing.stripe.test/session", type: destination }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+    mocks.state.user = {
+      id: "u1",
+      email: "free@screenpipe.test",
+      token: "tok",
+      cloud_subscribed: false,
+      subscription_plan: "none",
+    };
+    render(<AccountSection />);
+    fireEvent.click(screen.getByTestId(`account-plan-choose-${plan}`));
+
+    await waitFor(() => expect(mocks.capture).toHaveBeenCalledWith(
+      "desktop_upgrade_checkout_opened",
+      expect.objectContaining({ plan, destination_type: destination }),
+    ));
+    expect(mocks.capture).toHaveBeenCalledWith(
+      "desktop_upgrade_checkout_started",
+      expect.objectContaining({ plan }),
+    );
+  });
+
   it("offers Lifetime users Business and starts a separate subscription checkout", async () => {
     const checkoutFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "test stop" }), {
