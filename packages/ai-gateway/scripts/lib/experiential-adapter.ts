@@ -148,6 +148,10 @@ export async function prepareExperientialProbeConnection(options: ExperientialAd
       await response.body?.cancel();
       throw new MigrationCheckError('zdr_response_not_confirmed_no_retry');
     }
+    if (contentRetention === 'retain' && response.headers.get('x-gateway-zdr') === 'true') {
+      await response.body?.cancel();
+      throw new MigrationCheckError('retention_response_conflict_no_retry');
+    }
     return response;
   };
   return {

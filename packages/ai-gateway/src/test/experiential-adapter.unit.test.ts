@@ -67,6 +67,14 @@ describe('inactive customer-isolated adapter', () => {
     expect(new Headers(dispatched.init.headers).get('cf-aig-metadata')).toBeNull();
     expect(c.contentRetention).toBe('retain');
   });
+  it('rejects a retaining response that explicitly reports ZDR and refuses replay', async () => {
+    const { options, calls } = await fixture({ capture: true, policy: { require_zdr: false }, verdict: 'true' });
+    delete options.contentRetention;
+    const c = await prepareExperientialProbeConnection(options);
+    await expect(c.fetch(url, post())).rejects.toMatchObject({ code: 'retention_response_conflict_no_retry' });
+    await expect(c.fetch(url, post())).rejects.toMatchObject({ code: 'probe_replay_forbidden' });
+    expect(calls.filter(call => call.init.method === 'POST')).toHaveLength(1);
+  });
   it.each([
     { capture: false, policy: { require_zdr: false } },
     { capture: true, policy: { require_zdr: true } },
