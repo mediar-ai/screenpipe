@@ -149,7 +149,7 @@ pub fn max_batch_duration_secs(
         AudioTranscriptionEngine::OpenAICompatible => {
             user_override.filter(|&v| v > 0).unwrap_or(120)
         }
-        AudioTranscriptionEngine::Parakeet => 45,
+        AudioTranscriptionEngine::Parakeet | AudioTranscriptionEngine::Bark => 45,
         _ => 600,
     }
 }
@@ -2857,6 +2857,10 @@ mod tests {
         );
         assert_eq!(
             max_batch_duration_secs(&AudioTranscriptionEngine::Parakeet, Some(60)),
+            45
+        );
+        assert_eq!(
+            max_batch_duration_secs(&AudioTranscriptionEngine::Bark, None),
             45
         );
     }

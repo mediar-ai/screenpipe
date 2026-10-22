@@ -361,7 +361,11 @@ pub fn is_engine_unsafe_for_cpu(engine: &str, tier: DeviceTier, has_avx2: bool) 
         return true;
     }
 
-    let is_parakeet = engine == "parakeet" || engine == "parakeet-mlx";
+    if engine == "bark" && !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        return true;
+    }
+    // Bark uses the same native MLX graph and expanded weight footprint.
+    let is_parakeet = matches!(engine, "parakeet" | "parakeet-mlx" | "bark");
     if !is_parakeet {
         return false;
     }
@@ -392,7 +396,7 @@ pub fn is_engine_unsafe_for_cpu(engine: &str, tier: DeviceTier, has_avx2: bool) 
     {
         // Off-macOS, plain parakeet is ONNX CPU — safe on High tier. Only the
         // explicit MLX variant is impossible here (no MLX support).
-        engine == "parakeet-mlx"
+        engine == "parakeet-mlx" || engine == "bark"
     }
 }
 
@@ -493,6 +497,8 @@ mod tests {
 
     #[test]
     fn parakeet_unsafe_on_low_and_mid_tier() {
+        assert!(is_engine_unsafe("bark", DeviceTier::Low));
+        assert!(is_engine_unsafe("bark", DeviceTier::Mid));
         assert!(is_engine_unsafe("parakeet", DeviceTier::Low));
         assert!(is_engine_unsafe("parakeet-mlx", DeviceTier::Low));
         assert!(is_engine_unsafe("parakeet", DeviceTier::Mid));

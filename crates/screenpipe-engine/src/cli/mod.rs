@@ -77,6 +77,9 @@ pub enum CliAudioTranscriptionEngine {
     Qwen3Asr,
     #[clap(name = "parakeet")]
     Parakeet,
+    /// Underdog Bark 3.0: English, native MLX on Apple silicon
+    #[clap(name = "bark")]
+    Bark,
     /// Disable transcription (audio capture only, no speech-to-text)
     #[clap(name = "disabled")]
     Disabled,
@@ -105,6 +108,7 @@ fn cli_engine_to_str(engine: &CliAudioTranscriptionEngine) -> &'static str {
         CliAudioTranscriptionEngine::OpenAICompatible => "openai-compatible",
         CliAudioTranscriptionEngine::Qwen3Asr => "qwen3-asr",
         CliAudioTranscriptionEngine::Parakeet => "parakeet",
+        CliAudioTranscriptionEngine::Bark => "bark",
         CliAudioTranscriptionEngine::Disabled => "disabled",
     }
 }
@@ -134,6 +138,7 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
             }
             CliAudioTranscriptionEngine::Qwen3Asr => CoreAudioTranscriptionEngine::Qwen3Asr,
             CliAudioTranscriptionEngine::Parakeet => CoreAudioTranscriptionEngine::Parakeet,
+            CliAudioTranscriptionEngine::Bark => CoreAudioTranscriptionEngine::Bark,
             CliAudioTranscriptionEngine::Disabled => CoreAudioTranscriptionEngine::Disabled,
         }
     }

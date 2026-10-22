@@ -175,6 +175,11 @@ pub enum TranscriptionEngine {
         model: Arc<StdMutex<audiopipe::Model>>,
         vocabulary: Vec<VocabularyEntry>,
     },
+    #[cfg(feature = "parakeet-mlx")]
+    Bark {
+        model: Arc<StdMutex<screenpipe_bark::BarkModel>>,
+        vocabulary: Vec<VocabularyEntry>,
+    },
     Deepgram {
         config: DeepgramTranscriptionConfig,
         languages: Vec<Language>,
@@ -442,6 +447,9 @@ impl TranscriptionEngine {
                     info!("transcription engine runtime: Parakeet (MLX / Metal GPU)");
                     const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3-mlx";
                     let load_result = tokio::task::spawn_blocking(|| {
+                        let _guard = screenpipe_bark::MLX_LOCK
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
                         audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
                     })
                     .await
@@ -552,12 +560,63 @@ impl TranscriptionEngine {
                 }
             }
 
+            AudioTranscriptionEngine::Bark => {
+                #[cfg(feature = "parakeet-mlx")]
+                {
+                    anyhow::ensure!(
+                        languages.iter().all(|l| *l == Language::English),
+                        "Bark 3.0 supports English only"
+                    );
+                    if let Some(path) = screenpipe_bark::cached_model() {
+                        *observed_path = Some(path.clone());
+                        let loaded = tokio::task::spawn_blocking(move || {
+                            screenpipe_bark::BarkModel::load(&path)
+                        })
+                        .await
+                        .map_err(|error| anyhow!("Bark model loading task failed: {error}"))
+                        .and_then(|result| result);
+                        let model = match loaded {
+                            Ok(model) => model,
+                            Err(error) => {
+                                warn!("Bark model unavailable ({error}); recording continues for reconciliation");
+                                *observed_status = "load_failed";
+                                return Ok(Self::Disabled);
+                            }
+                        };
+                        mlx_memory::set_cache_limit(2 * 1024 * 1024 * 1024);
+                        Ok(Self::Bark {
+                            model: Arc::new(StdMutex::new(model)),
+                            vocabulary,
+                        })
+                    } else {
+                        *observed_status = "downloading";
+                        screenpipe_core::health_diagnostics::transcription_model_state(
+                            model_generation,
+                            "downloading",
+                            None,
+                            None,
+                        );
+                        screenpipe_bark::spawn_download();
+                        Ok(Self::Disabled)
+                    }
+                }
+                #[cfg(not(feature = "parakeet-mlx"))]
+                {
+                    Err(anyhow!(
+                        "Bark requires an Apple silicon build with the 'parakeet-mlx' feature"
+                    ))
+                }
+            }
+
             AudioTranscriptionEngine::ParakeetMlx => {
                 #[cfg(feature = "parakeet-mlx")]
                 {
                     info!("transcription engine runtime: Parakeet MLX (GPU)");
                     const MODEL_NAME: &str = "parakeet-tdt-0.6b-v3-mlx";
                     let load_result = tokio::task::spawn_blocking(|| {
+                        let _guard = screenpipe_bark::MLX_LOCK
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
                         audiopipe::Model::from_pretrained_cache_only(MODEL_NAME)
                     })
                     .await
@@ -857,6 +916,11 @@ impl TranscriptionEngine {
                 model: model.clone(),
                 vocabulary: merge_keyterms(vocabulary, extra_keyterms),
             }),
+            #[cfg(feature = "parakeet-mlx")]
+            Self::Bark { model, vocabulary } => Ok(TranscriptionSession::Bark {
+                model: model.clone(),
+                vocabulary: merge_keyterms(vocabulary, extra_keyterms),
+            }),
             Self::Deepgram {
                 config,
                 languages,
@@ -910,6 +974,8 @@ impl TranscriptionEngine {
             Self::Parakeet { .. } => AudioTranscriptionEngine::Parakeet,
             #[cfg(feature = "parakeet-mlx")]
             Self::ParakeetMlx { .. } => AudioTranscriptionEngine::ParakeetMlx,
+            #[cfg(feature = "parakeet-mlx")]
+            Self::Bark { .. } => AudioTranscriptionEngine::Bark,
             Self::Deepgram { .. } => AudioTranscriptionEngine::Deepgram,
             Self::OpenAICompatible { .. } => AudioTranscriptionEngine::OpenAICompatible,
             Self::Disabled => AudioTranscriptionEngine::Disabled,
@@ -943,6 +1009,11 @@ pub enum TranscriptionSession {
     #[cfg(feature = "parakeet-mlx")]
     ParakeetMlx {
         model: Arc<StdMutex<audiopipe::Model>>,
+        vocabulary: Vec<VocabularyEntry>,
+    },
+    #[cfg(feature = "parakeet-mlx")]
+    Bark {
+        model: Arc<StdMutex<screenpipe_bark::BarkModel>>,
         vocabulary: Vec<VocabularyEntry>,
     },
     Deepgram {
@@ -1038,6 +1109,19 @@ impl TranscriptionSession {
     ) -> Result<String> {
         let transcription = match self {
             Self::Disabled => Ok(String::new()),
+            #[cfg(feature = "parakeet-mlx")]
+            Self::Bark { model, .. } => {
+                let resampled;
+                let audio = if sample_rate == 16000 {
+                    audio
+                } else {
+                    resampled = crate::utils::audio::resample(audio, sample_rate, 16000)?;
+                    &resampled
+                };
+                let mut model = model.lock().map_err(|e| anyhow!("Bark model lock: {e}"))?;
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| model.transcribe(audio)))
+                    .map_err(|_| anyhow!("Bark MLX transcription panicked"))?
+            }
 
             Self::Deepgram {
                 config,
@@ -1145,6 +1229,9 @@ impl TranscriptionSession {
 
             #[cfg(feature = "parakeet-mlx")]
             Self::ParakeetMlx { model, vocabulary } => {
+                let _guard = screenpipe_bark::MLX_LOCK
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 // GPU serialization is handled by audiopipe's Model::GPU_LOCK.
                 // The per-model mutex here just prevents concurrent Rust access
                 // to the same Model instance.
@@ -1432,6 +1519,8 @@ impl TranscriptionSession {
                     Self::Parakeet { vocabulary, .. } => vocabulary,
                     #[cfg(feature = "parakeet-mlx")]
                     Self::ParakeetMlx { vocabulary, .. } => vocabulary,
+                    #[cfg(feature = "parakeet-mlx")]
+                    Self::Bark { vocabulary, .. } => vocabulary,
                     Self::Deepgram { vocabulary, .. } => vocabulary,
                     Self::OpenAICompatible { vocabulary, .. } => vocabulary,
                     Self::Disabled => return Ok(text),

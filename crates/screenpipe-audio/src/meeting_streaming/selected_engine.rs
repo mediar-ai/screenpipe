@@ -316,6 +316,8 @@ fn selected_engine_model(session: &TranscriptionSession) -> Option<String> {
         TranscriptionSession::ParakeetMlx { .. } => {
             AudioTranscriptionEngine::ParakeetMlx.to_string()
         }
+        #[cfg(feature = "parakeet-mlx")]
+        TranscriptionSession::Bark { .. } => AudioTranscriptionEngine::Bark.to_string(),
         TranscriptionSession::Deepgram { .. } => AudioTranscriptionEngine::Deepgram.to_string(),
         TranscriptionSession::OpenAICompatible { .. } => {
             AudioTranscriptionEngine::OpenAICompatible.to_string()

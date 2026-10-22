@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-22",
+  "hardware": "Apple M5 Max",
+  "physical_cpu_cores": 18,
+  "memory_gib": 128,
+  "macos": "26.6.2",
+  "backend": "MLX CPU, Metal disabled for this benchmark build",
+  "mlx_cpp_version": "0.25.1",
+  "mlx_rs_version": "0.25.3",
+  "audiopipe_revision": "b099a2e589d0dc4d8f22e3e8351efea9e1a359ac",
+  "bark_revision": "85db2ad18ab41e534a222ee253c29191d77ed919",
+  "parakeet_cache_revision": "ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15",
+  "repetitions_per_clip": 3,
+  "excluded_warmups_per_clip": 1,
+  "weight_dtype": "f32 for both models",
+  "cache_limit_bytes": 2147483648,
+  "bark_model_download_bytes": 163398645,
+  "parakeet_model_download_bytes": 2508288736,
+  "source_sha256": {
+    "crates/screenpipe-bark/src/model.rs": "a1b7aabc3f04ac1e4101a01f71e20f188ba64c4c0878a22750126ef42dd84d99",
+    "crates/screenpipe-bark/src/weights.rs": "5caf77134cf856ae35cd91ab29c0100ac1e370df506a4ac8cdf80be554f88dde",
+    "crates/screenpipe-bark/examples/bark_parakeet_bench.rs": "9e19b728418862f89a1f4b4748072feecae64c947e386ad6975f7b21bd1d71cb",
+    "crates/screenpipe-bark/bench/fixtures.json": "bd6655481693f13a3a2f90f3344546c98c0e22796fb35a7fa3333999b03ee2bb"
+  },
+  "limitations": [
+    "Shared workstation; no CPU affinity or exclusive machine reservation.",
+    "Small legacy fixture set, with imperfect references and no number/URL canonicalization.",
+    "These are CPU measurements, not GPU performance or an ASR leaderboard."
+  ]
+}

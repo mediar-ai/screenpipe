@@ -18,6 +18,7 @@ pub enum AudioTranscriptionEngine {
     Qwen3Asr,
     Parakeet,
     ParakeetMlx,
+    Bark,
     Disabled,
 }
 
@@ -32,8 +33,8 @@ impl AudioTranscriptionEngine {
         match self {
             Self::Qwen3Asr => !cfg!(target_os = "windows"),
             Self::Deepgram | Self::OpenAICompatible | Self::Disabled => false,
-            Self::Parakeet | Self::ParakeetMlx => false, // ONNX Runtime: runtime CPU dispatch
-            _ => true,                                   // all Whisper variants (ggml)
+            Self::Parakeet | Self::ParakeetMlx | Self::Bark => false,
+            _ => true, // all Whisper variants (ggml)
         }
     }
 }
@@ -53,6 +54,7 @@ impl std::str::FromStr for AudioTranscriptionEngine {
             "qwen3-asr" => Ok(Self::Qwen3Asr),
             "parakeet" | "parakeet-tdt-0.6b-v2" => Ok(Self::Parakeet),
             "parakeet-mlx" => Ok(Self::ParakeetMlx),
+            "bark" => Ok(Self::Bark),
             "disabled" => Ok(Self::Disabled),
             _ => Err(format!("unknown audio engine: {s}")),
         }
@@ -77,6 +79,7 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::Qwen3Asr => write!(f, "Qwen3Asr"),
             AudioTranscriptionEngine::Parakeet => write!(f, "Parakeet"),
             AudioTranscriptionEngine::ParakeetMlx => write!(f, "ParakeetMlx"),
+            AudioTranscriptionEngine::Bark => write!(f, "Bark"),
             AudioTranscriptionEngine::Disabled => write!(f, "Disabled"),
         }
     }
@@ -85,6 +88,16 @@ impl fmt::Display for AudioTranscriptionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bark_is_an_explicit_native_engine() {
+        assert_eq!(
+            "bark".parse::<AudioTranscriptionEngine>().unwrap(),
+            AudioTranscriptionEngine::Bark
+        );
+        assert_eq!(AudioTranscriptionEngine::Bark.to_string(), "Bark");
+        assert!(!AudioTranscriptionEngine::Bark.requires_avx2());
+    }
 
     #[test]
     fn from_str_deepgram() {

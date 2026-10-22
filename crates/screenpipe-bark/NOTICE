@@ -1,0 +1,13 @@
+Underdog Bark 3.0 native loader, derived from the format documented by
+ConwayResearch/Underdog-Bark-3.0 at revision
+85db2ad18ab41e534a222ee253c29191d77ed919.
+
+Model and loader attribution:
+  NVIDIA Corporation, nvidia/parakeet-tdt-0.6b-v3
+  Moondream, moondream/parakeet-ultra
+  Conway Research / Underdog, post-training and compression
+License: Creative Commons Attribution 4.0
+https://creativecommons.org/licenses/by/4.0/
+
+Changes: native Rust ANS/XZ decoding and tensor layout conversion, integration
+with Screenpipe's existing audiopipe MLX implementation. No weights redistributed.
