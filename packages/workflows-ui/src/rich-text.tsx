@@ -47,6 +47,7 @@ export function WorkflowRichText({
   current.current = { value, onChange, maxLength, imageUrl };
   const emitted = useRef(value);
   const [expanded, setExpanded] = useState(false);
+  const [focusWithin, setFocusWithin] = useState(false);
   const [long, setLong] = useState(false);
   const [error, setError] = useState("");
   const [, refreshToolbar] = useState(0);
@@ -201,8 +202,16 @@ export function WorkflowRichText({
   const hasTextSelection = selection instanceof TextSelection && !selection.empty;
 
   return (
-    <div className={`${styles.root} ${className}`} data-testid="procedure-markdown">
-      {editable && fullDocument && hasTextSelection && <div className={styles.toolbar} role="toolbar" aria-label={`${label} formatting`}>
+    <div
+      className={`${styles.root} ${className}`}
+      data-testid="procedure-markdown"
+      onFocusCapture={() => setFocusWithin(true)}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setFocusWithin(false);
+      }}
+    >
+      {editable && fullDocument && focusWithin && hasTextSelection && <div className={styles.toolbar} role="toolbar" aria-label={`${label} formatting`}>
         {controls.map(control => <button key={control.label} type="button" aria-label={control.label} title={control.label} aria-pressed={control.active}
           disabled={!view.current || !control.command(view.current.state)}
           onMouseDown={event => event.preventDefault()}
