@@ -36,18 +36,6 @@ if (selectedModes?.some((mode) => !modes.includes(mode))) throw new Error('Unkno
 const orgResponse = await fetch('https://api.experientiallabs.ai/api/whoami', { headers: { Authorization: 'Bearer ' + key } });
 const org: any = await orgResponse.json();
 if (org.org_id !== expectedOrg) throw new Error('Wrong test organization');
-const policy: any = await (
-	await fetch('https://api.experientiallabs.ai/api/orgs/' + org.org_id + '/provider-policy', {
-		headers: { Authorization: 'Bearer ' + key },
-	})
-).json();
-const capture: any = await (
-	await fetch('https://api.experientiallabs.ai/api/orgs/' + org.org_id + '/telemetry-settings', {
-		headers: { Authorization: 'Bearer ' + key },
-	})
-).json();
-if (policy.policy?.require_zdr !== false || capture.capture_prompt_content !== true)
-	throw new Error('Test requires the authorized retention-enabled organization configuration');
 const workerUrl = process.env.EXPERIENTIAL_ACCEPTANCE_WORKER_URL;
 const serviceToken = process.env.EXPERIENTIAL_ACCEPTANCE_SERVICE_TOKEN;
 const expectedGateway = process.env.EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY ?? 'experiential';

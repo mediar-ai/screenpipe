@@ -891,20 +891,21 @@ describe('OpenAI API accounting and routing', () => {
 	// Sentry SCREENPIPE-CLI / orphan tool messages — when chat history is
 	// pruned a tool-role message can survive without its originating
 	// assistant tool_calls, which OpenAI rejects with a 400.
-	it('drops orphan tool messages whose tool_call_id never appeared', () => {
+	it('preserves orphan tool output as historical data', () => {
 		const provider = new OpenAIProvider('sk-test') as any;
 		const formatted = provider.formatMessages([
 			{ role: 'user', content: 'hi' },
 			{ role: 'tool', content: 'ghost result', tool_call_id: 'call_ghost' },
 			{ role: 'user', content: 'continue' },
 		]);
-		expect(formatted).toHaveLength(2);
-		expect(formatted.map((m: any) => m.role)).toEqual(['user', 'user']);
+		expect(formatted).toHaveLength(3);
+		expect(formatted.map((m: any) => m.role)).toEqual(['user', 'user', 'user']);
+		expect(formatted[1].content).toContain('ghost result');
 	});
 
 	// Tool messages with no tool_call_id at all are equally invalid — OpenAI
 	// requires one to bind back to the prior assistant.tool_calls turn.
-	it('drops tool messages with missing tool_call_id', () => {
+	it('preserves tool output with missing tool_call_id as historical data', () => {
 		const provider = new OpenAIProvider('sk-test') as any;
 		const formatted = provider.formatMessages([
 			{ role: 'user', content: 'list files' },
@@ -915,8 +916,9 @@ describe('OpenAI API accounting and routing', () => {
 			},
 			{ role: 'tool', content: 'orphan output, no id' },
 		]);
-		expect(formatted).toHaveLength(2);
-		expect(formatted.map((m: any) => m.role)).toEqual(['user', 'assistant']);
+		expect(formatted).toHaveLength(3);
+		expect(formatted.map((m: any) => m.role)).toEqual(['user', 'assistant', 'user']);
+		expect(formatted[2].content).toContain('orphan output, no id');
 	});
 
 	// Sentry SCREENPIPE-AI-PROXY-Y: "400 Unsupported value: 'temperature'

@@ -15,6 +15,7 @@ import { Env } from '../types';
 
 export interface ProviderConnectionOptions {
 	fetch?: typeof fetch;
+	explicitPromptCaching?: boolean;
 	baseURL?: string;
 	apiKey?: string;
 	maxRetries?: number;
@@ -214,6 +215,7 @@ export function createProvider(model: string, env: Env, connection?: ProviderCon
 		connection?.maxRetries,
 		connection?.chatTemplateKwargs,
 		connection?.fetch,
+		connection?.explicitPromptCaching,
 	);
 	if (proFeatures) provider.supportsJson = proFeatures.structuredOutput;
 	return provider;

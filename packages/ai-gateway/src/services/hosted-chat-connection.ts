@@ -45,6 +45,7 @@ export async function resolveHostedChatConnection(
     delete defaultHeaders['cf-aig-byok-alias'];
     return { ...connection, baseURL: url.toString().replace(/\/$/, ''), apiKey, defaultHeaders,
       model: EXPERIENTIAL_MODEL_ALIASES[model] ?? model,
+      explicitPromptCaching: false,
       gateway: 'experiential' as const, allowanceGateway: 'cloudflare' as const, gatewayReason: 'experiential_supported',
     };
   }
@@ -95,6 +96,7 @@ export async function resolveHostedChatConnection(
       ...(provider === 'anthropic' ? { 'x-api-key': null } : {}),
     },
     model: EXPERIENTIAL_MODEL_ALIASES[model] ?? model,
+    explicitPromptCaching: false,
     gateway: 'experiential' as const,
     allowanceGateway: undefined,
     gatewayReason: 'internal_canary',

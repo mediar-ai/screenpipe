@@ -21,24 +21,23 @@ describe('hybrid route keeps features on their working transport',()=>{
     expect(JSON.parse(c.defaultHeaders['cf-aig-metadata']!)).toEqual({...context,plan});
     expect(c.defaultHeaders['cf-aig-byok-alias']).toBeUndefined();
   });
-  it.each(['gpt-5.4-mini','gpt-5.4-nano','gpt-5-mini','gpt-5-nano'])('keeps %s vision on the same original model',async model=>{
+  it.each(['gpt-5.4-mini','gpt-5.4-nano','gpt-5-mini','gpt-5-nano'])('uses verified Experiential vision for %s',async model=>{
     expect((await resolveHostedChatConnection(env,'openai',context,model,text)).gateway).toBe('experiential');
     const c=await resolveHostedChatConnection(env,'openai',context,model,image);
-    expect(c.gateway).toBe('cloudflare');expect(c.model).toBe(model);expect(c.gatewayReason).toBe('experiential_vision_unavailable');
-    expect(c.defaultHeaders.Authorization).toBeNull();expect(c.apiKey).not.toBe(key);
+    expect(c.gateway).toBe('experiential');expect(c.model).toBe(model);expect(c.gatewayReason).toBe('experiential_supported');
+    expect(c.apiKey).toBe(key);
   });
   it.each(['gpt-6-astra','gpt-6-luna','claude-haiku-5-5'])('retains native context pricing for %s',async model=>{
     expect(getFlatGatewayTokenRates(model)).toBeNull();
     const c=await resolveHostedChatConnection(env,model.startsWith('claude')?'anthropic':'openai',context,model,text);
     expect(c.gateway).toBe('cloudflare');expect(c.gatewayReason).toBe('native_context_pricing');expect(c.model).toBe(model);
   });
-  it('keeps Pro on its original route even without vendor credentials',async()=>{
-    const c=await resolveHostedChatConnection({...env,EXPERIENTIAL_API_KEY:undefined},'openai',context,'gpt-5.4-pro',text);
-    expect(c.gateway).toBe('cloudflare');expect(c.model).toBe('gpt-5.4-pro');expect(c.gatewayReason).toBe('experiential_model_unavailable');
-  });
-  it('preserves explicit caching on the original route',async()=>{
-    const c=await resolveHostedChatConnection(env,'openai',context,'gpt-5.6',{messages:[{role:'system',content:'Cache these instructions.'},...text.messages]});
-    expect(c.gateway).toBe('cloudflare');expect(c.model).toBe('gpt-5.6');expect(c.gatewayReason).toBe('native_prompt_caching');
+  it('routes newly supported Pro and GPT-5.6 caching through Experiential',async()=>{
+    for (const model of ['gpt-5.4-pro','gpt-5.6','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna']) {
+      const c=await resolveHostedChatConnection(env,'openai',context,model,{messages:[{role:'system',content:'Cache these instructions.'},...text.messages]});
+      expect(c.gateway).toBe('experiential');expect(c.explicitPromptCaching).toBe(false);
+      expect(c.gatewayReason).toBe('experiential_supported');
+    }
   });
   it('uses native Claude URL and the same cache pricing as settlement',async()=>{
     const c=await resolveHostedChatConnection(env,'anthropic',context,'claude-sonnet-5',text);

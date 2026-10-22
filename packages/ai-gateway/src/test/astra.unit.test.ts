@@ -82,7 +82,9 @@ describe('Astra Responses compatibility', () => {
 		expect(input[4].call_id.length).toBeLessThanOrEqual(40);
 		expect(input[6]).toEqual({ type: 'function_call_output', call_id: input[4].call_id, output: 'result one' });
 		expect(input[7]).toEqual({ type: 'function_call_output', call_id: 'call_two', output: 'result two' });
-		expect(input).toHaveLength(8);
+		expect(input).toHaveLength(9);
+		expect(input[8].role).toBe('user');
+		expect(input[8].content).toContain('discard');
 	});
 
 	it('translates structured output schemas and prefers max_completion_tokens', async () => {
