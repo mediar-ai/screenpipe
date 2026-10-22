@@ -203,9 +203,11 @@ export function createProvider(model: string, env: Env, connection?: ProviderCon
 			connection?.maxRetries,
 		);
 	}
+	const proFeatures = Object.prototype.hasOwnProperty.call(OPENAI_PRO_NATIVE_FEATURES, model)
+		? OPENAI_PRO_NATIVE_FEATURES[model as keyof typeof OPENAI_PRO_NATIVE_FEATURES] : undefined;
 	const Provider = model.toLowerCase() === 'gpt-6-astra' ? AstraProvider
-		: Object.prototype.hasOwnProperty.call(OPENAI_PRO_NATIVE_FEATURES, model) ? OpenAIProProvider : OpenAIProvider;
-	return new Provider(
+		: proFeatures ? OpenAIProProvider : OpenAIProvider;
+	const provider = new Provider(
 		connection?.apiKey ?? requireSecret(env.OPENAI_API_KEY, 'OpenAI API key not configured'),
 		connection?.baseURL,
 		connection?.defaultHeaders,
@@ -213,6 +215,8 @@ export function createProvider(model: string, env: Env, connection?: ProviderCon
 		connection?.chatTemplateKwargs,
 		connection?.fetch,
 	);
+	if (proFeatures) provider.supportsJson = proFeatures.structuredOutput;
+	return provider;
 }
 
 export type { AIProvider };

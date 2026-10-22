@@ -24,6 +24,7 @@ function fixture(model: string) {
     return new Response(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''),{headers:{'content-type':'text/event-stream'}});
   }) as typeof fetch;
   const provider=createProvider(model,{} as Env,{apiKey:'synthetic-key',baseURL:'https://fixture.invalid/v1',maxRetries:0,fetch:transport});
+  expect(provider.supportsJson).toBe(model==='gpt-5.5-pro');
   const body:RequestBody={model,messages:[{role:'user',content:'Synthetic.'}],max_tokens:2048,reasoning_effort:'medium'};
   return {provider,body,requests};
 }
