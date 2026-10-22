@@ -72,6 +72,8 @@ export async function inspectExperientialAccount(key: string, sourceModels: stri
     org_id: who.org_id as string,
     checks: {
       prompt_capture_disabled: telemetry.capture_prompt_content === false,
+      prompt_capture_enabled: telemetry.capture_prompt_content === true,
+      upstream_zero_retention_disabled: providers.policy?.require_zdr === false,
       upstream_no_training: providers.policy?.require_no_training === true,
       upstream_zero_retention: providers.policy?.require_zdr === true,
       // Existing require_zdr is grandfathered even without a current Pro entitlement.

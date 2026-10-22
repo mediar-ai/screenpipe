@@ -1,5 +1,25 @@
 # Experiential migration preparation
 
+Current cutover requirement: retain prompts and responses. Use
+[the live Worker acceptance](EXPERIENTIAL_ACCEPTANCE.md) for that contract.
+The inactive adapter now defaults to `contentRetention: 'retain'`, requiring
+account capture enabled, org ZDR disabled, and the existing no-training policy.
+It removes caller provider preferences and sends no ZDR field. Retaining probes
+do not require a ZDR response header. Verify actual captured synthetic content
+separately; HTTP success alone does not establish storage.
+
+The ZDR-only smoke script and the explicitly selected `contentRetention: 'zdr'`
+regression fixtures below preserve the historical probe contract. Their ZDR
+requirements are not requirements for the current retaining cutover. All
+identity, exact-model, plan-assignment and credential checks remain in both
+adapter modes. Neither mode implements production selection.
+
+Silent's companion commit `e57beac7d26ab703328ecd2c5e45e53ed557df9b` was
+incorporated in #7338 (`3d96e77e3f`). The retaining default supersedes its later
+ZDR-only probe default following the current retention requirement.
+
+## Historical ZDR probe reference
+
 Status: preparation and synthetic probes only. These scripts stay outside the
 Worker import graph. They do not change the production provider factory,
 Cloudflare routing, secrets, webhooks, deployment configuration or traffic.
@@ -109,8 +129,7 @@ The production consent integration is **not implemented here**. Screenpipe's
 existing Workflows opt-in covers redacted contributions and training Screenpipe's
 own models (`lib/trajectories/collector.ts` and
 `components/workflows/workflow-sharing-controls.tsx` in the desktop app). It does
-not authorize Experiential to retain raw inference requests. Keep inference ZDR
-for both opted-in and opted-out users; consented sharing remains a separate flow.
+not authorize Experiential to retain raw inference requests. This historical probe uses ZDR; it does not define the current retaining setup.
 Before any future retention exception, verify the specific consent purpose and
 version against the authenticated account server-side. Missing, stale, revoked,
 cross-account or client-supplied consent cannot relax privacy. Exercise these
@@ -156,8 +175,7 @@ canonical model IDs are UUIDs. The adapter sends at most one inference POST per
 prepared connection, refuses replay, strips caller/provider/Cloudflare auth
 headers, overwrites caller provider preferences with `provider: { zdr: true }`,
 and requires exactly `x-gateway-zdr: true` before the SDK consumes JSON or SSE.
-Missing or unsafe verdicts cancel the body without retry. Every user requires
-ZDR, with no consent-based retention exception. It defaults to 64 output tokens. An operator may explicitly select
+Missing or unsafe verdicts cancel the body without retry. These historical fixtures explicitly select ZDR mode. It defaults to 64 output tokens. An operator may explicitly select
 128 for an isolated probe; higher or missing request bounds are refused. Neither
 bound is a dollar guarantee or permission to spend.
 
