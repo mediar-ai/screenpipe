@@ -169,6 +169,20 @@ function findPricing(model: string | null | undefined): ModelPricing | null {
   return key === GEMINI_ARGON_MODEL ? argonPricing() : key ? MODEL_PRICING[key] : null;
 }
 
+/** Flat rates for the Cloudflare custom-provider bridge. Models with context
+ * tiers retain native pricing: an estimated token count cannot select a tier. */
+export function getFlatGatewayTokenRates(model: string) {
+  const pricing = findPricing(model);
+  if (!pricing || pricing.longContext) return null;
+  const input = pricing.input / 1_000_000;
+  return {
+    per_token_in: input,
+    per_token_out: pricing.output / 1_000_000,
+    per_cache_read_token: input * (pricing.cacheRead ?? 1),
+    per_cache_write_token: input * (pricing.cacheWrite ?? 1),
+  };
+}
+
 /** Collapse versioned model IDs and arbitrary caller input to a bounded key. */
 export function normalizeTelemetryModel(model: string | null | undefined): string {
   const pricingKey = findPricingKey(model);

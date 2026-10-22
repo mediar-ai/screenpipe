@@ -10,6 +10,7 @@ export const EXPERIENTIAL_ORIGIN = 'https://api.experientiallabs.ai';
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 type Json = Record<string, any>;
 export type ProbeProtocol = 'chat' | 'stream' | 'tools' | 'json-schema' | 'responses' | 'messages';
+export type ContentRetention = 'retain' | 'zdr';
 const KEY = /^xpl_[0-9a-f]{40}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Gateway identities are artifact IDs, not UUIDs. Org/model IDs remain UUIDs.
@@ -72,6 +73,8 @@ export async function inspectExperientialAccount(key: string, sourceModels: stri
     org_id: who.org_id as string,
     checks: {
       prompt_capture_disabled: telemetry.capture_prompt_content === false,
+      prompt_capture_enabled: telemetry.capture_prompt_content === true,
+      upstream_zero_retention_disabled: providers.policy?.require_zdr === false,
       upstream_no_training: providers.policy?.require_no_training === true,
       upstream_zero_retention: providers.policy?.require_zdr === true,
       // Existing require_zdr is grandfathered even without a current Pro entitlement.
@@ -139,10 +142,9 @@ const STATELESS_RESPONSES_OPTIONS = { service_tier: 'default', store: false } sa
 const tool = { type: 'function', function: { name: 'confirm', description: 'Return confirmation.',
   parameters: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false } } };
 
-export function syntheticRequest(model: string, protocol: ProbeProtocol): { path: string; body: Json } {
-  // Every probe requires ZDR. Screenpipe sharing consent does not authorize
-  // vendor retention, and this tool deliberately has no privacy opt-out.
-  const provider = { zdr: true };
+export function syntheticRequest(model: string, protocol: ProbeProtocol, contentRetention: ContentRetention = 'retain'): { path: string; body: Json } {
+  if (contentRetention !== 'retain' && contentRetention !== 'zdr') throw new MigrationCheckError('invalid_content_retention');
+  const retentionFields = contentRetention === 'zdr' ? { provider: { zdr: true } } : {};
   // Excludes aliases, auto, confidential/custom, audio and background rescue routes.
   if (!getHostedAiAllowedModels('business').includes(model) || !/^(gpt-|claude-)/.test(model)) {
     throw new MigrationCheckError('unsupported_probe_model');
@@ -150,15 +152,15 @@ export function syntheticRequest(model: string, protocol: ProbeProtocol): { path
   if (model === 'gpt-6-astra' && protocol !== 'responses') throw new MigrationCheckError('astra_requires_responses');
   if (protocol === 'messages') {
     if (!model.startsWith('claude-')) throw new MigrationCheckError('messages_requires_claude');
-    return { path: '/v1/messages', body: { model, provider, max_tokens: 64, messages: [{ role: 'user', content: PROMPT }] } };
+    return { path: '/v1/messages', body: { model, ...retentionFields, max_tokens: 64, messages: [{ role: 'user', content: PROMPT }] } };
   }
   if (protocol === 'responses') {
     if (model !== 'gpt-6-astra') throw new MigrationCheckError('responses_probe_requires_astra');
-    return { path: '/v1/responses', body: { model, provider, input: [{ role: 'user', content: PROMPT }],
+    return { path: '/v1/responses', body: { model, ...retentionFields, input: [{ role: 'user', content: PROMPT }],
       max_output_tokens: 64, reasoning: { effort: 'low' }, ...STATELESS_RESPONSES_OPTIONS } };
   }
   if (!['chat', 'stream', 'tools', 'json-schema'].includes(protocol)) throw new MigrationCheckError('unsupported_protocol');
-  const body: Json = { model, provider, messages: [{ role: 'user', content: PROMPT }], max_completion_tokens: 64 };
+  const body: Json = { model, ...retentionFields, messages: [{ role: 'user', content: PROMPT }], max_completion_tokens: 64 };
   if (protocol === 'stream') Object.assign(body, { stream: true, stream_options: { include_usage: true } });
   if (protocol === 'tools') Object.assign(body, { tools: [tool], tool_choice: { type: 'function', function: { name: 'confirm' } } });
   if (protocol === 'json-schema') body.response_format = { type: 'json_schema', json_schema: {
@@ -235,25 +237,29 @@ async function readStream(response: Response): Promise<Json> {
 }
 
 export async function runSyntheticProbe(options: {
-  key: string; model: string; protocol: ProbeProtocol; allowSpend: boolean;
+  key: string; model: string; protocol: ProbeProtocol; allowSpend: boolean; contentRetention?: ContentRetention;
 }, fetcher: Fetcher = fetch) {
   if (options.allowSpend !== true) throw new MigrationCheckError('explicit_spend_authorization_required');
-  const spec = syntheticRequest(options.model, options.protocol);
+  const contentRetention = options.contentRetention ?? 'retain';
+  const spec = syntheticRequest(options.model, options.protocol, contentRetention);
   const before = await inspectExperientialAccount(options.key, [options.model], fetcher);
-  // Documented per-request ZDR suppresses capture even when the org switch is
-  // on. No-training remains separate; continuation storage must stay disabled.
-  if (!before.checks.upstream_no_training || !before.checks.zdr_request_entitled ||
-      !before.checks.zdr_continuation_storage_disabled) throw new MigrationCheckError('privacy_preflight_failed');
+  if (!before.checks.upstream_no_training || (contentRetention === 'zdr'
+      ? !before.checks.zdr_request_entitled || !before.checks.zdr_continuation_storage_disabled
+      : !before.checks.prompt_capture_enabled || !before.checks.upstream_zero_retention_disabled)) {
+    throw new MigrationCheckError('privacy_preflight_failed');
+  }
   if (!before.models[0]?.exact_catalog_match) throw new MigrationCheckError('model_not_in_authenticated_catalog');
-  if (!before.models[0].zdr_route_available) throw new MigrationCheckError('model_has_no_verified_zdr_route');
+  if (contentRetention === 'zdr' && !before.models[0].zdr_route_available) throw new MigrationCheckError('model_has_no_verified_zdr_route');
   // Exactly one synthetic POST. No retries, provider fallback, customer data,
   // previous_response_id, BYOK upload or production configuration changes.
   const response = await request(options.key, spec.path, fetcher, spec.body);
-  // Confirm before consuming JSON or SSE. A missing/false/ambiguous verdict
-  // cannot prove compliance, and must never trigger a retry without provider.zdr.
-  if (response.headers.get('x-gateway-zdr') !== 'true') {
+  if (contentRetention === 'zdr' && response.headers.get('x-gateway-zdr') !== 'true') {
     await response.body?.cancel().catch(() => {});
     throw new MigrationCheckError('zdr_response_not_confirmed_no_retry');
+  }
+  if (contentRetention === 'retain' && response.headers.get('x-gateway-zdr') === 'true') {
+    await response.body?.cancel().catch(() => {});
+    throw new MigrationCheckError('retention_response_conflict_no_retry');
   }
   let data: Json;
   try { data = options.protocol === 'stream' ? await readStream(response) : await response.json() as Json; }
@@ -266,7 +272,8 @@ export async function runSyntheticProbe(options: {
   if (!Number.isInteger(input) || input < 0 || !Number.isInteger(output) || output < 0) throw new MigrationCheckError('usage_invalid');
   const requestId = response.headers.get('x-request-id');
   return { protocol: options.protocol, model: options.model, request_id: requestId,
-    zdr_requested: true, zdr_response_confirmed: true,
+    content_retention: contentRetention,
+    zdr_requested: contentRetention === 'zdr', zdr_response_confirmed: response.headers.get('x-gateway-zdr') === 'true',
     input_tokens: input, output_tokens: output,
     // Optional inline cost is not authoritative settlement or allowance proof.
     inline_cost_usd: typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null,

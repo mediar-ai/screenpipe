@@ -1,3 +1,5 @@
+# screenpipe — AI that knows everything you've seen, said, or heard
+# https://screenpipe.com
 #:schema node_modules/wrangler/config-schema.json
 name = "ai-proxy"
 main = "src/index.ts"
@@ -66,9 +68,15 @@ GEMINI_FLEX_INTERACTIVE = "false"
 MODEL_GATING_ENABLED = "true"
 PIPE_FRONTIER_POLICY = "reject"
 
-# Hosted chat always uses Cloudflare AI Gateway. Production provides:
+# Hosted chat keeps Cloudflare spend enforcement. Optional hybrid routing uses
+# HOSTED_CHAT_GATEWAY=experiential and CLOUDFLARE_EXPERIENTIAL_PROVIDER plus an
+# EXPERIENTIAL_API_KEY secret. cloudflare restores original native providers.
+# See scripts/EXPERIENTIAL_ACCEPTANCE.md for retained features and route labels.
+# Production provides:
 # - CLOUDFLARE_AI_GATEWAY_ID: same-account Gateway with default OpenAI and
 #   Anthropic BYOK keys. See CLOUDFLARE_AI_GATEWAY_ROLLOUT.md.
+# - CLOUDFLARE_AI_GATEWAY_TOKEN: authenticates provider-native SDK HTTP calls;
+#   the Workers binding getUrl() method supplies only an address.
 # - CLOUDFLARE_ACCOUNT_ID: account that owns the Gateway and Analytics data.
 # - CLOUDFLARE_API_TOKEN: read-only AI Gateway + Account Analytics token used
 #   by /v1/usage to calculate per-user allowance percentages. Raw provider

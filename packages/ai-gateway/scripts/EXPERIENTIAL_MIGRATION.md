@@ -1,57 +1,38 @@
+<!-- screenpipe — AI that knows everything you've seen, said, or heard -->
+<!-- https://screenpipe.com -->
+
 # Experiential migration preparation
 
-Status: preparation and synthetic probes only. These scripts stay outside the
-Worker import graph. They do not change the production provider factory,
-Cloudflare routing, secrets, webhooks, deployment configuration or traffic.
+The current cutover contract retains prompts and responses. Use
+[the live Worker acceptance](EXPERIENTIAL_ACCEPTANCE.md) to test the real
+Screenpipe request path. These preparation commands remain outside the Worker
+import graph and do not activate customer routing or move allowance balances.
 
-```text
-Before: customer -> existing gateway/auth/limits -> existing providers
-After:  customer -> existing gateway/auth/limits -> existing providers
-        operator -> read-only preflight -> Experiential account
-        operator -> approved synthetic probe + provider.zdr=true -> Experiential
-                 <- require x-gateway-zdr:true before reading JSON/SSE
-```
-
-## Offline inventory
+## Inventory and read-only account checks
 
 From `packages/ai-gateway`:
 
 ```sh
 bun scripts/export-migration-inventory.ts > migration-inventory.json
-```
-
-Imports the current repository model/plan policy. Destination mappings and live
-allowances remain null. Source credit constants are not a live rule export. Run
-from a clean reviewed checkout; the report records the current Git revision.
-Keep generated reports private when enriched with account or production facts.
-
-## Read-only preflight
-
-Load the test credential into `EXPLABS_API_KEY` from your secret manager inside
-the calling process. Never put it in CLI arguments, source, logs or a ticket.
-Do not use your Cloudflare or upstream provider credential for this request.
-
-```sh
 bun scripts/experiential-preflight.ts > experiential-preflight.json
 ```
 
-Only GETs the documented API host. Compares exact authenticated model IDs and
-reads prompt capture, ZDR entitlement, continuation storage and upstream policy.
-Reports exact boolean model ZDR capability separately from catalog membership.
-Refuses redirects, redacts upstream
-errors, and never tries another key or host. Exit 1 means inspection failed;
-exit 2 means a report was produced with migration gates still unresolved. Catalog
-access cannot mark the account production ready.
+Load the test credential as `EXPLABS_API_KEY` from the secret manager into the
+calling process. Keep credentials out of arguments, logs and generated reports.
+The inventory records repository model and plan policy; its advertised credits
+are not deployed spending rules. Preflight reads the authenticated catalog,
+organization and data controls without changing them. Exit 1 means inspection
+failed; exit 2 means a report exists but migration checks remain unresolved.
+Neither command proves cutover readiness.
 
-## Optional synthetic probes
+## Synthetic protocol smoke checks
 
-Require spending approval, a test-only credential, billing activation, ZDR
-entitlement (or an existing grandfathered org ZDR policy), no-training routing,
-disabled ZDR continuation storage and a model with an authenticated catalog ZDR
-route. Missing or malformed privacy facts block dispatch. Preflight runs again each time. Each
-invocation sends exactly one synthetic POST, at most 64 output tokens, with no
-retries or fallback. Review the model price before approving: token bounds are
-not a dollar guarantee. Reconcile uncertain requests before retrying.
+The smoke command now defaults to retention, matching Worker acceptance and the
+adapter. It requires prompt capture enabled, organization ZDR disabled and the
+existing no-training routing setting. It sends no ZDR request field or header.
+An explicit `x-gateway-zdr: true` response conflicts with this mode and is
+canceled before content is read, without retry. A successful response is not
+proof of capture; inspect the captured synthetic request separately.
 
 ```sh
 bun scripts/experiential-smoke.ts --allow-spend gpt-5.4-nano chat
@@ -62,156 +43,69 @@ bun scripts/experiential-smoke.ts --allow-spend gpt-6-astra responses
 bun scripts/experiential-smoke.ts --allow-spend claude-sonnet-5 messages
 ```
 
-Run only approved cases. These are examples, not a batch command. An unavailable
-model fails without substitution. Responses keeps Astra stateless with low
-reasoning and Standard service (OpenAI wire value `service_tier: "default"`, checked
-against the installed SDK type). Confidential/custom, classifier, Auto and background
-rescue IDs are excluded. Streaming requires content, successful finish, usage and
-DONE. Plain Chat and schema probes require `finish_reason: "stop"`; filtered,
-truncated and unexpected finish reasons fail. Messages requires `end_turn` and
-nonempty text. Responses requires overall completion and a completed assistant
-message containing nonempty output text. Reasoning alone, refusals and partial
-answers do not pass; reasoning alongside a completed answer is allowed.
-Tool/schema checks inspect actual arguments or JSON, not just HTTP status.
-The output omits prompts, completion content, raw headers and secrets. It records
-only the boolean ZDR request/response confirmations and existing usage fields. Inline cost is
-optional and never proves settlement or customer allowance accounting.
+Each invocation makes one synthetic inference POST, with the existing 64-token
+probe budget, no retry or model fallback. Streaming validates content, finish,
+usage and DONE. Tools and JSON schema inspect returned arguments/content.
+Responses requires a completed assistant answer; Messages requires text and
+`end_turn`. Partial answers, reasoning alone and refusals fail. These direct
+vendor probes do not replace Worker acceptance, image tests or second tool turns.
+Inline cost does not prove settled billing or allowance enforcement.
 
-These probes test the vendor wire contract, not the deployed Screenpipe Worker
-or a completed routing adapter. Images, cache accounting, provider-native stream
-translation and multi-customer enforcement still need end-to-end proof.
+Historical ZDR probes require an explicit option:
 
-## Per-request privacy and consent boundary
+```sh
+bun scripts/experiential-smoke.ts --allow-spend --zdr gpt-5.4-nano chat
+```
 
-Every probe sends a top-level `"provider": {"zdr": true}` in the JSON body on
-Chat Completions, Responses and Messages. This is a request field, not a request
-header. With the Anthropic SDK it belongs in `extra_body`. The documented
-`x-gateway-zdr: true` response header is required before reading either JSON or
-SSE; missing, false or ambiguous values cancel the body and fail without retry.
-A response confirmation reports the vendor's verdict, not an independent audit
-of its storage. Check live enforcement before sending customer content.
+That mode alone sends `provider: {zdr: true}`, requires the documented model
+route and account entitlement, and requires `x-gateway-zdr: true` before reading
+JSON or SSE. Current retention testing never selects that option automatically.
+Astra retains Low reasoning, Standard service (`service_tier: "default"`),
+`store: false` and no `previous_response_id` in either mode.
 
-According to the vendor's data-controls contract, per-request ZDR suppresses
-prompt/response capture even when `capture_prompt_content` is on, excludes
-noncompliant upstream routes including fallbacks, and never loosens org policy.
-That is why account capture being on alone no longer blocks a ZDR probe. Pro
-entitlement still applies. `403 needs_subscription`, `403 model_not_granted`, and
-an older engine's `400` for unsupported `provider` all terminate the probe. Never
-remove the field or retry on a retaining route to make it succeed. No-training is
-a separate requirement and cannot substitute for ZDR.
+## Inactive customer adapter
 
-These probes have no consent-based exception: all requests use ZDR. Responses
-uses `store:false` and no `previous_response_id`; ZDR continuation storage must be
-explicitly off. No batch upload or `Idempotency-Key` replay storage is used.
-Content-free billing metadata is still retained by the vendor.
-
-The production consent integration is **not implemented here**. Screenpipe's
-existing Workflows opt-in covers redacted contributions and training Screenpipe's
-own models (`lib/trajectories/collector.ts` and
-`components/workflows/workflow-sharing-controls.tsx` in the desktop app). It does
-not authorize Experiential to retain raw inference requests. Keep inference ZDR
-for both opted-in and opted-out users; consented sharing remains a separate flow.
-Before any future retention exception, verify the specific consent purpose and
-version against the authenticated account server-side. Missing, stale, revoked,
-cross-account or client-supplied consent cannot relax privacy. Exercise these
-cases, account switching, all protocol paths and fallbacks in the future runtime
-adapter; neither this report nor these synthetic tests prove those customer flows.
-
-## Inactive adapter and local tests
-
-`lib/experiential-adapter.ts` is outside the Worker import graph. Its default
-mode refuses all activity; only an explicit `isolated-test` caller can prepare
-one request. It does not select a production provider, synchronize entitlements,
-or activate a cutover. The existing Bun tests are its consumers:
+`lib/experiential-adapter.ts` defaults to inactive. Its `isolated-test` mode
+prepares one synthetic SDK request with `contentRetention: 'retain'` by default.
+Historical fixtures explicitly choose `'zdr'`. Both modes verify the existing
+server-owned customer binding, current authenticated plan, distinct management
+and customer keys, exact model UUID and identity-bound destination assignment.
+The adapter neither provisions those records nor selects production traffic.
 
 ```sh
 bun test src/test/experiential-migration.unit.test.ts src/test/experiential-adapter.unit.test.ts src/test/experiential-sdk-parity.unit.test.ts
 ```
 
-The SDK tests exercise the installed OpenAI and Anthropic serializers and stream
-parsers using injected synthetic transports. They cover tools, images, cache
-usage, structured-output serialization, and Astra Responses-to-Chat translation.
-Astra stays Low, Standard (`service_tier: "default"` on the wire), and stateless
-(`store: false`). Anthropic's existing schema support remains system-prompt
-instructions, not a claim of native constrained decoding.
+The HTTP integration test additionally requires a separately running local
+platform fixture, selected with `SCREENPIPE_EXPERIENTIAL_LOCAL_FIXTURE`. It is
+skipped without one. That fixture is synthetic, not live provider proof. It
+contains `controlBaseUrl`, `gatewayBaseUrl`, `managementKey`, `orgId`,
+`provisioningIdentityId`, `canonicalModelUuid`, `model`, `syntheticUpstream` and
+two customers with `userId`, `identityId`, `customerKey`, `accountPlan` and
+`expectedPlan: {plan_key, plan_version, revision}`. Keep it private. Only loopback
+hosts and `gpt-5.4-mini` are accepted by this historical fixture.
 
-The adapter requires server-verified Screenpipe authentication and a trusted
-server registry binding the actor to a customer identity, customer key, source
-plan, and expected destination plan key/version/assignment revision. The
-provisioning identity and management credential stay separate from inference.
-It performs these actual reads before preparing a request:
+## Customer cutover boundary
 
-- Management key: organization, ZDR entitlement, no-training policy, disabled
-  ZDR continuation storage, authenticated model ZDR capability, exact catalog
-  slug, and `/api/models/{slug}` canonical UUID. Account capture may remain on
-  because per-request ZDR suppresses capture under the vendor contract.
-- Customer key: `/api/whoami` with both identity fields matching the registry
-  and `is_provisioning: false`, customer-visible model listing, and its own
-  `customer-plan` assignment matching the pinned tuple with no pending change.
+Use actual deployed Cloudflare rules, reset windows, settled usage and pending
+exposure. Repository credit constants and empty destination balances cannot
+replace them. A direct destination route needs equivalent customer admission,
+shared total/frontier caps, subscription synchronization and a verified usage
+handoff in both directions. Native customer plans require platform activation;
+explicit source periods do not automatically renew themselves.
 
-Older servers without identity proof fail closed. Missing models, alternate
-model guesses, stale assignments, shared management/customer keys, and privacy
-failures never dispatch. Gateway identities are artifact IDs; organization and
-canonical model IDs are UUIDs. The adapter sends at most one inference POST per
-prepared connection, refuses replay, strips caller/provider/Cloudflare auth
-headers, overwrites caller provider preferences with `provider: { zdr: true }`,
-and requires exactly `x-gateway-zdr: true` before the SDK consumes JSON or SSE.
-Missing or unsafe verdicts cancel the body without retry. Every user requires
-ZDR, with no consent-based retention exception. It defaults to 64 output tokens. An operator may explicitly select
-128 for an isolated probe; higher or missing request bounds are refused. Neither
-bound is a dollar guarantee or permission to spend.
+Encrypted Tinfoil/EHBP, custom GLM, Vertex, classifier, audio and background
+rescue retain their existing routes. Test provider protocols, images, aliases,
+cache costs, tool-result turns and rollback through the actual Worker before
+promoting any routing change. Internal canary success does not establish
+customer cutover readiness.
 
-The opt-in HTTP integration test uses a separately provisioned, synthetic-only
-local platform stack. It reads a private JSON fixture from the environment and
-refuses non-loopback URLs, any model other than `gpt-5.4-mini`, or a fixture not
-marked `syntheticUpstream: true`:
+Historical intent: #7338 (`3d96e77e3f`) incorporates Silent's companion commit
+`e57beac7d26ab703328ecd2c5e45e53ed557df9b`. Its explicit historical ZDR behavior
+remains testable; the user's retaining requirement supersedes its default.
 
-```sh
-SCREENPIPE_EXPERIENTIAL_LOCAL_FIXTURE=/absolute/private-fixture.json \
-  bun test src/test/experiential-adapter.integration.test.ts --timeout=30000
-```
+Official contracts:
 
-The fixture contains `controlBaseUrl`, `gatewayBaseUrl`, `managementKey`, `orgId`,
-`provisioningIdentityId`, `canonicalModelUuid`, `model`, `syntheticUpstream`, and
-two `customers`. Each customer has `userId`, `identityId`, `customerKey`,
-`accountPlan`, and `expectedPlan: { plan_key, plan_version, revision }`. Obtain
-these values from the isolated stack's actual control API; do not fabricate
-policy readbacks. Keep the fixture outside source control. Without it, the test
-is skipped. It exercises one JSON and one streaming request under distinct
-customer keys, but neither provisions policy nor proves real-provider behavior.
-
-The provider fixes preserve OpenAI's upstream nonstream `finish_reason` and
-normalize Anthropic nonstream tool-call IDs/types and terminal reasons into Chat
-format. Regression tests cover a second tool turn. These fixes do not change
-routing or imply deployment. Encrypted Tinfoil/EHBP, ordinary custom GLM,
-Vertex, classifier, audio, and background rescue routes remain unchanged.
-
-## Gates before implementing production selection
-
-1. Pin deployed behavior and read actual Cloudflare limits, reset windows,
-   settled usage, reservations and late/pending exposure.
-2. Verify native enforcement across the serving fleet. The documented disjoint
-   model groups and UTC-month allowances do not alone preserve shared-total plus
-   frontier caps or other windows. Do not invent or approximate commercial limits.
-3. Bind customer keys to authenticated identities and approved plans before
-   issuance. Keep management credentials separate. Test two synthetic identities,
-   rotation, forbidden models, concurrent holds, plan transitions and scoped
-   reporting. Request labels authorize nothing.
-4. Verify exact model mappings, rates, privacy, cache accounting and retries.
-   Keep encrypted Tinfoil/EHBP, custom GLM, Vertex Messages, classifier, audio
-   and background rescue separate without their own compatibility proof.
-5. Reconcile usage carry-in and rollback across both gateways. A fresh destination
-   balance must not reset usage or grant duplicate allowance.
-6. Then review a separate routing change and stage with synthetic users.
-   Production promotion still requires the owner's explicit signal.
-
-Do not use an unrestricted org key as a temporary customer route. These scripts
-never mint keys, assign plans, upload BYOK, change settings, purchase, deploy,
-connect subscription webhooks or revoke existing gateway credentials.
-
-Official contracts checked September 28, 2026:
-
-- [Account and identities](https://platform.experientiallabs.ai/docs/account-api)
+- [Account, plans and handoff](https://platform.experientiallabs.ai/docs/account-api)
 - [Usage and allowances](https://platform.experientiallabs.ai/docs/cost-api)
-- [Privacy](https://platform.experientiallabs.ai/docs/data-controls)
-- [Wire reference](https://platform.experientiallabs.ai/llms.txt)
+- [Data controls](https://platform.experientiallabs.ai/docs/data-controls)

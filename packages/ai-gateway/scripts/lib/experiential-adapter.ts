@@ -27,6 +27,8 @@ export interface ExperientialModelMapping {
 }
 export interface ExperientialAdapterOptions {
   mode?: 'inactive' | 'isolated-test';
+  // Retention is the current cutover contract; ZDR is an explicit historical probe.
+  contentRetention?: 'retain' | 'zdr';
   // Explicit operator-selected probe bound, never a customer request override.
   maxOutputTokens?: 64 | 128;
   auth: AuthResult;
@@ -48,6 +50,8 @@ const KEY = /^xpl_[0-9a-f]{40}$/;
  * tools, images, and Responses -> Chat conversion stay in those providers. */
 export async function prepareExperientialProbeConnection(options: ExperientialAdapterOptions) {
   if (options.mode !== 'isolated-test') throw new MigrationCheckError('experiential_adapter_inactive');
+  const contentRetention = options.contentRetention ?? 'retain';
+  if (contentRetention !== 'retain' && contentRetention !== 'zdr') throw new MigrationCheckError('invalid_content_retention');
   const maxOutputTokens = options.maxOutputTokens ?? 64;
   if (maxOutputTokens !== 64 && maxOutputTokens !== 128) throw new MigrationCheckError('invalid_probe_output_bound');
   const { auth, sourceModelId } = options;
@@ -82,12 +86,13 @@ export async function prepareExperientialProbeConnection(options: ExperientialAd
   }
   const preflight = await inspectExperientialAccount(options.managementKey, [mapping.destinationModelId], options.transport);
   if (preflight.org_id !== binding.orgId) throw new MigrationCheckError('customer_organization_mismatch');
-  if (!preflight.checks.upstream_no_training || !preflight.checks.zdr_request_entitled ||
-      !preflight.checks.zdr_continuation_storage_disabled) {
+  if (!preflight.checks.upstream_no_training || (contentRetention === 'zdr'
+      ? !preflight.checks.zdr_request_entitled || !preflight.checks.zdr_continuation_storage_disabled
+      : !preflight.checks.prompt_capture_enabled || !preflight.checks.upstream_zero_retention_disabled)) {
     throw new MigrationCheckError('privacy_preflight_failed');
   }
   if (!preflight.models[0]?.exact_catalog_match) throw new MigrationCheckError('model_not_in_authenticated_catalog');
-  if (!preflight.models[0].zdr_route_available) throw new MigrationCheckError('model_has_no_verified_zdr_route');
+  if (contentRetention === 'zdr' && !preflight.models[0].zdr_route_available) throw new MigrationCheckError('model_has_no_verified_zdr_route');
   await verifyExperientialCanonicalModel(options.managementKey, mapping.destinationModelId, mapping.canonicalModelUuid, options.transport);
   await verifyExperientialCustomerKey(binding.customerKey, binding.orgId, binding.customerIdentityId, mapping.destinationModelId, options.transport);
   await verifyExperientialCustomerPlan(binding.customerKey, binding.orgId, binding.customerIdentityId, binding.expectedPlan, options.transport);
@@ -110,9 +115,10 @@ export async function prepareExperientialProbeConnection(options: ExperientialAd
         body.reasoning?.effort !== 'low' || body.service_tier !== 'default')) {
       throw new MigrationCheckError('astra_stateless_low_standard_required');
     }
-    // This harness never permits retention, including for users who opted in.
-    // Replace caller provider preferences so they cannot weaken routing policy.
-    body.provider = { zdr: true };
+    // Caller preferences cannot override the operator's content-retention mode.
+    // A ZDR field would suppress capture even when account capture is enabled.
+    if (contentRetention === 'zdr') body.provider = { zdr: true };
+    else delete body.provider;
     if (posted) throw new MigrationCheckError('probe_replay_forbidden');
     posted = true;
     // Construct auth from the registry, not forwarded headers. Do not leak CF
@@ -138,9 +144,13 @@ export async function prepareExperientialProbeConnection(options: ExperientialAd
     }
     // Check before the SDK can consume JSON or any SSE event. Never retry a
     // missing/false verdict: dispatch may already have incurred usage.
-    if (response.headers.get('x-gateway-zdr') !== 'true') {
+    if (contentRetention === 'zdr' && response.headers.get('x-gateway-zdr') !== 'true') {
       await response.body?.cancel();
       throw new MigrationCheckError('zdr_response_not_confirmed_no_retry');
+    }
+    if (contentRetention === 'retain' && response.headers.get('x-gateway-zdr') === 'true') {
+      await response.body?.cancel();
+      throw new MigrationCheckError('retention_response_conflict_no_retry');
     }
     return response;
   };
@@ -150,6 +160,7 @@ export async function prepareExperientialProbeConnection(options: ExperientialAd
     maxRetries: 0,
     defaultHeaders: { Authorization: `Bearer ${binding.customerKey}`, ...(protocol === 'messages' ? { 'x-api-key': null } : {}) },
     fetch: sdkFetch,
+    contentRetention,
     production_ready: false as const,
     cutover_authorized: false as const,
   };

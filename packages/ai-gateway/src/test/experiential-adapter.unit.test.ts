@@ -18,7 +18,7 @@ async function fixture(overrides: { capture?: boolean; policy?: Record<string, u
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const actorId = await hostedChatActorId(auth);
   const options: ExperientialAdapterOptions = {
-    mode: 'isolated-test', auth, sourceModelId: model, managementKey,
+    mode: 'isolated-test', contentRetention: 'zdr', auth, sourceModelId: model, managementKey,
     mappings: [{ sourceModelId: model, destinationModelId: model, canonicalModelUuid: canonical, protocol: 'chat' }],
     lookupBinding: async () => ({ actorId, orgId: org, customerIdentityId: identity, provisioningIdentityId: provisioner, accountPlan: 'business', expectedPlan, customerKey, ...overrides.binding }),
     transport: async (url, init) => {
@@ -41,6 +41,52 @@ const post = (modelId = model, headers?: Record<string, string>) => ({ method: '
 const url = `${EXPERIENTIAL_ORIGIN}/v1/chat/completions`;
 
 describe('inactive customer-isolated adapter', () => {
+  it.each(['chat', 'messages', 'responses'] as const)('retains content by default through %s without ZDR fields or verdict requirements', async protocol => {
+    const { options, calls } = await fixture({ capture: true, policy: { require_zdr: false }, verdict: null, entitled: false, modelPolicy: {} });
+    delete options.contentRetention;
+    const sourceModel = protocol === 'messages' ? 'claude-sonnet-5' : protocol === 'responses' ? 'gpt-6-astra' : model;
+    options.sourceModelId = sourceModel;
+    options.mappings = [{ sourceModelId: sourceModel, destinationModelId: sourceModel, canonicalModelUuid: canonical, protocol }];
+    const original = options.transport;
+    options.transport = async (requested, init) => {
+      if (requested.endsWith('/v1/models')) return Response.json({ data: [{ id: sourceModel }] });
+      if (requested.endsWith(`/api/models/${sourceModel}`)) return Response.json({ model: { id: canonical, slug: sourceModel } });
+      return original(requested, init);
+    };
+    const c = await prepareExperientialProbeConnection(options);
+    const body = protocol === 'responses'
+      ? { model: sourceModel, input: [], max_output_tokens: 64, store: false, reasoning: { effort: 'low' }, service_tier: 'default' }
+      : { model: sourceModel, messages: [], ...(protocol === 'messages' ? { max_tokens: 64 } : { max_completion_tokens: 64 }) };
+    await c.fetch(`${EXPERIENTIAL_ORIGIN}/v1/${protocol === 'chat' ? 'chat/completions' : protocol}`, {
+      method: 'POST', body: JSON.stringify({ ...body, provider: { zdr: true } }),
+      headers: { 'x-gateway-zdr': 'true', 'cf-aig-metadata': 'caller' },
+    });
+    const dispatched = calls.find(call => call.init.method === 'POST')!;
+    expect(JSON.parse(dispatched.init.body as string)).not.toHaveProperty('provider');
+    expect(new Headers(dispatched.init.headers).get('x-gateway-zdr')).toBeNull();
+    expect(new Headers(dispatched.init.headers).get('cf-aig-metadata')).toBeNull();
+    expect(c.contentRetention).toBe('retain');
+  });
+  it('rejects a retaining response that explicitly reports ZDR and refuses replay', async () => {
+    const { options, calls } = await fixture({ capture: true, policy: { require_zdr: false }, verdict: 'true' });
+    delete options.contentRetention;
+    const c = await prepareExperientialProbeConnection(options);
+    await expect(c.fetch(url, post())).rejects.toMatchObject({ code: 'retention_response_conflict_no_retry' });
+    await expect(c.fetch(url, post())).rejects.toMatchObject({ code: 'probe_replay_forbidden' });
+    expect(calls.filter(call => call.init.method === 'POST')).toHaveLength(1);
+  });
+  it.each([
+    { capture: false, policy: { require_zdr: false } },
+    { capture: true, policy: { require_zdr: true } },
+    { capture: true, policy: { require_zdr: undefined } },
+    { capture: true, policy: { require_zdr: false, require_no_training: false } },
+  ])('refuses a retaining probe when account configuration conflicts: %j', async change => {
+    const { options, calls } = await fixture(change);
+    delete options.contentRetention;
+    await expect(prepareExperientialProbeConnection(options)).rejects.toMatchObject({ code: 'privacy_preflight_failed' });
+    expect(calls.every(call => call.init.method === 'GET')).toBe(true);
+  });
+
   it.each([undefined, 'inactive'] as const)('does nothing in mode %s', async mode => {
     const { options, calls } = await fixture();
     await expect(prepareExperientialProbeConnection({ ...options, mode })).rejects.toMatchObject({ code: 'experiential_adapter_inactive' });

@@ -39,6 +39,8 @@ export interface HostedChatAllowance {
 }
 
 export class HostedChatAllowanceExceededError extends Error {
+	gateway?: 'cloudflare' | 'experiential';
+	gatewayReason?: string;
 	status = 429;
 	code = 'hosted_ai_allowance_exceeded';
 	transient = false;
@@ -162,8 +164,8 @@ function localGatewayProviderUrl(baseUrl: string, gatewayId: string, provider: C
 }
 
 /**
- * Resolve a pre-authenticated provider-native Gateway URL from the Workers AI
- * binding. Provider auth headers are explicitly removed so Cloudflare injects
+ * Resolve a provider-native Gateway URL from the Workers AI binding. getUrl()
+ * supplies an address; native HTTP SDK calls still need Gateway authentication. Provider auth headers are explicitly removed so Cloudflare injects
  * the provider's `default` BYOK key instead of receiving a Worker secret.
  * Vertex instead receives a short-lived OAuth token minted by the Worker.
  */

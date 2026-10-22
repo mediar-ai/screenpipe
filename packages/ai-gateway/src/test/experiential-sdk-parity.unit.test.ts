@@ -61,7 +61,7 @@ async function intercept(provider: any, response: () => Response, side?: string,
   if (side === 'experiential-fixture') {
     const auth = { isValid: true, tier: 'subscribed', accountPlan: 'business', userId: 'synthetic-user', deviceId: 'synthetic-device' } as const;
     const actorId = await hostedChatActorId(auth);
-    const c = await prepareExperientialProbeConnection({ mode: 'isolated-test', auth, sourceModelId: model,
+    const c = await prepareExperientialProbeConnection({ mode: 'isolated-test', contentRetention: 'zdr', auth, sourceModelId: model,
       managementKey: `xpl_${'1'.repeat(40)}`, transport,
       mappings: [{ sourceModelId: model, destinationModelId: model, canonicalModelUuid: '00000000-0000-0000-0000-000000000004', protocol: model === 'gpt-6-astra' ? 'responses' : model.startsWith('claude-') ? 'messages' : 'chat' }],
       lookupBinding: async () => ({ actorId, orgId: '00000000-0000-0000-0000-000000000001', customerIdentityId: 'customer-alice', provisioningIdentityId: 'entitlement-sync', accountPlan: 'business', expectedPlan: { plan_key: 'business', plan_version: 1, revision: 1 }, customerKey: key }),

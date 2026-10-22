@@ -153,6 +153,14 @@ export interface GeminiResponse {
 }
 
 export interface Env {
+	/** Hybrid cutover: unsupported features keep their original native route. */
+	HOSTED_CHAT_GATEWAY?: 'cloudflare' | 'experiential';
+	/** Account-owned custom provider with origin api.experientiallabs.ai. */
+	CLOUDFLARE_EXPERIENTIAL_PROVIDER?: string;
+	/** Disabled by default; only authenticated internal-service chat can opt in. */
+	EXPERIENTIAL_CANARY_MODE?: 'off' | 'internal';
+	/** Server-side inference credential; customer limits stay on Cloudflare. */
+	EXPERIENTIAL_API_KEY?: string;
 	AI: Ai;
 	/** GPT-5.6 prompt caching: `system` (default/kill switch) or `history`. */
 	GPT56_HISTORY_CACHE_MODE?: string;
@@ -165,7 +173,7 @@ export interface Env {
 	ELEVENLABS_USD_PER_CHARACTER?: string;
 	/** Local-dev only: Gateway root or compat chat URL when remote binding URL resolution is unavailable. */
 	CLOUDFLARE_AI_GATEWAY_BASE_URL?: string;
-	/** Local-dev only: authenticate provider-native fetches made off-platform. */
+	/** Gateway bearer for provider-native SDK fetches, including local development. */
 	CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
 	/** Cloudflare account that owns the hosted-chat Gateway and Analytics data. */
 	CLOUDFLARE_ACCOUNT_ID?: string;

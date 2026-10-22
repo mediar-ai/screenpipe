@@ -69,7 +69,7 @@ describe.skipIf(!fixturePath)('inactive adapter with actual isolated control API
     expect(fixture.customers[0].identityId === fixture.customers[1].identityId).toBe(false);
     expect(fixture.customers[0].customerKey === fixture.customers[1].customerKey).toBe(false);
     for (let index = 0; index < auths.length; index++) {
-      const connection = await prepareExperientialProbeConnection({ mode: 'isolated-test', auth: auths[index],
+      const connection = await prepareExperientialProbeConnection({ mode: 'isolated-test', contentRetention: 'zdr', auth: auths[index],
         sourceModelId: fixture.model, managementKey: fixture.managementKey, transport,
         mappings: [{ sourceModelId: fixture.model, destinationModelId: fixture.model, canonicalModelUuid: fixture.canonicalModelUuid, protocol: 'chat' }],
         lookupBinding: async actorId => registry.get(actorId) ?? null,

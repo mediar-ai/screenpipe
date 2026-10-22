@@ -1,3 +1,5 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
 /**
  * Adds CORS headers to a response
  * @param response The response to add headers to
@@ -8,6 +10,9 @@ export function addCorsHeaders(response: Response): Response {
   response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
   response.headers.set('Access-Control-Allow-Headers', '*');
   response.headers.set('Access-Control-Allow-Credentials', 'true');
+  const exposed = new Set((response.headers.get('Access-Control-Expose-Headers') ?? '').split(',').map(value => value.trim()).filter(Boolean));
+  for (const name of ['x-screenpipe-model', 'x-screenpipe-gateway', 'x-screenpipe-gateway-reason']) exposed.add(name);
+  response.headers.set('Access-Control-Expose-Headers', [...exposed].join(', '));
   response.headers.set('Access-Control-Max-Age', '86400');
   response.headers.append('Vary', 'Origin');
   return response;

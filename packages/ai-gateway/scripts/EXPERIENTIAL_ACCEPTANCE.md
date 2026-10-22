@@ -1,0 +1,148 @@
+<!-- screenpipe — AI that knows everything you've seen, said, or heard -->
+<!-- https://screenpipe.com -->
+
+# Live Experiential acceptance
+
+The supported cutover is hybrid: use Experiential for working features, retain
+the same model on its original route for unavailable features, and report the
+actual route. Customer authentication, model access, spend rules and usage
+windows stay on the existing Cloudflare gateway. No allowance migration is
+needed. Production traffic changes only after deploying the reviewed source
+and selecting the server-owned routing flag.
+
+Load the authorized test credential into `EXPLABS_API_KEY` without printing it.
+From `packages/ai-gateway`, set `EXPERIENTIAL_ACCEPTANCE_ORG_ID` to the exact test
+organization and `EXPERIENTIAL_ACCEPTANCE_REPORT` to a private absolute JSON path:
+
+```sh
+bun scripts/experiential-acceptance.ts --allow-spend
+```
+
+The script refuses a different organization or a configuration that does not have
+retention enabled and ZDR disabled. It does not modify account settings, expose
+the credential to the Worker, or deploy anything. Each case sends synthetic
+content; the bundled image shows four digits. Preserve no-training and all other
+account settings. Model access denials remain failures, not policy overrides.
+
+Every hosted model from the source policy is tested through `/chat/completions`,
+including Auto. Gemini's native Vertex route, the confidential GLM route, and the
+self-hosted classifier stay on their existing providers and are listed separately
+in the report. They are not sent as vendor aliases. The verified mappings are native `claude-haiku-5-5` to catalog
+`claude-haiku-5.5`, and `gpt-5.6` to `gpt-5.6-sol`. OpenAI's official Sol
+documentation confirms that unsuffixed alias, and the authenticated destination
+model reports the Sol deployment. Source-model metering and response headers
+preserve the caller's model. Other names are never guessed.
+
+Cases exercise JSON, SSE terminal completion and usage, named tools and a second
+tool-result turn in both JSON and streaming form, parsed schema output, and
+actual image digit reading. Explicit
+model requests must be answered by the requested model, with a successful live
+upstream request ID; fallback success cannot hide a broken explicit model. Auto
+may use its existing fallback chain, and every attempted model is recorded.
+Failures produce a nonzero exit status and retain completed results incrementally.
+The temporary local Worker and database are disposed at the end.
+
+This supersedes the ad hoc direct-request matrix for cutover acceptance. Historical ZDR fixtures remain explicit; both current smoke and acceptance commands default to retention. Passing this harness alone does not enable
+production traffic or establish that every original provider can be moved.
+
+For a focused recheck, set comma-separated `EXPERIENTIAL_ACCEPTANCE_MODELS` and
+`EXPERIENTIAL_ACCEPTANCE_MODES`. Both are validated against the same full model
+and feature manifest; omitted filters run every applicable case. Focused results
+do not replace evidence for the other cases.
+
+## Hybrid switch and rollback
+
+Prepare these server-side bindings before selecting the new route:
+
+- `EXPERIENTIAL_API_KEY`: a dedicated inference credential, kept in Worker secrets.
+- `CLOUDFLARE_EXPERIENTIAL_PROVIDER`: an account-owned `custom-...` provider whose
+  configured base URL is exactly `https://api.experientiallabs.ai`.
+- Existing `CLOUDFLARE_AI_GATEWAY_ID` and `CLOUDFLARE_AI_GATEWAY_TOKEN`: keep the
+  same gateway and spend counters. The token must allow native HTTP gateway calls.
+
+`HOSTED_CHAT_GATEWAY=experiential` enables the hybrid path for authenticated
+hosted chat. `HOSTED_CHAT_GATEWAY=cloudflare` rolls every request back to its
+original provider on the next dispatch, overriding any older internal-canary
+flag. In-flight streams finish on their selected transport. The default is the
+existing Cloudflare route; client headers or JSON cannot choose this flag.
+
+Features retained on original routes:
+
+- GPT-5.4 Pro: the destination refuses its existing no-training route setting.
+- Images on GPT-5.4 Mini/Nano and original GPT-5 Mini/Nano: destination routes
+  are text-only. Text and tools on those models can use Experiential.
+- Context-tier pricing models: retain native pricing rather than estimate the
+  threshold. The central pricing table identifies these models.
+- GPT-5.6 explicit prompt caching: preserve the native options and breakpoints
+  rather than remove them for a destination that rejects them.
+- Vertex, confidential/custom GLM, classifier, audio and background rescue:
+  retain their existing routes.
+
+A further explicit unsupported-request refusal can retry the same model on its
+original native route. Spend limits, quotas, safety refusals and uncertain paid
+outcomes do not trigger this transport retry. Existing Auto/model-cascade
+semantics remain separate. No different model is silently called an exact-model
+pass.
+
+Every hosted response carries `x-screenpipe-gateway` (`experiential` or
+`cloudflare`) and `x-screenpipe-gateway-reason`. Browser CORS exposes these
+headers; the normal route audit records `gateway_mode` and `gateway_reason`.
+Cloudflare custom-provider pricing comes from the same flat/cache rates as
+application settlement. Destination requests preserve the existing server-owned
+actor, plan, lane, workload and trial metadata, so native and Experiential
+requests share the same counters and rollback does not reset allowances.
+
+```sh
+bun test src/test/experiential-hybrid.unit.test.ts src/test/experiential-hybrid.integration.test.ts --timeout=30000
+```
+
+The older `EXPERIENTIAL_CANARY_MODE=internal` direct route remains available for
+isolated diagnostics when the new routing flag is absent. It is not the hybrid
+customer switch. Legacy diagnostics still require their separate service bearer.
+
+## Deployed canary acceptance
+
+Set `EXPERIENTIAL_ACCEPTANCE_WORKER_URL` to the isolated canary's HTTPS `/v1`
+base URL and `EXPERIENTIAL_ACCEPTANCE_SERVICE_TOKEN` to its dedicated test-service
+credential. Keep the same org preflight key and report path, then run the same
+command. The runner accepts only the Screenpipe canary prefix under the verified
+`louis-beaumont.workers.dev` account; it never sends the service bearer to an
+arbitrary URL. All six cases run against each applicable model, 108 total.
+
+In this mode the request goes to the deployed Worker with no local egress
+instrumentation. Reports identify `worker_request_id` as Cloudflare's CF-Ray,
+not an Experiential billing ID. The response must report its actual
+selector and satisfy the same model, content, tool, schema and SSE checks. Local
+instrumented runs separately retain the vendor request IDs. Do not conflate
+these evidence boundaries.
+
+For hybrid acceptance set `EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY=hybrid`.
+The same 108-case manifest verifies both the content and the policy-selected
+route. Each row names its actual gateway and reason. Known original-route cases
+are successful hybrid behavior, not Experiential coverage. GPT-5.4 Pro's native
+unsupported schema remains a separate unsupported case. A full passing run is
+107 supported cases plus that explicitly verified rejection.
+
+For a deployed Cloudflare rollback/baseline run, set
+`EXPERIENTIAL_ACCEPTANCE_EXPECTED_GATEWAY=cloudflare` after selecting `HOSTED_CHAT_GATEWAY=cloudflare`.
+The same case manifest and assertions then require the Cloudflare route. The
+report names that boundary explicitly; Cloudflare results never count as passed
+Experiential cases. A dedicated internal canary without a copied production
+gateway token uses the authenticated gateway binding for rollback, preserving
+native SDK request/response formats and the existing metadata. Production
+connections with their configured gateway token keep their current transport.
+
+## Native Pro capabilities
+
+Both existing Pro models require Responses, so the Worker keeps its public Chat
+wire while reusing the Responses translator. GPT-5.5 Pro has no native stream;
+its SSE response is emitted after the provider finishes, with terminal reason,
+tool IDs and usage preserved. It does not claim incremental upstream tokens.
+GPT-5.4 Pro supports native streaming but has no native structured-output format.
+That schema case must return a clear unsupported-format error and is reported
+separately as unsupported, never as a passing inference feature. All supported
+Pro tests explicitly request their documented `medium` effort; the runtime
+preserves supported caller effort and native defaults when omitted.
+
+Capability references: [GPT-5.4 Pro](https://developers.openai.com/api/docs/models/gpt-5.4-pro)
+and [GPT-5.5 Pro](https://developers.openai.com/api/docs/models/gpt-5.5-pro).
