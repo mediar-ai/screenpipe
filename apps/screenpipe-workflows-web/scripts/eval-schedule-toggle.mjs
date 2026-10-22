@@ -34,11 +34,9 @@ await page.getByRole('button',{name:'Enable automatic updates',exact:true}).clic
 await page.getByRole('dialog',{name:'Keep your workflows up to date?'}).waitFor({state:'hidden'});
 const sharing=page.getByRole('dialog',{name:'Help improve Screenpipe'}); if(await sharing.isVisible()) await sharing.getByRole('button',{name:'Not now',exact:true}).click();
 assert.deepEqual(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)),key),[true,true,true,true]);
-await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-await page.getByRole('menuitemradio',{name:'Memory',exact:false}).click();
+await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Memory', exact: true}).click();
 assert.equal(await toggle().count(),0);
-await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-await page.getByRole('menuitemradio',{name:'Workflows',exact:false}).click(); await saved(true);
+await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Workflows', exact: true}).click(); await saved(true);
 await navigate('&workflowScheduleState=saving'); await saved(true); await toggle().click();
 await page.getByText('Saving…',{exact:true}).waitFor();assert(await toggle().isDisabled());await snap('saving');await saved(false);
 await page.evaluate(k=>localStorage.setItem(k,JSON.stringify([true,true,true,true])),key);

@@ -72,10 +72,8 @@ fs.mkdirSync(out, { recursive: true });
       await page.getByRole('region',{name:'Video SOP',exact:true}).waitFor();
       await snap('recipe-video');
       await page.getByRole('button',{name:'Back to SOP',exact:true}).click();
-      await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-      await page.getByRole('menuitemradio',{name:/^Memory/}).click();
-      await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-      await page.getByRole('menuitemradio',{name:/^Workflows/}).click();
+      await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Memory', exact: true}).click();
+      await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Workflows', exact: true}).click();
       await page.getByRole('textbox',{name:'SOP title',exact:true}).waitFor();
     }
     assert.deepEqual(errors,[]);

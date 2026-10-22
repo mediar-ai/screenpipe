@@ -19,11 +19,11 @@ it("fails closed until an explicit boolean true", () => {
 });
 it("hides the switcher before flag resolution and on revocation", () => {
   const view = render(<ProductSwitcher mode="screenpipe" onChange={vi.fn()} />);
-  expect(screen.queryByRole("button", { name: "Switch workspace" })).toBeNull();
+  expect(screen.queryByRole("group", { name: "Switch workspace" })).toBeNull();
   state.flag = true; view.rerender(<ProductSwitcher mode="screenpipe" onChange={vi.fn()} />);
-  expect(screen.getByRole("button", { name: "Switch workspace" })).toBeVisible();
+  expect(screen.getByRole("group", { name: "Switch workspace" })).toBeVisible();
   state.flag = false; view.rerender(<ProductSwitcher mode="screenpipe" onChange={vi.fn()} />);
-  expect(screen.queryByRole("button", { name: "Switch workspace" })).toBeNull();
+  expect(screen.queryByRole("group", { name: "Switch workspace" })).toBeNull();
 });
 it("does not install or run tasks while excluded from rollout", async () => {
   await expect(enableWorkflowTask()).rejects.toThrow("not available");

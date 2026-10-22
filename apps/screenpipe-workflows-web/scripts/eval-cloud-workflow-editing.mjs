@@ -22,13 +22,12 @@ await page.getByRole('button',{name:'Do later',exact:true}).click({timeout:2000}
 await page.locator('label').filter({has:page.getByLabel('Light',{exact:true})}).click();
 await page.getByRole('button',{name:'Back to app'}).click();
 // Mock startup can present the storage-upgrade prompt after hydration.
-for (let attempt=0; attempt<30 && !await page.getByRole('button',{name:'Switch workspace',exact:true}).isVisible(); attempt++) {
+for (let attempt=0; attempt<30 && !await page.getByRole('group',{name:'Switch workspace',exact:true}).isVisible(); attempt++) {
  const later=page.getByRole('button',{name:'Do later',exact:true});
  if(await later.isVisible()) await later.click();
  await page.waitForTimeout(1000);
 }
-await page.getByRole('button',{name:'Switch workspace',exact:true}).click();
-await page.getByRole('menuitemradio',{name:/Workflows/}).click();
+await page.getByRole('group', {name: 'Switch workspace', exact: true}).getByRole('button', {name: 'Workflows', exact: true}).click();
 await page.getByRole('combobox',{name:'Workflow source'}).selectOption('cloud');
 await page.getByRole('dialog',{name:'Turn off local workflow processing?'}).waitFor();
 await capture({animations:'disabled',style:'nextjs-portal { display: none; }',path:out+'/cloud-processing-choice.png'});

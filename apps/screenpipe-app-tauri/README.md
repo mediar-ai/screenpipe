@@ -15,7 +15,7 @@ usage documentation is available at [docs.screenpi.pe](https://docs.screenpi.pe/
 
 ## Workflows integration preview
 
-The workspace menu in `/home` switches between Memory and Workflows. In the
+The workspace toggle in `/home` switches between Memory and Workflows. In the
 browser-mock build (`bun run dev:web`), Workflows uses synthetic data and its
 build-catalog action does not call the engine or an AI provider. Packaged builds
 use the main app's recorder, account, and app-local workflow storage.
