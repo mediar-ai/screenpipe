@@ -77,7 +77,7 @@ same mono PCM16 16 kHz files and use f32 weights, a 2 GiB MLX cache budget and
 30-second fixed inference shapes. Bark additionally uses its documented leading
 silence. One warm-up per clip is excluded from the repeated timing samples.
 
-JSON records cached model load time, each timing sample, median real-time factor,
+JSON records the selected MLX device, cached model load time, each timing sample, median real-time factor,
 process peak RSS, MLX active/peak memory, transcript and aggregate word error
 rate. Normalize case/punctuation only; numbers and URLs are not canonicalized.
 The five legacy Screenpipe fixture references contain known transcription and
@@ -87,7 +87,8 @@ transcripts alongside the scores. Run on an otherwise idle machine for stable
 timing; background workloads can affect results.
 
 Recorded comparisons: [CPU](bench/results/2026-10-22-m5-max-cpu) and
-[Metal](bench/results/2026-10-22-m5-max-metal). The Metal report documents the
+[Metal](bench/results/2026-10-22-m5-max-metal) and
+[repeated GPU performance](bench/results/2026-10-22-m5-max-metal-repeat). The Metal report documents the
 upstream MLX fence backport required by Xcode 27; an unmodified production
 Metal build is not validated with that toolchain.
 

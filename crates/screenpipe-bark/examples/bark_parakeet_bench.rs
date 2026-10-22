@@ -27,6 +27,7 @@ struct Measurement {
 struct Report {
     model: String,
     backend: &'static str,
+    selected_device: String,
     weight_dtype: &'static str,
     load_seconds: f64,
     peak_rss_bytes: u64,
@@ -111,10 +112,23 @@ fn main() -> Result<()> {
                 available,
                 "Metal is unavailable; use an MLX Metal build or explicitly choose cpu"
             );
+            mlx_rs::Device::set_default(&mlx_rs::Device::gpu());
             "native Rust / MLX / Metal"
         }
         _ => anyhow::bail!("device must be gpu or cpu"),
     };
+    let selected_device = mlx_rs::Device::try_default()?;
+    ensure!(
+        selected_device
+            == if backend.ends_with("Metal") {
+                mlx_rs::Device::gpu()
+            } else {
+                mlx_rs::Device::cpu()
+            },
+        "selected MLX device does not match requested backend"
+    );
+    let selected_device = selected_device.to_string();
+    eprintln!("benchmark device: {selected_device}");
     unsafe {
         let mut previous = 0;
         mlx_set_cache_limit(&mut previous, 2 * 1024 * 1024 * 1024);
@@ -187,6 +201,7 @@ fn main() -> Result<()> {
         serde_json::to_string_pretty(&Report {
             model: args[1].clone(),
             backend,
+            selected_device,
             weight_dtype: "f32 (both models)",
             load_seconds,
             peak_rss_bytes: usage.ru_maxrss as u64,

@@ -1,5 +1,9 @@
 # Native Metal comparison
 
+A subsequent [repeated GPU test](../2026-10-22-m5-max-metal-repeat) explicitly
+asserts the selected GPU and collects 100 timing samples per model in alternating
+process order. The three-repetition results below are retained for provenance.
+
 Apple M5 Max, 18 CPU cores, 128 GiB RAM, macOS 26.6.2. Separate native Rust
 processes, MLX Metal, f32 weights, identical five mono PCM16 16 kHz clips,
 one excluded warm-up per clip and three measured repetitions per clip.

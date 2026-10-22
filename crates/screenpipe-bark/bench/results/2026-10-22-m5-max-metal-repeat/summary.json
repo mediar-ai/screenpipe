@@ -1,0 +1,118 @@
+{
+  "bark": {
+    "selected_device": "Device(gpu, 0)",
+    "measured_transcriptions": 100,
+    "audio_seconds": 170.51831249999998,
+    "sum_pooled_clip_medians_seconds": 1.4012766045,
+    "per_process_sum_clip_medians_seconds": [
+      1.3283884595000002,
+      1.469323021
+    ],
+    "model_load_seconds": [
+      7.242319417,
+      8.213293375
+    ],
+    "peak_rss_bytes": [
+      3445309440,
+      3438313472
+    ],
+    "mlx_active_bytes": [
+      2549496216,
+      2549496216
+    ],
+    "word_error_rate": [
+      0.18024691358024691,
+      0.18024691358024691
+    ],
+    "cases": [
+      {
+        "name": "accuracy1",
+        "samples": 20,
+        "median_seconds": 0.3303899165,
+        "p90_seconds_nearest_rank": 0.363133209
+      },
+      {
+        "name": "accuracy2",
+        "samples": 20,
+        "median_seconds": 0.532408,
+        "p90_seconds_nearest_rank": 0.544246958
+      },
+      {
+        "name": "accuracy3",
+        "samples": 20,
+        "median_seconds": 0.1602693335,
+        "p90_seconds_nearest_rank": 0.168403208
+      },
+      {
+        "name": "accuracy4",
+        "samples": 20,
+        "median_seconds": 0.2190813335,
+        "p90_seconds_nearest_rank": 0.248192791
+      },
+      {
+        "name": "accuracy5",
+        "samples": 20,
+        "median_seconds": 0.159128021,
+        "p90_seconds_nearest_rank": 0.18696225
+      }
+    ]
+  },
+  "parakeet": {
+    "selected_device": "Device(gpu, 0)",
+    "measured_transcriptions": 100,
+    "audio_seconds": 170.51831249999998,
+    "sum_pooled_clip_medians_seconds": 1.3375168960000001,
+    "per_process_sum_clip_medians_seconds": [
+      1.288348979,
+      1.368591625
+    ],
+    "model_load_seconds": [
+      0.577151458,
+      0.496304584
+    ],
+    "peak_rss_bytes": [
+      5818793984,
+      5838700544
+    ],
+    "mlx_active_bytes": [
+      2549496216,
+      2549496216
+    ],
+    "word_error_rate": [
+      0.15308641975308643,
+      0.15308641975308643
+    ],
+    "cases": [
+      {
+        "name": "accuracy1",
+        "samples": 20,
+        "median_seconds": 0.31977143750000003,
+        "p90_seconds_nearest_rank": 0.341714667
+      },
+      {
+        "name": "accuracy2",
+        "samples": 20,
+        "median_seconds": 0.5141917295,
+        "p90_seconds_nearest_rank": 0.544468458
+      },
+      {
+        "name": "accuracy3",
+        "samples": 20,
+        "median_seconds": 0.15931962500000002,
+        "p90_seconds_nearest_rank": 0.166690875
+      },
+      {
+        "name": "accuracy4",
+        "samples": 20,
+        "median_seconds": 0.1944136455,
+        "p90_seconds_nearest_rank": 0.1994005
+      },
+      {
+        "name": "accuracy5",
+        "samples": 20,
+        "median_seconds": 0.1498204585,
+        "p90_seconds_nearest_rank": 0.153695041
+      }
+    ]
+  }
+}
