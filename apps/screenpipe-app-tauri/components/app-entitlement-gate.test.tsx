@@ -176,6 +176,9 @@ describe("AppEntitlementGate", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting Screenpipe…");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Turn what people know into what computers can scale",
+    );
     expect(screen.queryByTestId("protected-app")).not.toBeInTheDocument();
     expect(screen.queryByText(/checking local settings/i)).not.toBeInTheDocument();
 
@@ -323,6 +326,9 @@ describe("AppEntitlementGate", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting Screenpipe…");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Turn what people know into what computers can scale",
+    );
     expect(screen.queryByText(/checking access/i)).not.toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.stopScreenpipe).not.toHaveBeenCalled();
@@ -372,6 +378,9 @@ describe("AppEntitlementGate", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting Screenpipe…");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Turn what people know into what computers can scale",
+    );
     expect(screen.queryByText(/checking enterprise access/i)).not.toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.stopScreenpipe).not.toHaveBeenCalled();

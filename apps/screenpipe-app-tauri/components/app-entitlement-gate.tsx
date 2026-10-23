@@ -691,7 +691,12 @@ export function AppEntitlementGate({
   ) : null;
 
   if (!isSettingsLoaded) {
-    return <StartupLoader label={ui("Starting Screenpipe…")} />;
+    return (
+      <StartupLoader
+        label={ui("Starting Screenpipe…")}
+        vision={ui("Turn what people know into what computers can scale")}
+      />
+    );
   }
 
   if (!shouldGate) {
@@ -719,11 +724,21 @@ export function AppEntitlementGate({
         </EntitlementShell>
       );
     }
-    return <StartupLoader label={ui("Starting Screenpipe…")} />;
+    return (
+      <StartupLoader
+        label={ui("Starting Screenpipe…")}
+        vision={ui("Turn what people know into what computers can scale")}
+      />
+    );
   }
 
   if (isManagedDeployment && authenticationState === "checking") {
-    return <StartupLoader label={ui("Starting Screenpipe…")} />;
+    return (
+      <StartupLoader
+        label={ui("Starting Screenpipe…")}
+        vision={ui("Turn what people know into what computers can scale")}
+      />
+    );
   }
 
   if (isManagedDeployment && authenticationState === "choice") {
