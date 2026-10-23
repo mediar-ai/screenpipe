@@ -894,7 +894,11 @@ impl DatabaseManager {
         }
         registry.push(pool.clone());
         drop(registry);
-        Ok(Arc::new(Self {
+        Ok(self.protected_read_adapter(pool))
+    }
+
+    fn protected_read_adapter(self: &Arc<Self>, pool: SqlitePool) -> Arc<Self> {
+        Arc::new(Self {
             release_owner: Some(Arc::clone(self)),
             release_read_pools: Arc::clone(&self.release_read_pools),
             storage: self.storage.clone(),
@@ -908,7 +912,7 @@ impl DatabaseManager {
             persistent_failure_hook: self.persistent_failure_hook.clone(),
             manager_lease: None,
             close_token: self.close_token.clone(),
-        }))
+        })
     }
 
     /// Revokes assembled uploads only when already released content or the
@@ -1056,13 +1060,7 @@ impl DatabaseManager {
                 .derived_release_page(kind, after, cutoff, end, limit)
                 .await;
         }
-        let (table,projection,time)=match kind {
-            "frames"=>("frames","s.id AS frame_id,s.timestamp,s.app_name,s.window_name,s.browser_url,s.accessibility_tree_json AS accessibility_tree,COALESCE(s.full_text,s.accessibility_text,'') AS text","timestamp"),
-            "audio"=>("audio_transcriptions","s.id AS transcription_id,s.timestamp,s.transcription,NULL AS speaker,s.device","timestamp"),
-            "input"=>("ui_events","s.id AS event_id,s.timestamp,s.event_type,s.app_name,s.window_title,s.browser_url,s.element_role,s.element_name,s.text_content","timestamp"),
-            "memory"=>("memories","s.id AS memory_id,s.created_at,s.updated_at,s.content,s.source,s.tags,s.importance,s.frame_id","created_at"),
-            _=>return Err(err("privacy export surface is not supported")),
-        };
+        let (table, projection, time) = export_surface(kind)?;
         let (sequence, more) = self
             .ready_range_window(kind, table, time, None, after, cutoff, end, limit)
             .await?;
@@ -1076,7 +1074,99 @@ impl DatabaseManager {
             .bind(end)
             .fetch_all(&self.pool)
             .await?;
-        let mut rows = Self::raw_sql_rows(&rows);
+        let rows = self.hydrate_release_export(kind, &rows).await?;
+        Ok(ReleasePage {
+            sequence,
+            rows,
+            more,
+        })
+    }
+    /// The policy generation changes for policy replacement, including a cycle
+    /// back to the same identity. Record revocations leave this value unchanged.
+    pub async fn release_policy_generation(&self) -> Result<Option<i64>, sqlx::Error> {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='_privacy_policy')",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        if !exists {
+            return Ok(None);
+        }
+        sqlx::query_scalar("SELECT receipt_key FROM _privacy_policy WHERE id=1")
+            .fetch_one(&self.pool)
+            .await
+            .map(Some)
+    }
+
+    /// Refresh only selected IDs through current completion receipts. Never
+    /// replace a processed export with a raw source, or enroll new captures.
+    pub async fn refresh_release_export_selection(
+        self: &Arc<Self>,
+        kind: &str,
+        ids: &[String],
+    ) -> Result<serde_json::Value, sqlx::Error> {
+        if self.close_token.is_cancelled() {
+            return Err(sqlx::Error::PoolClosed);
+        }
+        let reader = if self.protected_reads_enabled() {
+            Arc::clone(self)
+        } else {
+            // API admission already registered its protected pool. Reuse it
+            // across chunks/ticks instead of accumulating a pool per refresh.
+            let existing = self
+                .release_read_pools
+                .lock()
+                .await
+                .iter()
+                .find(|pool| !pool.is_closed())
+                .cloned();
+            match existing {
+                Some(pool) => self.protected_read_adapter(pool),
+                None => self.protected_reads().await?,
+            }
+        };
+        reader
+            .refresh_release_export_selection_inner(kind, ids)
+            .await
+    }
+
+    async fn refresh_release_export_selection_inner(
+        &self,
+        kind: &str,
+        ids: &[String],
+    ) -> Result<serde_json::Value, sqlx::Error> {
+        if !self.protected_reads_enabled() {
+            return Err(err("protected read adapter required"));
+        }
+        if ids.is_empty() {
+            return Ok(serde_json::json!([]));
+        }
+        let ids = serde_json::to_string(ids).map_err(|_| err("invalid export IDs"))?;
+        if matches!(kind, "activities" | "parsed" | "feedback") {
+            let values: Vec<(String, String)> = sqlx::query_as("SELECT s.template_json,s.text_json FROM json_each(?) selected JOIN _privacy_exports s ON s.source_id=selected.value AND s.stream=? JOIN _privacy_release r ON r.kind='exports' AND r.id=CAST(s.id AS TEXT) JOIN _privacy_policy p ON CAST(p.receipt_key AS TEXT)=r.policy")
+                .bind(ids).bind(kind).fetch_all(&self.pool).await?;
+            let rows = values
+                .into_iter()
+                .map(|(template, texts)| super::privacy_exports::restore_payload(&template, &texts))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(serde_json::json!(rows));
+        }
+        let (table, projection, _) = export_surface(kind)?;
+        let sql = format!("SELECT {projection} FROM json_each(?) selected JOIN {table} s ON s.id=selected.value JOIN _privacy_release r ON r.kind=? AND r.id=CAST(s.id AS TEXT) JOIN _privacy_policy p ON CAST(p.receipt_key AS TEXT)=r.policy");
+        let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+            .bind(ids)
+            .bind(kind)
+            .fetch_all(&self.pool)
+            .await?;
+        self.hydrate_release_export(kind, &rows).await
+    }
+
+    async fn hydrate_release_export(
+        &self,
+        kind: &str,
+        rows: &[sqlx::sqlite::SqliteRow],
+    ) -> Result<serde_json::Value, sqlx::Error> {
+        let mut rows = Self::raw_sql_rows(rows);
         if let Some(items) = rows.as_array_mut() {
             if kind == "memory" {
                 for item in items.iter_mut() {
@@ -1123,11 +1213,7 @@ impl DatabaseManager {
                 }
             }
         }
-        Ok(ReleasePage {
-            sequence,
-            rows,
-            more,
-        })
+        Ok(rows)
     }
 }
 
@@ -1203,4 +1289,14 @@ impl DatabaseManager {
             surfaces,
         })
     }
+}
+
+fn export_surface(kind: &str) -> Result<(&'static str, &'static str, &'static str), sqlx::Error> {
+    Ok(match kind {
+            "frames"=>("frames","s.id AS frame_id,s.timestamp,s.app_name,s.window_name,s.browser_url,s.accessibility_tree_json AS accessibility_tree,COALESCE(s.full_text,s.accessibility_text,'') AS text","timestamp"),
+            "audio"=>("audio_transcriptions","s.id AS transcription_id,s.timestamp,s.transcription,NULL AS speaker,s.device","timestamp"),
+            "input"=>("ui_events","s.id AS event_id,s.timestamp,s.event_type,s.app_name,s.window_title,s.browser_url,s.element_role,s.element_name,s.text_content","timestamp"),
+            "memory"=>("memories","s.id AS memory_id,s.created_at,s.updated_at,s.content,s.source,s.tags,s.importance,s.frame_id","created_at"),
+            _=>return Err(err("privacy export surface is not supported")),
+    })
 }
