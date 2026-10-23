@@ -1,0 +1,76 @@
+/* screenpipe — AI that knows everything you've seen, said, or heard */
+/* https://screenpipe.com */
+
+.mark {
+  position: relative;
+  display: grid;
+  width: 184px;
+  height: 184px;
+  place-items: center;
+}
+
+.mark img {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.frame {
+  position: absolute;
+  inset: 40px;
+  border: 1px solid currentColor;
+  opacity: 0.22;
+  animation: unfold 3.6s ease-in-out infinite;
+}
+
+.frame:nth-child(2) {
+  inset: 24px;
+  opacity: 0.13;
+  animation-delay: -2.4s;
+}
+
+.frame:nth-child(3) {
+  inset: 8px;
+  opacity: 0.07;
+  animation-delay: -1.2s;
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 24px;
+  color: hsl(var(--muted-foreground));
+}
+
+.dots span {
+  width: 3px;
+  height: 3px;
+  background: currentColor;
+  opacity: 0.3;
+  animation: breathe 1.8s ease-in-out infinite;
+}
+
+.dots span:nth-child(2) {
+  animation-delay: -1.2s;
+}
+
+.dots span:nth-child(3) {
+  animation-delay: -0.6s;
+}
+
+@keyframes unfold {
+  0%, 100% { transform: scale(0.94); }
+  50% { transform: scale(1); }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame,
+  .dots span {
+    animation: none;
+  }
+}
