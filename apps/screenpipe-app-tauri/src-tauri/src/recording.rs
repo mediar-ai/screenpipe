@@ -1098,7 +1098,7 @@ pub(crate) fn resume_deferred_account_start(app: tauri::AppHandle) {
     });
 }
 
-/// Schedule one bounded native recovery request for this intent generation.
+/// Schedule one paced native recovery request for this intent generation.
 /// Policy refresh remains free to revoke access while startup is retrying.
 #[cfg(feature = "enterprise-support")]
 pub(crate) async fn resume_enterprise_recording(app: &tauri::AppHandle) {
@@ -1123,37 +1123,50 @@ pub(crate) async fn resume_enterprise_recording(app: &tauri::AppHandle) {
                 generation,
                 allowed,
                 || async {
-                    // Settings failures belong to the same retry budget. Do not
-                    // abandon first login or start from the previous policy.
-                    crate::enterprise::managed_settings::apply(&app).await?;
-                    authorized_start::attempt(&state.server_lifecycle, allowed, || async {
-                        // Drop each slot guard before acquiring the other;
-                        // capture teardown can itself need the server slot.
-                        let server_running = state.server.lock().await.is_some();
-                        let capture_running = state.capture.lock().await.is_some();
-                        if server_running && capture_running {
-                            return Ok(());
-                        }
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
-                        let last = state.last_spawn_epoch.load(Ordering::SeqCst);
-                        if last > 0 && now.saturating_sub(last) < RESTART_COOLDOWN_SECS {
-                            // The general spawn command defers through a webview event.
-                            // Keep ownership here when no webview exists.
-                            return Err("recording restart cooldown is still active".into());
-                        }
-                        spawn_screenpipe_inner(&state, app.clone()).await?;
-                        let server_running = state.server.lock().await.is_some();
-                        let capture_running = state.capture.lock().await.is_some();
-                        if allowed() && (!server_running || !capture_running) {
-                            return Err(
-                                "native startup completed without an active capture session".into(),
-                            );
-                        }
-                        Ok(())
-                    })
+                    retry::run(
+                        &crate::db_relaunch::active_data_dir(),
+                        &state.wants_recording,
+                        async {
+                            // Settings failures belong to the same retry cadence. Do not
+                            // abandon first login or start from the previous policy.
+                            crate::enterprise::managed_settings::apply(&app).await?;
+                            authorized_start::attempt(
+                                &state.server_lifecycle,
+                                allowed,
+                                || async {
+                                    // Drop each slot guard before acquiring the other;
+                                    // capture teardown can itself need the server slot.
+                                    let server_running = state.server.lock().await.is_some();
+                                    let capture_running = state.capture.lock().await.is_some();
+                                    if server_running && capture_running {
+                                        return Ok(());
+                                    }
+                                    let now = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs();
+                                    let last = state.last_spawn_epoch.load(Ordering::SeqCst);
+                                    if last > 0
+                                        && now.saturating_sub(last) < RESTART_COOLDOWN_SECS
+                                    {
+                                        // The general spawn command defers through a webview event.
+                                        // Keep ownership here when no webview exists.
+                                        return Err(
+                                            "recording restart cooldown is still active".into()
+                                        );
+                                    }
+                                    spawn_screenpipe_inner(&state, app.clone()).await?;
+                                    let server_running = state.server.lock().await.is_some();
+                                    let capture_running = state.capture.lock().await.is_some();
+                                    if allowed() && (!server_running || !capture_running) {
+                                        return Err("native startup completed without an active capture session".into());
+                                    }
+                                    Ok(())
+                                },
+                            )
+                            .await
+                        },
+                    )
                     .await
                 },
                 &delays,
