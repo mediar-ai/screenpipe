@@ -453,13 +453,38 @@ mod tests {
     }
 }
 
+// Strict contribution redaction uses the enclave's overlapping token windows.
+static CONTRIBUTION_REDACTION: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
+    serde_json::from_str(include_str!(
+        "../../lib/trajectories/redaction-contract.json"
+    ))
+    .expect("valid bundled contribution redaction contract")
+});
+
+fn contribution_fits_enclave(text: &str) -> bool {
+    !text.trim().is_empty()
+        && text.chars().count()
+            + CONTRIBUTION_REDACTION["prefix"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count()
+            <= CONTRIBUTION_REDACTION["maxInputCharacters"]
+                .as_u64()
+                .unwrap() as usize
+}
+
 /// Strict contribution redaction. No regex-only fallback, no content-bearing
 /// errors, no capture settings, and no chunk boundaries through identifiers.
 #[tauri::command]
 #[specta::specta]
 pub async fn redact_workflow_contribution(text: String) -> Result<String, String> {
-    if text.trim().is_empty() || text.len() > 1800 {
-        return Err("Message is outside the contribution size limit".into());
+    // privacy-filter/server.py MAX_INPUT_CHARS=100000, including our prefix.
+    // The old 1800-byte gate predates the enclave's overflowing token windows.
+    if !contribution_fits_enclave(&text) {
+        return Err(format!("redaction_input_boundary: actual={} threshold={} units=characters (including prefix); split the contribution before retrying",
+            text.chars().count() + CONTRIBUTION_REDACTION["prefix"].as_str().unwrap().chars().count(),
+            CONTRIBUTION_REDACTION["maxInputCharacters"]));
     }
     let redactor = TinfoilRedactor::new(TinfoilConfig {
         // Pin the production attestation identity; do not honor local overrides.
@@ -496,17 +521,31 @@ async fn strict_workflow_redaction(
 ) -> Result<String, String> {
     // The common adapter bypasses very short input. A fixed context prefix
     // ensures even a short name is submitted to the enclave for classification.
-    let input = format!("Workflow message:\n{text}");
+    let prefix = CONTRIBUTION_REDACTION["prefix"].as_str().unwrap();
+    let input = format!("{prefix}{text}");
     let output = tokio::time::timeout(budget, redactor.redact(&input))
         .await
-        .map_err(|_| "Redaction timed out".to_string())?
-        .map_err(|_| "Redaction unavailable".to_string())?;
+        .map_err(|_| "redaction_timeout".to_string())?
+        .map_err(|error| match error {
+            screenpipe_redact::RedactError::HttpStatus { status, .. } => {
+                format!("redaction_http_{}", status.as_u16())
+            }
+            screenpipe_redact::RedactError::Runtime(message)
+                if message.contains("Certificate fingerprint mismatch") =>
+            {
+                "redaction_certificate_mismatch".into()
+            }
+            screenpipe_redact::RedactError::Runtime(message) if message.contains("attestation") => {
+                "redaction_attestation".into()
+            }
+            _ => "redaction_runtime".into(),
+        })?;
     let redacted = output
         .redacted
-        .strip_prefix("Workflow message:\n")
+        .strip_prefix(prefix)
         .unwrap_or(&output.redacted)
         .trim();
-    if redacted.is_empty() || redacted.len() > 8000 {
+    if redacted.is_empty() {
         return Err("Invalid redaction result".into());
     }
     Ok(redacted.to_owned())
@@ -562,7 +601,7 @@ mod workflow_contribution_tests {
     async fn failure_never_returns_raw_or_regex_fallback_or_sensitive_errors() {
         let result =
             strict_workflow_redaction(&FakeRedactor("fail"), "Alice", Duration::from_secs(1)).await;
-        assert_eq!(result.unwrap_err(), "Redaction unavailable");
+        assert_eq!(result.unwrap_err(), "redaction_runtime");
         assert!(
             strict_workflow_redaction(&FakeRedactor(""), "Alice", Duration::from_secs(1))
                 .await
@@ -574,14 +613,40 @@ mod workflow_contribution_tests {
         let result =
             strict_workflow_redaction(&FakeRedactor("hang"), "Alice", Duration::from_millis(10))
                 .await;
-        assert_eq!(result.unwrap_err(), "Redaction timed out");
+        assert_eq!(result.unwrap_err(), "redaction_timeout");
     }
     #[tokio::test]
     async fn oversized_and_empty_messages_never_contact_the_enclave() {
         assert!(redact_workflow_contribution(" ".into()).await.is_err());
-        assert!(redact_workflow_contribution("a".repeat(1801))
+        assert!(redact_workflow_contribution("a".repeat(100000))
             .await
             .is_err());
+    }
+    #[test]
+    fn contribution_boundary_counts_unicode_characters_including_prefix() {
+        let max = CONTRIBUTION_REDACTION["maxInputCharacters"]
+            .as_u64()
+            .unwrap() as usize
+            - CONTRIBUTION_REDACTION["prefix"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count();
+        assert!(contribution_fits_enclave(&"a".repeat(max - 1)));
+        assert!(contribution_fits_enclave(&"💬".repeat(max)));
+        assert!(!contribution_fits_enclave(&"a".repeat(max + 1)));
+    }
+    #[tokio::test]
+    async fn full_redaction_output_is_not_rejected_by_the_old_eight_kilobyte_gate() {
+        let output: &'static str = Box::leak("[REDACTED]".repeat(1000).into_boxed_str());
+        let result = strict_workflow_redaction(
+            &FakeRedactor(output),
+            "Full workflow",
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, output);
     }
 
     /// Bounded synthetic-data smoke eval through the exact production command.
