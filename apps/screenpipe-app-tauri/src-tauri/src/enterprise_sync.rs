@@ -2935,6 +2935,17 @@ mod imp {
                 .await
                 .unwrap();
                 assert!(export.filter(&mut rows, &Protected).await.is_err());
+                db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                    identity: "v1".into(),
+                    text: true,
+                    images: false,
+                })
+                .await
+                .unwrap();
+                assert!(
+                    export.filter(&mut rows, &Protected).await.is_err(),
+                    "a policy cycle must not revive an old export"
+                );
                 db.close().await;
             }
         }
