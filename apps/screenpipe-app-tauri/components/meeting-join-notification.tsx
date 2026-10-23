@@ -9,10 +9,14 @@ import { useGT } from "gt-react";
 import type { NotificationAction } from "@/lib/notifications/actions";
 import { meetingJoinChoices, meetingProvider } from "@/lib/notifications/meeting-join";
 
+const MEETING_JOIN_CARD_WIDTH = 460;
+const MEETING_JOIN_CARD_HEIGHT = 124;
+
 interface Props {
   title: string;
   body: string;
   actions: NotificationAction[];
+  scale?: number;
   onAction: (action: NotificationAction) => Promise<void>;
   onDismiss: () => void;
   onMouseEnter?: () => void;
@@ -22,6 +26,7 @@ interface Props {
 /** Shared Windows/Linux join card; mirrors the native macOS split control. */
 export function MeetingJoinNotification(props: Props) {
   const ui = useGT();
+  const scale = props.scale ?? 1;
   const busy = useRef(false);
   const [pending, setPending] = useState(false);
   const choices = meetingJoinChoices(props.actions);
@@ -41,13 +46,24 @@ export function MeetingJoinNotification(props: Props) {
     whiteSpace: "nowrap" as const,
   };
   return (
+    <div style={{ width: MEETING_JOIN_CARD_WIDTH, height: MEETING_JOIN_CARD_HEIGHT,
+      transform: `scale(${scale})`, transformOrigin: "top left" }}>
     <section aria-label={ui("Meeting starting")} aria-busy={pending}
       onMouseEnter={props.onMouseEnter} onMouseLeave={props.onMouseLeave}
-      style={{ boxSizing: "border-box", width: "100%", height: "100%", minHeight: 124,
+      style={{ boxSizing: "border-box", width: MEETING_JOIN_CARD_WIDTH, height: MEETING_JOIN_CARD_HEIGHT,
         background: "#000", color: "#f2f2f2", border: "1px solid #6b6b6b", borderRadius: 8,
         padding: 14, display: "flex", flexDirection: "column", gap: 8,
         fontFamily: '"IBM Plex Mono", monospace' }}>
-      <style>{`.meeting-join-controls button:focus-visible { outline: 2px solid #4285f4; outline-offset: -3px; border-radius: 5px; }`}</style>
+      <style>{`
+        .meeting-join-action, .meeting-join-dismiss { transition: background-color 150ms ease, color 150ms ease; }
+        .meeting-join-action:hover:not(:disabled) { background: #d9d9d9 !important; }
+        .meeting-join-action:active:not(:disabled) { background: #c9c9c9 !important; }
+        .meeting-join-action:disabled { opacity: .58; cursor: wait; }
+        .meeting-join-action:focus-visible { outline: 2px solid #111; outline-offset: -3px; border-radius: 5px; }
+        .meeting-join-dismiss:hover { color: #f2f2f2 !important; background: #ffffff1a !important; }
+        .meeting-join-dismiss:focus-visible { outline: 2px solid #f2f2f2; outline-offset: -2px; border-radius: 5px; }
+        @media (prefers-reduced-motion: reduce) { .meeting-join-action, .meeting-join-dismiss { transition: none; } }
+      `}</style>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
         <Video size={20} fill="currentColor" aria-hidden="true" style={{ color: "#bfbfbf", marginTop: 3, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -56,16 +72,17 @@ export function MeetingJoinNotification(props: Props) {
             display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{props.body}</div>
         </div>
         <button type="button" aria-label={ui("Dismiss notification")} onClick={props.onDismiss}
-          style={{ background: "transparent", border: 0, color: "#999", padding: 4, cursor: "pointer" }}><X size={16} /></button>
+          className="meeting-join-dismiss"
+          style={{ background: "transparent", border: 0, color: "#999", padding: 4, cursor: "pointer", borderRadius: 5 }}><X size={16} /></button>
       </div>
       <div className="meeting-join-controls" style={{ alignSelf: "flex-end", marginTop: "auto", display: "flex", alignItems: "center", borderRadius: 6, background: "#ebebeb", maxWidth: "100%" }}>
-        <button type="button" disabled={pending} onClick={() => void join(choices.join)} style={buttonStyle}>
+        <button type="button" className="meeting-join-action" disabled={pending} onClick={() => void join(choices.join)} style={buttonStyle}>
           {provider ? <img src={`/images/meeting-providers/${provider}.png`} width={18} height={18} alt="" /> : <Video size={18} fill="currentColor" aria-hidden="true" />}
-          {choices.join.label || ui("join and take notes")}
+          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{choices.join.label || ui("join and take notes")}</span>
         </button>
         {choices.hd && <>
           <span aria-hidden="true" style={{ width: 1, height: 20, flexShrink: 0, background: "#00000026" }} />
-          <button type="button" disabled={pending} onClick={() => void join(choices.hd!)} style={buttonStyle}
+          <button type="button" className="meeting-join-action" disabled={pending} onClick={() => void join(choices.hd!)} style={buttonStyle}
             aria-label={ui("Join and take notes with HD screen recording")}
             title={ui("Join and take notes with HD screen recording: more frequent screenshots for smoother replay. Uses more storage.")}>
             {ui("join + HD")}
@@ -73,5 +90,6 @@ export function MeetingJoinNotification(props: Props) {
         </>}
       </div>
     </section>
+    </div>
   );
 }
