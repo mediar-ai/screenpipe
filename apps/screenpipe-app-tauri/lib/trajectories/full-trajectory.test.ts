@@ -81,6 +81,33 @@ describe("full Workflows trajectory collection", () => {
     expect(JSON.stringify([...f.jobs])).not.toContain("SECRET_BEARER");
     expect(f.jobs.size).toBe(0);
   });
+  it("persists later conversations while earlier redaction is pending", async () => {
+    const f = fixture(); let release!: () => void, written!: () => void;
+    f.ports.store.put.mockImplementation(async job => {
+      f.jobs.set(job.id, structuredClone(job));
+      if (job.id.startsWith("2") && !job.cursor && !written) await new Promise<void>(resolve => { written = resolve; });
+    });
+    f.ports.redact.mockImplementationOnce(async text => {
+      await new Promise<void>(resolve => { release = resolve; }); return text;
+    });
+    const first = f.collector.completeFull(f.ticket, [{ text: "First" }]);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const second = f.collector.completeFull({ ...f.ticket, id: "22345678-1234-4234-8234-123456789abc" }, [{ text: "Second" }]);
+    await vi.waitFor(() => expect(f.jobs.size).toBe(2));
+    const resumed = f.collector.resume(); release(); await resumed; written();
+    await Promise.all([first, second]); expect(f.jobs.size).toBe(0);
+    expect(f.posts).toHaveLength(2);
+  });
+  it("purges a source write that finishes after withdrawal", async () => {
+    const f = fixture(); let finish!: () => void;
+    f.ports.store.put.mockImplementationOnce(async job => {
+      await new Promise<void>(resolve => { finish = resolve; }); f.jobs.set(job.id, structuredClone(job));
+    });
+    const pending = f.collector.completeFull(f.ticket, [{ text: "PRIVATE" }]);
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    await f.collector.stop("user_one"); f.setLocal(null); finish(); await pending;
+    expect(f.jobs.size).toBe(0); expect(f.posts).toHaveLength(0);
+  });
   it("never queues or sends anything without opt-in and rechecks server consent", async () => {
     const f = fixture(); await f.collector.completeFull(null, [{ text: "PRIVATE" }]);
     expect(f.ports.store.put).not.toHaveBeenCalled(); expect(f.ports.request).not.toHaveBeenCalled();

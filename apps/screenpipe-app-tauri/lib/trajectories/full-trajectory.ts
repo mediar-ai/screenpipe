@@ -90,7 +90,9 @@ function transferParts(text: string, job: Contribution, capture: NonNullable<Sha
 
 export function createFullTrajectoryCollector(ports: Ports) {
   let work: Promise<void> = Promise.resolve();
+  let generation = 0;
   const active = new Map<string, AbortController>();
+  const scheduled = new Set<string>();
   const enqueue = (task: () => Promise<void>) => {
     const result = work.then(task, task); work = result.catch(() => {}); return result;
   };
@@ -168,15 +170,28 @@ export function createFullTrajectoryCollector(ports: Ports) {
     } finally { active.delete(job.id); }
   }
   return {
-    completeFull(ticket: TrajectoryTicket | null, records: unknown[]) {
-      if (!ticket) return Promise.resolve();
-      // Persist before any external await. Credentials never enter the outbox.
+    async completeFull(ticket: TrajectoryTicket | null, records: unknown[]) {
+      if (!ticket) return;
+      const started = generation, local = await ports.local();
+      if (started !== generation || local?.accountId !== ticket.local.accountId || local.epoch !== ticket.local.epoch) return;
+      // Persist independently of earlier redaction/upload work. Credentials
+      // never enter the outbox; withdrawal during this write wins afterward.
       const job: Contribution = { id: ticket.id, local: ticket.local, createdAt: Date.now(),
         records: records.map(record => JSON.parse(contributionText(record))), redacted: [], cursor: 0, nextPart: 0 };
-      return enqueue(async () => { await ports.store.put(job); await process(job); });
+      scheduled.add(job.id);
+      try {
+        await ports.store.put(job);
+        await enqueue(async () => {
+          if (started !== generation) await ports.store.remove(job.id);
+          else await process(job);
+        });
+      } finally { scheduled.delete(job.id); }
     },
-    resume() { return enqueue(async () => { for (const job of await ports.store.list()) await process(job); }); },
+    resume() { return enqueue(async () => {
+      for (const job of await ports.store.list()) if (!scheduled.has(job.id)) await process(job);
+    }); },
     stop(accountId?: string) {
+      generation++;
       for (const controller of active.values()) controller.abort();
       if (accountId) return enqueue(async () => {
         for (const job of await ports.store.list()) if (job.local.accountId === accountId) await ports.store.remove(job.id);
