@@ -191,8 +191,11 @@ export function GoogleCalendarCard({ onConnected, onDisconnected }: { onConnecte
     setDisconnecting(key);
     const remainingAccounts = accounts.filter(account => (account.instance ?? "__default__") !== key);
     try {
-      await dismissCalendarNudge().catch((error) => console.error("calendar nudge: disconnect suppression could not be saved", error));
-      await commands.oauthDisconnect("google-calendar", instance ?? null);
+      // Saving reminder preferences must not block removal of the account.
+      void dismissCalendarNudge().catch((error) => console.error("calendar nudge: disconnect suppression could not be saved", error));
+      const result = await commands.oauthDisconnect("google-calendar", instance ?? null);
+      if (result.status === "error") throw new Error(result.error);
+      if (!result.data) throw new Error(ui("Disconnect was not completed. Please try again."));
       setAccounts(remainingAccounts);
       await fetchStatus();
       posthog.capture("google_calendar_disconnected");
@@ -204,6 +207,11 @@ export function GoogleCalendarCard({ onConnected, onDisconnected }: { onConnecte
       }
     } catch (e) {
       console.error("failed to disconnect google calendar:", e);
+      toast({
+        title: ui("Google calendar disconnect failed"),
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
     }
     setDisconnecting(null);
   };
@@ -287,6 +295,7 @@ export function GoogleCalendarCard({ onConnected, onDisconnected }: { onConnecte
                             size="sm"
                             onClick={() => handleDisconnect(account.instance)}
                             disabled={isDisconnecting}
+                            aria-label={ui("Disconnect {account}", { account: account.displayName || account.instance || "Google account" })}
                             className="text-xs text-muted-foreground hover:text-destructive h-6 px-2 shrink-0"
                           >
                             {isDisconnecting ? (
