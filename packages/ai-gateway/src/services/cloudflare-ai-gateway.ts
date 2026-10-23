@@ -7,6 +7,7 @@ import { isFrontierModel } from './cost-tracker';
 import { getHostedAiPlan } from './hosted-ai-policy';
 import { GEMINI_ARGON_MODEL, argonPricing } from '../providers/gemini-argon';
 import { SCREENPIPE_GLM_MODEL } from '../providers/screenpipe-glm';
+import { attachExperientialRequestTags, buildExperientialRequestTags } from './experiential-metadata';
 export type HostedChatPlan = 'free' | 'basic' | 'business' | 'business_max' | 'business_ultra' | 'super_admin' | 'internal';
 export type HostedChatLane = 'auto' | 'explicit' | 'frontier';
 export type HostedChatRequestLane = Exclude<HostedChatLane, 'frontier'>;
@@ -110,7 +111,7 @@ export async function buildHostedChatGatewayContext(
 ): Promise<HostedChatGatewayContext> {
 	const userId = await hostedChatActorId(auth);
 	const plan = collapsePlan(auth);
-	return {
+	return attachExperientialRequestTags({
 		user_id: userId,
 		plan: userId === SUPER_ADMIN_ACTOR_ID ? 'super_admin' : plan,
 		lane: hostedChatLaneForModel(
@@ -119,7 +120,7 @@ export async function buildHostedChatGatewayContext(
 		),
 		workload,
 		trial: auth.hostedAiTrial === true,
-	};
+	}, buildExperientialRequestTags(auth));
 }
 
 export function hostedChatLaneForModel(

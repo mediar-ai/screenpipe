@@ -35,7 +35,11 @@ export function buildExperientialRequestTags(auth: AuthResult): ExperientialRequ
  * metadata, allowance actor or existing five-field spend-rule contract. */
 export function attachExperientialRequestTags<T extends object>(context: T, tags: ExperientialRequestTags | null): T {
   const validated = parseTrainingMetadata(tags);
-  return Object.assign(context, { [contextTags]: validated ? Object.freeze(validated) : null });
+  if (!validated) {
+    delete (context as { [contextTags]?: unknown })[contextTags];
+    return context;
+  }
+  return Object.assign(context, { [contextTags]: Object.freeze(validated) });
 }
 
 export function getExperientialRequestTags(context: object): ExperientialRequestTags | null {
