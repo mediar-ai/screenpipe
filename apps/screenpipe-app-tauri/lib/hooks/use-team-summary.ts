@@ -28,14 +28,19 @@ export function useTeamSummary({
   orgName?: string | null;
 }): TeamEntry | undefined {
   const build = useEnterpriseBuildStatus();
-  const consumerBuild = build.resolved && !build.error && !build.isEnterprise;
+  // Unified builds can serve both account types. Enterprise accounts use the
+  // organization member page; signed-in consumer accounts keep their B2C flow.
+  const canUseConsumerTeamFlow =
+    build.resolved &&
+    !build.error &&
+    (!build.isEnterprise || (!enterprise && Boolean(token)));
   const [result, setResult] = useState<{
     token: string;
     team: Summary;
     role?: string;
   } | null>(null);
   useEffect(() => {
-    if (!consumerBuild || !enabled || enterprise || !token) return;
+    if (!canUseConsumerTeamFlow || !enabled || enterprise || !token) return;
     let disposed = false;
     let controller: AbortController | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -85,9 +90,9 @@ export function useTeamSummary({
       clearTimeout(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [token, enabled, enterprise, consumerBuild]);
+  }, [token, enabled, enterprise, canUseConsumerTeamFlow]);
 
-  if (!consumerBuild || !enabled) return undefined;
+  if (!enabled) return undefined;
   if (enterprise)
     return {
       label: orgName?.trim() || "Your organization",
@@ -97,6 +102,7 @@ export function useTeamSummary({
         "https://screenpipe.com",
       ),
     };
+  if (!canUseConsumerTeamFlow) return undefined;
   if (!token)
     return { label: "Invite your team", href: teamPage, kind: "signed-out" };
   if (!result || result.token !== token)
