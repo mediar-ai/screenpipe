@@ -67,6 +67,9 @@ pub const PAGE_LIMIT: u32 = 500;
 /// Frames include full AX trees; use smaller pages without truncating nodes.
 pub const FRAME_PAGE_LIMIT: u32 = 32;
 
+/// Match the parsed local query's existing hydration budget so full pages drain.
+pub const PARSED_PAGE_LIMIT: u32 = screenpipe_db::SemanticContextQuery::MAX_PAGE_SIZE;
+
 /// Keep hosted-ingest requests comfortably below Vercel's 4.5 MB function
 /// body limit. This is a transport envelope, not a data cap: every JSONL line
 /// is sent, across as many requests as necessary.
@@ -1522,7 +1525,7 @@ async fn run_one_sync_page(
             .fetch_parsed_since(
                 cursor.last_parsed_ts.as_deref(),
                 cursor.boundary.parsed,
-                PAGE_LIMIT,
+                PARSED_PAGE_LIMIT,
             )
             .await
         {
@@ -1978,7 +1981,7 @@ impl SyncTickReport {
             || self.scanned_full_page
             || self.frames >= FRAME_PAGE_LIMIT as usize
             || self.starred >= limit
-            || self.parsed >= limit
+            || self.parsed >= PARSED_PAGE_LIMIT as usize
             || self.audio >= limit
             || self.ui >= limit
             || self.memories >= limit
@@ -2978,6 +2981,7 @@ pub async fn run(
             Ok(report) => {
                 let total = &report.total;
                 if total.frames > 0
+                    || total.parsed > 0
                     || total.audio > 0
                     || total.ui > 0
                     || total.snapshots > 0
@@ -4089,6 +4093,327 @@ pub(crate) mod tests {
     }
 
     // ─── run_one_sync (with mocks) ──────────────────────────────────────
+
+    use screenpipe_db::{DatabaseManager, Order, SemanticContextQuery};
+
+    struct ParsedDatabase {
+        db: DatabaseManager,
+        refresh: bool,
+    }
+
+    struct RefreshParsed;
+
+    #[async_trait::async_trait]
+    impl ExportFilter for RefreshParsed {
+        async fn admit(&self) -> Result<Option<Box<dyn Send>>, EnterpriseSyncError> {
+            Ok(None)
+        }
+
+        async fn filter(
+            &self,
+            rows: &mut ExportRows<'_>,
+            local: &dyn LocalApiClient,
+        ) -> Result<ExportFilterReport, EnterpriseSyncError> {
+            rows.refresh(local).await
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl LocalApiClient for ParsedDatabase {
+        async fn begin_export(&self) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
+            Ok(self
+                .refresh
+                .then(|| Box::new(RefreshParsed) as Box<dyn ExportFilter>))
+        }
+
+        async fn fetch_frames_since(
+            &self,
+            _: Option<&str>,
+            _: u32,
+            _: u32,
+        ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+            Ok(Vec::new())
+        }
+
+        async fn fetch_audio_since(
+            &self,
+            _: Option<&str>,
+            _: u32,
+            _: u32,
+        ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+            Ok(Vec::new())
+        }
+
+        async fn fetch_parsed_since(
+            &self,
+            since: Option<&str>,
+            offset: u32,
+            limit: u32,
+        ) -> Result<Vec<ParsedRow>, EnterpriseSyncError> {
+            // Use the production /search database query and its real page cap.
+            let contexts = self
+                .db
+                .search_semantic_context(&SemanticContextQuery {
+                    start_time: since.map(|at| at.parse().unwrap()),
+                    offset,
+                    limit,
+                    order: Order::Ascending,
+                    ..Default::default()
+                })
+                .await
+                .unwrap();
+            Ok(contexts
+                .into_iter()
+                .map(|context| {
+                    let text = context.render_compact();
+                    let mut row = serde_json::to_value(context).unwrap();
+                    row["text"] = text.into();
+                    serde_json::from_value(row).unwrap()
+                })
+                .collect())
+        }
+    }
+
+    async fn parsed_database(root: &std::path::Path, count: u32, refresh: bool) -> ParsedDatabase {
+        let db = DatabaseManager::new(
+            root.join("parsed.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        db.execute_raw_sql_write(&format!(
+            "INSERT INTO semantic_runs(id,input_fingerprint,parser_id,parser_version,schema_version,app_platform,input_content_hash,status,item_count) VALUES(1,zeroblob(32),'test-parser','1',1,'macos',zeroblob(8),'handled',1); \
+             INSERT INTO semantic_items(id,entity_fingerprint,version_fingerprint,kind,item_key,identity_quality,body) VALUES(1,zeroblob(32),zeroblob(32),'message','stable-key','stable','synthetic parsed content'); \
+             INSERT INTO semantic_run_items(run_id,local_id,item_id,sort_order) VALUES(1,'stable-local',1,0); \
+             WITH RECURSIVE n(id) AS (VALUES(1) UNION ALL SELECT id+1 FROM n WHERE id<{count}) \
+             INSERT INTO frames(id,timestamp,semantic_run_id) SELECT id,'2026-08-01T00:00:00Z',1 FROM n"
+        )).await.unwrap();
+        ParsedDatabase { db, refresh }
+    }
+
+    fn uploaded_parsed_ids(requests: &[wiremock::Request]) -> Vec<i64> {
+        requests
+            .iter()
+            .filter(|request| request.url.path().ends_with("/ingest"))
+            .flat_map(|request| request.body.split(|b| *b == b'\n'))
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                serde_json::from_slice::<serde_json::Value>(line).unwrap()["frame_id"]
+                    .as_i64()
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn parsed_backlog_drains_real_query_pages_and_refreshes_timestamp_ties() {
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        let http = reqwest::Client::new();
+        // Below, at, and above the existing local query boundary, including a
+        // later tied page that export refresh must seek past the first page.
+        for count in [99, 100, 101, 201] {
+            for refresh in [false, true] {
+                let dir = TempDir::new().unwrap();
+                let local = parsed_database(dir.path(), count, refresh).await;
+                let server = wiremock::MockServer::start().await;
+                wiremock::Mock::given(wiremock::matchers::method("POST"))
+                    .respond_with(wiremock::ResponseTemplate::new(200))
+                    .mount(&server)
+                    .await;
+                let cfg = test_cfg(&dir, format!("{}/ingest", server.uri()));
+                let mut cursor = initialized_cursor();
+                cursor.last_parsed_ts = Some("2026-07-31T00:00:00Z".into());
+                let report = run_sync_burst(&cfg, &mut cursor, &local, &http)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    report.total.parsed, count as usize,
+                    "count={count}, refresh={refresh}"
+                );
+                assert_eq!(report.pages, count as usize / 100 + 1);
+                let ids = uploaded_parsed_ids(&server.received_requests().await.unwrap());
+                assert_eq!(ids, (1..=i64::from(count)).collect::<Vec<_>>());
+                let saved = Cursor::load(&cfg.cursor_path);
+                assert_eq!(saved.boundary.parsed, count);
+                assert_eq!(
+                    saved.last_parsed_ts.as_deref(),
+                    Some("2026-08-01T00:00:00Z")
+                );
+                assert_eq!(
+                    run_sync_burst(&cfg, &mut cursor, &local, &http)
+                        .await
+                        .unwrap()
+                        .total
+                        .parsed,
+                    0
+                );
+                local.db.close().await;
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn parsed_backlog_failed_page_resumes_from_durable_tie_after_restart() {
+        let logs = TempDir::new().unwrap();
+        check_parsed_backlog_restart(logs.path()).await;
+    }
+
+    // Also run through the real collected/redacted support upload in
+    // diagnostic_logs' tests, rather than the isolated target's collector stub.
+    pub(crate) async fn check_parsed_backlog_restart(logs: &std::path::Path) -> String {
+        let _env = ENV_LOCK.lock().unwrap();
+        let _guard = crate::enterprise_policy::sync_streams_test_lock();
+        let _restore = RestoreDefaultSyncStreams;
+        crate::enterprise_policy::set_sync_streams(
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            "off".into(),
+            "off".into(),
+        );
+        let _mode = UploadModeEnvGuard::clear();
+        let dir = TempDir::new().unwrap();
+        let local = parsed_database(dir.path(), 201, true).await;
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"desired_mode":"hosted_ingest"})),
+            )
+            .mount(&server)
+            .await;
+        let calls = Arc::new(AtomicUsize::new(0));
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/enterprise/ingest"))
+            .respond_with(move |_: &wiremock::Request| {
+                wiremock::ResponseTemplate::new(if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    200
+                } else {
+                    503
+                })
+            })
+            .expect(2)
+            .mount(&server)
+            .await;
+        let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", server.uri()));
+        cfg.cursor_path = logs.join("cursor.json");
+        let mut cursor = initialized_cursor();
+        cursor.last_parsed_ts = Some("2026-07-31T00:00:00Z".into());
+        let recovery = TestLicenseKeyRecovery::unavailable(Arc::new(AtomicUsize::new(0)));
+        let error = run_reported_sync_burst(
+            &mut cfg,
+            &mut cursor,
+            &local,
+            &reqwest::Client::new(),
+            &recovery,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, EnterpriseSyncError::IngestServerError(503)));
+        let saved = Cursor::load(&cfg.cursor_path);
+        assert_eq!(saved.boundary.parsed, 100);
+        local.db.close().await;
+        let reopened = Arc::new(ParsedDatabase {
+            db: DatabaseManager::new(
+                dir.path().join("parsed.sqlite").to_str().unwrap(),
+                Default::default(),
+            )
+            .await
+            .unwrap(),
+            refresh: true,
+        });
+        let healthy = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"desired_mode":"hosted_ingest"})),
+            )
+            .mount(&healthy)
+            .await;
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/api/enterprise/ingest"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .expect(2)
+            .mount(&healthy)
+            .await;
+        let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", healthy.uri()));
+        cfg.cursor_path = logs.join("cursor.json");
+        let log_path = logs.join("screenpipe-app.log");
+        let file = std::fs::File::create(&log_path).unwrap();
+        let _subscriber = tracing::subscriber::set_default(
+            tracing_subscriber::fmt()
+                .with_ansi(false)
+                .with_writer(move || file.try_clone().unwrap())
+                .finish(),
+        );
+        let (stop, shutdown) = tokio::sync::watch::channel(false);
+        let worker = tokio::spawn(run(cfg.clone(), reopened.clone(), shutdown, None));
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !std::fs::read_to_string(&log_path)
+                .unwrap()
+                .contains("pushed 0 frames, 101 parsed")
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("parsed-only recovery must reach normal support logs");
+        stop.send(true).unwrap();
+        tokio::task::yield_now().await;
+        tokio::time::pause();
+        tokio::time::advance(SYNC_INTERVAL).await;
+        tokio::time::timeout(SYNC_INTERVAL * 2, worker)
+            .await
+            .unwrap()
+            .unwrap();
+        tokio::time::resume();
+        assert_eq!(
+            uploaded_parsed_ids(&healthy.received_requests().await.unwrap()),
+            (101..=201).collect::<Vec<_>>()
+        );
+        assert_eq!(Cursor::load(&cfg.cursor_path).boundary.parsed, 201);
+        reopened.db.close().await;
+        // Rotation and a later healthy log must preserve the original failure
+        // and acknowledged recovery in the actual uploaded report.
+        std::fs::rename(&log_path, logs.join("screenpipe-app.2026-10-23.1.log")).unwrap();
+        std::fs::write(log_path, "INFO recorder restarted\npassword=hunter2\n").unwrap();
+        wiremock::Mock::given(wiremock::matchers::path("/api/logs"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"data":{"signedUrl":format!("{}/support-upload", healthy.uri()),"path":"logs/machine/test/parsed.log"}}),
+            )).mount(&healthy).await;
+        for path in ["/support-upload", "/api/logs/confirm"] {
+            wiremock::Mock::given(wiremock::matchers::path(path))
+                .respond_with(wiremock::ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&healthy)
+                .await;
+        }
+        assert!(
+            submit_device_logs(&cfg, &enterprise_http_client(), "parsed backlog regression")
+                .await
+                .is_some()
+        );
+        let requests = healthy.received_requests().await.unwrap();
+        let upload = requests
+            .iter()
+            .find(|request| request.url.path() == "/support-upload")
+            .unwrap();
+        String::from_utf8(upload.body.clone()).unwrap()
+    }
 
     struct PrivacyLocal {
         db: Arc<screenpipe_db::DatabaseManager>,
