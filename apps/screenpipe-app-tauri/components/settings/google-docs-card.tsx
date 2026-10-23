@@ -12,6 +12,7 @@ import { Loader2, RefreshCw, LogOut, ExternalLink, FileText, Plus } from "lucide
 import { commands } from "@/lib/utils/tauri";
 import { notifyConnectionsUpdated } from "@/lib/connections-events";
 import posthog from "posthog-js";
+import { toast } from "@/components/ui/use-toast";
 import { localFetch } from "@/lib/api";
 import { GoogleOAuthUnverifiedAppHint } from "./google-oauth-unverified-app-hint";
 import { useGT } from "gt-react";
@@ -131,12 +132,19 @@ export function GoogleDocsCard() {
     const key = instance ?? "__default__";
     setDisconnecting(key);
     try {
-      await commands.oauthDisconnect("google-docs", instance ?? null);
+      const result = await commands.oauthDisconnect("google-docs", instance ?? null);
+      if (result.status === "error") throw new Error(result.error);
+      if (!result.data) throw new Error(ui("Disconnect was not completed. Please try again."));
       posthog.capture("google_docs_disconnected", { instance });
       await fetchAccounts();
       notifyConnectionsUpdated();
     } catch (e) {
       console.error("failed to disconnect google docs:", e);
+      toast({
+        title: ui("Google Docs disconnect failed"),
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
     }
     setDisconnecting(null);
   };
@@ -180,6 +188,7 @@ export function GoogleDocsCard() {
                         size="sm"
                         onClick={() => handleDisconnect(account.instance)}
                         disabled={isDisconnecting}
+                        aria-label={ui("Disconnect {account}", { account: account.displayName || account.instance || "Google account" })}
                         className="text-xs text-muted-foreground hover:text-destructive h-6 px-2 shrink-0"
                       >
                         {isDisconnecting ? (

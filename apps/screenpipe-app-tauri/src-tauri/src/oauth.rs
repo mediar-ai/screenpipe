@@ -680,33 +680,44 @@ pub async fn oauth_disconnect(
     integration_id: String,
     instance: Option<String>,
 ) -> Result<bool, String> {
-    let store = open_secret_store().await;
-    if instance.is_none() {
-        // load_oauth_json falls back to named instances (e.g. the user's email) when
-        // the None-key is empty, so deleting only the None-key leaves the token alive
-        // under its named instance and oauth_status incorrectly reports connected=true.
-        // Sweep all instances so the fallback path finds nothing.
-        let instances = oauth::list_oauth_instances(store.as_ref(), &integration_id).await;
-        for inst in instances {
-            let _ = oauth::delete_oauth_token_instance(
-                store.as_ref(),
-                &integration_id,
-                inst.as_deref(),
-            )
-            .await;
-        }
-        // Also delete the None-key in case it exists alongside named ones.
-        let _ = oauth::delete_oauth_token_instance(store.as_ref(), &integration_id, None).await;
+    let data_dir = screenpipe_core::paths::default_screenpipe_data_dir();
+    let store = screenpipe_secrets::SecretStore::open_for_data_dir_with_vault_key(&data_dir)
+        .await
+        .map_err(|e| {
+            let message = format!("failed to open OAuth secret store for disconnect: {e:#}");
+            report_disconnect_failure(&integration_id, message)
+        })?;
+    let mut instances = if instance.is_none() {
+        // Preserve disconnect-all: default lookups can fall back to named accounts.
+        oauth::list_oauth_instances(Some(&store), &integration_id).await
     } else {
-        oauth::delete_oauth_token_instance(store.as_ref(), &integration_id, instance.as_deref())
-            .await
-            .map_err(|e| format!("failed to remove token: {}", e))?;
+        vec![instance.clone()]
+    };
+    if instance.is_none() && !instances.contains(&None) {
+        instances.push(None);
+    }
+    let mut failures = Vec::new();
+    for inst in instances {
+        if let Err(e) =
+            oauth::delete_oauth_token_instance(Some(&store), &integration_id, inst.as_deref()).await
+        {
+            failures.push(format!("failed to remove OAuth token: {e:#}"));
+        }
+    }
+    if !failures.is_empty() {
+        let message = failures.join("; ");
+        return Err(report_disconnect_failure(&integration_id, message));
     }
     info!(
         "OAuth disconnected: {} (instance={:?})",
         integration_id, instance
     );
     Ok(true)
+}
+
+fn report_disconnect_failure(integration_id: &str, message: String) -> String {
+    error!("OAuth disconnect failed: {}: {}", integration_id, message);
+    message
 }
 
 /// List all connected OAuth instances for a given integration.
@@ -763,6 +774,64 @@ mod tests {
     use super::{derive_effective_instance, oauth_cancel};
     use screenpipe_connect::oauth::{OAuthCallbackResult, PendingOAuth, PENDING_OAUTH};
     use serde_json::json;
+
+    #[tokio::test]
+    async fn disconnect_failure_survives_support_collection_and_rotation() {
+        let logs = tempfile::tempdir().unwrap();
+        let current = logs.path().join("screenpipe-app.2026-10-23.log");
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::fs::File::create(&current).unwrap())
+            .finish();
+        let data = tempfile::tempdir().unwrap();
+        let database = data.path().join("secrets.sqlite");
+        let store = screenpipe_secrets::SecretStore::open(database.to_str().unwrap(), None)
+            .await
+            .unwrap();
+        store
+            .set_json(
+                "oauth:_t_disconnect_support",
+                &json!({"access_token": "test"}),
+            )
+            .await
+            .unwrap();
+        let connection = rusqlite::Connection::open(&database).unwrap();
+        connection.execute_batch("CREATE TRIGGER reject_delete BEFORE DELETE ON secrets BEGIN SELECT RAISE(FAIL, 'injected storage failure'); END").unwrap();
+        drop(connection);
+        let cause = screenpipe_connect::oauth::delete_oauth_token_instance(
+            Some(&store),
+            "_t_disconnect_support",
+            None,
+        )
+        .await
+        .unwrap_err();
+        tracing::subscriber::with_default(subscriber, || {
+            super::report_disconnect_failure(
+                "google-calendar",
+                format!("failed to remove OAuth token: {cause:#}; account=person@example.com"),
+            );
+        });
+        std::fs::rename(
+            &current,
+            logs.path().join("screenpipe-app.2026-10-23.1.log"),
+        )
+        .unwrap();
+        std::fs::write(&current, "app restarted\n").unwrap();
+        let report =
+            crate::diagnostic_logs::collect_redacted_from_dirs(&[logs.path().to_path_buf()])
+                .await
+                .unwrap();
+        for expected in [
+            "OAuth disconnect failed",
+            "google-calendar",
+            "failed to remove stored OAuth token",
+            "injected storage failure",
+            "code: 1811",
+        ] {
+            assert!(report.contains(expected), "missing {expected}: {report}");
+        }
+        assert!(!report.contains("person@example.com"));
+    }
 
     #[test]
     fn effective_instance_uses_email_identity() {
