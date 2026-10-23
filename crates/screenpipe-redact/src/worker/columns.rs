@@ -79,6 +79,7 @@ pub struct RedactColumns {
     pub accessibility_tree: bool,
     pub window_name: bool,
     pub browser_url: bool,
+    /// Deprecated compatibility field. Audio is always excluded from AI redaction.
     pub audio_transcription: bool,
     pub ui_text_content: bool,
     pub ui_element_value: bool,
@@ -120,7 +121,7 @@ impl Default for RedactColumns {
             accessibility_tree: true,
             window_name: true,
             browser_url: false,
-            audio_transcription: true,
+            audio_transcription: false,
             ui_text_content: true,
             ui_element_value: true,
             ui_window_title: true,
@@ -159,7 +160,8 @@ impl RedactColumns {
             accessibility_tree: has(keys::ACCESSIBILITY_TREE),
             window_name: has(keys::WINDOW_NAME),
             browser_url: has(keys::BROWSER_URL),
-            audio_transcription: has(keys::AUDIO_TRANSCRIPTION),
+            // Retain the legacy key for config compatibility, but never enable it.
+            audio_transcription: false,
             ui_text_content: has(keys::UI_TEXT_CONTENT),
             ui_element_value: has(keys::UI_ELEMENT_VALUE),
             ui_window_title: has(keys::UI_WINDOW_TITLE),
@@ -251,7 +253,8 @@ mod tests {
         let d = RedactColumns::default();
         // Clear capture surfaces — on.
         assert!(d.accessibility_text && d.accessibility_tree && d.window_name);
-        assert!(d.audio_transcription && d.ui_text_content && d.ui_element_value);
+        assert!(!d.audio_transcription);
+        assert!(d.ui_text_content && d.ui_element_value);
         assert!(d.ui_window_title && d.element_text);
         // Form-field values — on by default (the real PII surface, incl.
         // password-field values OCR never sees).
@@ -268,6 +271,12 @@ mod tests {
         assert!(c.browser_url && c.ui_element_name);
         // Anything not listed is OFF — this is the full-list contract.
         assert!(!c.accessibility_text && !c.window_name && !c.element_properties);
+    }
+
+    #[test]
+    fn legacy_audio_key_cannot_enable_ai_redaction() {
+        assert!(!RedactColumns::from_keys(&["audio_transcription"]).audio_transcription);
+        assert!(!RedactColumns::default_keys().contains(&"audio_transcription"));
     }
 
     #[test]

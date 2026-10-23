@@ -49,6 +49,17 @@ impl Progress {
     fn new(job: ReleaseJob) -> Result<Self, RedactError> {
         let mut fields = VecDeque::new();
         let mut json = BTreeMap::new();
+        // Audio keeps revision receipts for sync/retry bookkeeping only. Copy
+        // transcripts unchanged, without sending any field to a local or cloud
+        // detector. Local transcript reads do not wait for this bookkeeping.
+        if screenpipe_db::privacy_release::is_audio_surface(&job.kind) {
+            return Ok(Self {
+                values: job.values.clone(),
+                job,
+                json,
+                fields,
+            });
+        }
         for (column, value) in &job.values {
             let Some(text) = value.as_deref().filter(|s| !s.is_empty()) else {
                 continue;
@@ -217,9 +228,11 @@ impl Worker {
                 if db.publish_release(&progress.job, &progress.values).await? {
                     completed += 1;
                     let mut status = self.status.lock().await;
-                    status.redacted_total += 1;
-                    status.last_redacted_at = Some(chrono::Utc::now());
-                    status.last_error = None;
+                    if !screenpipe_db::privacy_release::is_audio_surface(&progress.job.kind) {
+                        status.redacted_total += 1;
+                        status.last_redacted_at = Some(chrono::Utc::now());
+                        status.last_error = None;
+                    }
                 }
                 scheduler.progress[index] = None;
             }

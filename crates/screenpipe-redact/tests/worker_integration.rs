@@ -208,7 +208,7 @@ async fn seed(pool: &sqlx::SqlitePool) {
 }
 
 #[tokio::test]
-async fn worker_redacts_all_targets() {
+async fn worker_redacts_screen_targets_and_leaves_audio_unchanged() {
     let (pool, _temp_dir) = setup_db().await;
     seed(&pool).await;
 
@@ -218,7 +218,11 @@ async fn worker_redacts_all_targets() {
         idle_between_batches: Duration::from_millis(1),
         poll_interval: Duration::from_millis(20),
         tables: ALL_TARGET_TABLES.to_vec(),
-        columns: all_columns(),
+        // Even a programmatically supplied legacy setting cannot opt audio in.
+        columns: RedactColumns {
+            audio_transcription: true,
+            ..all_columns()
+        },
         ..test_worker_config()
     };
     let worker = Worker::new(pool.clone(), redactor, cfg);
@@ -231,7 +235,6 @@ async fn worker_redacts_all_targets() {
                    WHERE full_text IS NOT NULL AND full_text_redacted_at IS NULL) + \
                 (SELECT COUNT(*) FROM frames \
                    WHERE accessibility_text IS NOT NULL AND accessibility_redacted_at IS NULL) + \
-                (SELECT COUNT(*) FROM audio_transcriptions WHERE redacted_at IS NULL) + \
                 (SELECT COUNT(*) FROM ui_events WHERE redacted_at IS NULL) + \
                 (SELECT COUNT(*) FROM elements \
                    WHERE (text IS NOT NULL OR properties IS NOT NULL) AND redacted_at IS NULL)",
@@ -244,11 +247,24 @@ async fn worker_redacts_all_targets() {
     .await;
     handle.abort();
 
+    let (audio, stamp): (String, Option<i64>) =
+        sqlx::query_as("SELECT transcription,redacted_at FROM audio_transcriptions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        audio,
+        "the api key is sk-proj-AbCdEf123456GhIjKlMnOp tomorrow"
+    );
+    assert!(
+        stamp.is_none(),
+        "the background AI worker must leave audio alone"
+    );
+
     // Every single-column seeded row should now have its source column
     // overwritten with the redacted version + redacted_at stamped.
     for target in [
         TargetTable::FullText,
-        TargetTable::AudioTranscription,
         TargetTable::Accessibility,
         // Elements is multi-column now (text + properties) — asserted
         // separately below, since a properties-only row has NULL text.
@@ -356,11 +372,11 @@ async fn worker_redacts_all_targets() {
 
     let status = worker.status().await;
     assert!(status.running);
-    // full_text seeded on both frames → 2 writes. audio (1), accessibility
+    // full_text seeded on both frames → 2 writes. accessibility
     // (1). elements: 2 rows processed (the text element + the properties-
     // only element; the NULL/NULL container is skipped). ui_events: 3 ROWS
-    // (keyboard, clipboard, click). 2+1+1+2+3 = 9.
-    assert_eq!(status.redacted_total, 9);
+    // (keyboard, clipboard, click). 2+1+2+3 = 8. Audio is excluded.
+    assert_eq!(status.redacted_total, 8);
     assert!(status.last_redacted_at.is_some());
 }
 
@@ -586,19 +602,19 @@ async fn worker_writes_consistent_pseudonym_tokens() {
     let (pool, _temp_dir) = setup_db().await;
     // Rows 1 & 2 share a secret; row 3 has a different one.
     sqlx::query(
-        "INSERT INTO audio_transcriptions (transcription) VALUES ('key is sk-proj-AbCdEf123456GhIjKlMnOp today')",
+        "INSERT INTO frames (accessibility_text) VALUES ('key is sk-proj-AbCdEf123456GhIjKlMnOp today')",
     )
     .execute(&pool)
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO audio_transcriptions (transcription) VALUES ('reuse sk-proj-AbCdEf123456GhIjKlMnOp again')",
+        "INSERT INTO frames (accessibility_text) VALUES ('reuse sk-proj-AbCdEf123456GhIjKlMnOp again')",
     )
     .execute(&pool)
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO audio_transcriptions (transcription) VALUES ('other sk-proj-ZyXwVu987654TsRqPoNmLk now')",
+        "INSERT INTO frames (accessibility_text) VALUES ('other sk-proj-ZyXwVu987654TsRqPoNmLk now')",
     )
     .execute(&pool)
     .await
@@ -612,15 +628,15 @@ async fn worker_writes_consistent_pseudonym_tokens() {
     let cfg = WorkerConfig {
         idle_between_batches: Duration::from_millis(1),
         poll_interval: Duration::from_millis(20),
-        tables: vec![TargetTable::AudioTranscription],
+        tables: vec![TargetTable::Accessibility],
         ..test_worker_config()
     };
     let worker = Worker::new(pool.clone(), redactor, cfg);
     let handle = worker.clone().spawn();
 
-    wait_until("audio pseudonym watermarks", || async {
+    wait_until("accessibility pseudonym watermarks", || async {
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM audio_transcriptions WHERE redacted_at IS NULL",
+            "SELECT COUNT(*) FROM frames WHERE accessibility_redacted_at IS NULL",
         )
         .fetch_one(&pool)
         .await
@@ -630,14 +646,13 @@ async fn worker_writes_consistent_pseudonym_tokens() {
     .await;
     handle.abort();
 
-    let texts: Vec<String> =
-        sqlx::query("SELECT transcription FROM audio_transcriptions ORDER BY id")
-            .fetch_all(&pool)
-            .await
-            .unwrap()
-            .iter()
-            .map(|r| r.get::<String, _>(0))
-            .collect();
+    let texts: Vec<String> = sqlx::query("SELECT accessibility_text FROM frames ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get::<String, _>(0))
+        .collect();
     assert_eq!(texts.len(), 3);
 
     // No raw secret survives anywhere.
@@ -678,12 +693,12 @@ struct SlowBatchRedactor {
     delay: Duration,
 }
 
-/// Gives audio deliberately slow timing while leaving element redaction fast,
+/// Gives accessibility deliberately slow timing while leaving element redaction fast,
 /// so the worker must learn independent limits for the two tables.
 struct TableTimingRedactor {
-    audio_batch_sizes: Mutex<Vec<usize>>,
+    accessibility_batch_sizes: Mutex<Vec<usize>>,
     element_batch_sizes: Mutex<Vec<usize>>,
-    audio_delay: Duration,
+    accessibility_delay: Duration,
 }
 
 #[async_trait]
@@ -723,10 +738,13 @@ impl Redactor for TableTimingRedactor {
     async fn redact_batch(&self, texts: &[String]) -> Result<Vec<RedactionOutput>, RedactError> {
         if texts
             .first()
-            .is_some_and(|text| text.starts_with("slow audio"))
+            .is_some_and(|text| text.starts_with("slow accessibility"))
         {
-            self.audio_batch_sizes.lock().unwrap().push(texts.len());
-            tokio::time::sleep(self.audio_delay).await;
+            self.accessibility_batch_sizes
+                .lock()
+                .unwrap()
+                .push(texts.len());
+            tokio::time::sleep(self.accessibility_delay).await;
         } else if texts
             .first()
             .is_some_and(|text| text.starts_with("fast element"))
@@ -748,7 +766,7 @@ impl Redactor for TableTimingRedactor {
 async fn slow_work_slice_shrinks_the_next_database_batch() {
     let (pool, _temp_dir) = setup_db().await;
     for index in 0..10 {
-        sqlx::query("INSERT INTO audio_transcriptions (transcription) VALUES (?)")
+        sqlx::query("INSERT INTO frames (accessibility_text) VALUES (?)")
             .bind(format!("ordinary transcript {index}"))
             .execute(&pool)
             .await
@@ -765,15 +783,15 @@ async fn slow_work_slice_shrinks_the_next_database_batch() {
         target_batch_duration: Duration::from_millis(5),
         idle_between_batches: Duration::from_millis(1),
         poll_interval: Duration::from_millis(20),
-        tables: vec![TargetTable::AudioTranscription],
+        tables: vec![TargetTable::Accessibility],
         ..test_worker_config()
     };
     let worker = Worker::new(pool.clone(), redactor.clone(), cfg);
     let handle = worker.spawn();
 
-    wait_until("adaptive audio batches", || async {
+    wait_until("adaptive accessibility batches", || async {
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM audio_transcriptions WHERE redacted_at IS NOT NULL",
+            "SELECT COUNT(*) FROM frames WHERE accessibility_redacted_at IS NOT NULL",
         )
         .fetch_one(&pool)
         .await
@@ -796,8 +814,8 @@ async fn slow_work_slice_shrinks_the_next_database_batch() {
 async fn table_work_slices_adapt_independently() {
     let (pool, _temp_dir) = setup_db().await;
     for index in 0..10 {
-        sqlx::query("INSERT INTO audio_transcriptions (transcription) VALUES (?)")
-            .bind(format!("slow audio {index}"))
+        sqlx::query("INSERT INTO frames (accessibility_text) VALUES (?)")
+            .bind(format!("slow accessibility {index}"))
             .execute(&pool)
             .await
             .unwrap();
@@ -811,9 +829,9 @@ async fn table_work_slices_adapt_independently() {
     }
 
     let redactor = Arc::new(TableTimingRedactor {
-        audio_batch_sizes: Mutex::new(Vec::new()),
+        accessibility_batch_sizes: Mutex::new(Vec::new()),
         element_batch_sizes: Mutex::new(Vec::new()),
-        audio_delay: Duration::from_millis(160),
+        accessibility_delay: Duration::from_millis(160),
     });
     let cfg = WorkerConfig {
         batch_size: 8,
@@ -821,15 +839,15 @@ async fn table_work_slices_adapt_independently() {
         target_batch_duration: Duration::from_millis(100),
         idle_between_batches: Duration::from_millis(1),
         poll_interval: Duration::from_millis(20),
-        tables: vec![TargetTable::AudioTranscription, TargetTable::Elements],
+        tables: vec![TargetTable::Accessibility, TargetTable::Elements],
         ..test_worker_config()
     };
     let worker = Worker::new(pool.clone(), redactor.clone(), cfg);
     let handle = worker.spawn();
 
     wait_until("independent table batches", || async {
-        let audio_done = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM audio_transcriptions WHERE redacted_at IS NOT NULL",
+        let accessibility_done = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM frames WHERE accessibility_redacted_at IS NOT NULL",
         )
         .fetch_one(&pool)
         .await
@@ -840,16 +858,16 @@ async fn table_work_slices_adapt_independently() {
         .fetch_one(&pool)
         .await
         .unwrap();
-        audio_done == 10 && elements_done == 20
+        accessibility_done == 10 && elements_done == 20
     })
     .await;
     handle.abort();
 
-    let audio_batches = redactor.audio_batch_sizes.lock().unwrap().clone();
+    let accessibility_batches = redactor.accessibility_batch_sizes.lock().unwrap().clone();
     let element_batches = redactor.element_batch_sizes.lock().unwrap().clone();
-    assert_eq!(audio_batches.first(), Some(&4));
-    assert_eq!(audio_batches.get(1), Some(&2));
-    assert!(audio_batches.iter().skip(2).all(|size| *size == 1));
+    assert_eq!(accessibility_batches.first(), Some(&4));
+    assert_eq!(accessibility_batches.get(1), Some(&2));
+    assert!(accessibility_batches.iter().skip(2).all(|size| *size == 1));
     assert_eq!(&element_batches[..3], &[4, 4, 4]);
     assert_eq!(element_batches.get(3), Some(&8));
 }

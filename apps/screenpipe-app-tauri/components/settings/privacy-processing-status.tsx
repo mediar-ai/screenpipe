@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useGT } from "gt-react";
+import { ChevronDown } from "lucide-react";
 import { localFetch } from "@/lib/api";
 import { PRIVACY_STATUS_POLL_INTERVAL_MS } from "@/lib/privacy-processing";
 
@@ -35,10 +36,17 @@ export function PrivacyStatusView({ status, unavailable }: {
   unavailable: boolean;
 }) {
   const ui = useGT();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const discovering = status?.surfaces.some((s) => s.discovering);
   const pending = status?.surfaces.reduce((sum, s) => sum + s.pending, 0) ?? 0;
-  const textEnabled = status?.surfaces.some((s) => s.kind !== "image");
-  const imageEnabled = status?.surfaces.some((s) => s.kind === "image");
+  const textSurfaces = status?.surfaces.filter((s) => s.kind !== "image") ?? [];
+  const imageSurface = status?.surfaces.find((s) => s.kind === "image");
+  const textEnabled = textSurfaces.length > 0;
+  const imageEnabled = !!imageSurface;
+  const textPending = textSurfaces.reduce((sum, s) => sum + s.pending, 0);
+  const textPendingCapped = textSurfaces.some((s) => s.pending_capped || s.discovering);
+  const imagePending = imageSurface?.pending ?? 0;
+  const imagePendingCapped = !!imageSurface && (imageSurface.pending_capped || imageSurface.discovering);
   const retrying = status?.surfaces.some((s) => s.deferred > 0);
   const title = unavailable ? ui("Processing status unavailable")
     : !status ? ui("Checking privacy processing")
@@ -54,18 +62,29 @@ export function PrivacyStatusView({ status, unavailable }: {
         : status && !status.enabled ? ui("Protection is not active in the recording engine yet. Check your recording settings if this persists.")
         : ui("Recording continues. New data becomes available after its privacy checks finish.")}
     </p>
-    {status?.enabled && !unavailable && <details className="mt-2 text-muted-foreground">
-      <summary className="cursor-pointer w-fit">{ui("Processing details")}</summary>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 max-w-sm">
+    {status?.enabled && !unavailable && <div className="mt-3 border-t border-border pt-2">
+      <dl className="grid max-w-sm grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         <dt>{ui("Text records waiting")}</dt>
-        <dd>{!textEnabled ? ui("Not enabled") : <>{status.surfaces.filter((s) => s.kind !== "image").reduce((sum, s) => sum + s.pending, 0).toLocaleString()}{status.surfaces.some((s) => s.kind !== "image" && (s.pending_capped || s.discovering)) ? "+" : ""}</>}</dd>
+        <dd className="text-right font-medium tabular-nums text-foreground">{!textEnabled ? ui("Not enabled") : <>{textPending.toLocaleString()}{textPendingCapped ? "+" : ""}</>}</dd>
         <dt>{ui("Screenshots waiting")}</dt>
-        <dd>{!imageEnabled ? ui("Not enabled") : <>{status.surfaces.find((s) => s.kind === "image")?.pending.toLocaleString() ?? "0"}{status.surfaces.some((s) => s.kind === "image" && (s.pending_capped || s.discovering)) ? "+" : ""}</>}</dd>
+        <dd className="text-right font-medium tabular-nums text-foreground">{!imageEnabled ? ui("Not enabled") : <>{imagePending.toLocaleString()}{imagePendingCapped ? "+" : ""}</>}</dd>
       </dl>
-      {discovering && <p className="mt-2">{ui("Counts may increase while existing history is checked.")}</p>}
-      <p className="mt-2">{ui("Text and screenshots finish separately. This status covers privacy processing, not upload completion.")}</p>
-      <p className="mt-1">{ui("Some live and derived-data features are unavailable with protection enabled.")}</p>
-    </details>}
+      {discovering && <p className="mt-1.5 text-xs text-muted-foreground">{ui("Scanning existing history. Counts can increase while discovery continues.")}</p>}
+      <button
+        type="button"
+        aria-expanded={detailsOpen}
+        aria-controls="privacy-processing-details"
+        onClick={() => setDetailsOpen((open) => !open)}
+        className="mt-2 flex items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+      >
+        <span className="font-medium">{ui("About these counts")}</span>
+        <ChevronDown aria-hidden="true" size={14} className={`shrink-0 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+      </button>
+      {detailsOpen && <div id="privacy-processing-details" className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+        <p>{ui("Text and screenshots finish separately. This status covers privacy processing, not upload completion.")}</p>
+        <p>{ui("Some live and derived-data features are unavailable with protection enabled.")}</p>
+      </div>}
+    </div>}
   </div>;
 }
 

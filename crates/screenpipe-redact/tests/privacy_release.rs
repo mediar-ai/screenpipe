@@ -26,6 +26,59 @@ async fn database() -> (tempfile::TempDir, Arc<DatabaseManager>) {
 }
 
 #[tokio::test]
+async fn history_discovery_does_not_jump_ahead_of_new_captures() {
+    let root = tempfile::tempdir().unwrap();
+    let db = DatabaseManager::new(
+        root.path().join("db.sqlite").to_str().unwrap(),
+        Default::default(),
+    )
+    .await
+    .unwrap();
+    // History predates the policy, so discovery enrolls it after live capture.
+    db.execute_raw_sql_write("WITH RECURSIVE history(id) AS (SELECT 1 UNION ALL SELECT id+1 FROM history WHERE id<512) INSERT INTO frames(id,timestamp,full_text) SELECT id,'2020-01-01','historical text' FROM history")
+        .await.unwrap();
+    db.configure_release(&ReleasePolicy {
+        identity: "history-priority-v1".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    for id in [1000, 1001] {
+        db.execute_raw_sql_write(&format!(
+            "INSERT INTO frames(id,timestamp,full_text) VALUES({id},'2026-10-23','new capture')"
+        ))
+        .await
+        .unwrap();
+        let recent = db
+            .release_pending_ordered("frames", 1, 0, false)
+            .await
+            .unwrap()
+            .remove(0);
+        assert_eq!(
+            recent.id,
+            id.to_string(),
+            "discovering old history must not outrank a new capture"
+        );
+        assert!(db.publish_release(&recent, &recent.values).await.unwrap());
+        let historical = db
+            .release_pending_ordered("frames", 1, 0, true)
+            .await
+            .unwrap()
+            .remove(0);
+        assert!(
+            historical.id.parse::<i64>().unwrap() < 1000,
+            "history must also retain its processing turn"
+        );
+        assert!(db
+            .publish_release(&historical, &historical.values)
+            .await
+            .unwrap());
+    }
+    db.close().await;
+}
+
+#[tokio::test]
 async fn pending_capture_is_durable_but_not_released_and_late_completion_is_not_lost() {
     let (_root, db) = database().await;
     db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET_OLDER'),(2,'2026-10-14T10:01:00Z','SYNTHETIC_SECRET_NEWER')").await.unwrap();
@@ -414,6 +467,122 @@ impl screenpipe_redact::Redactor for CountingDetector {
             })
             .collect())
     }
+}
+
+#[tokio::test]
+async fn audio_and_live_segments_bypass_ai_and_are_readable_before_bookkeeping() {
+    check_audio_exemption(false).await;
+}
+
+#[tokio::test]
+async fn hybrid_audio_and_live_segments_bypass_ai_and_are_readable_before_bookkeeping() {
+    check_audio_exemption(true).await;
+}
+
+async fn check_audio_exemption(hybrid: bool) {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    let root = tempfile::tempdir().unwrap();
+    let db = Arc::new(if hybrid {
+        DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap()
+    } else {
+        DatabaseManager::new(
+            root.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap()
+    });
+    db.configure_release(&ReleasePolicy {
+        identity: "audio-exempt-v1".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    db.execute_raw_sql_write("INSERT INTO audio_chunks(id,file_path) VALUES(1,'test.wav'); INSERT INTO audio_transcriptions(id,audio_chunk_id,offset_index,timestamp,transcription,device) VALUES(1,1,0,'2026-10-14T10:00:00Z','Alice at alice@example.com','microphone'); INSERT INTO meetings(id,meeting_start,meeting_app) VALUES(1,'2026-10-14T10:00:00Z',''); INSERT INTO meeting_transcript_segments(id,meeting_id,provider,item_id,transcript,captured_at) VALUES(1,1,'test','one','Call Alice at alice@example.com','2026-10-14T10:00:00Z')").await.unwrap();
+    let reader = db.protected_reads().await.unwrap();
+    let audio: String =
+        sqlx::query_scalar("SELECT transcription FROM audio_transcriptions WHERE id=1")
+            .fetch_one(&reader.pool)
+            .await
+            .unwrap();
+    let segment: String =
+        sqlx::query_scalar("SELECT transcript FROM meeting_transcript_segments WHERE id=1")
+            .fetch_one(&reader.pool)
+            .await
+            .unwrap();
+    assert_eq!(audio, "Alice at alice@example.com");
+    assert_eq!(segment, "Call Alice at alice@example.com");
+    assert!(reader
+        .activity_sources_ready(
+            chrono::DateTime::parse_from_rfc3339("2026-10-14T09:00:00Z")
+                .unwrap()
+                .into(),
+            chrono::DateTime::parse_from_rfc3339("2026-10-14T11:00:00Z")
+                .unwrap()
+                .into()
+        )
+        .await
+        .unwrap());
+    assert!(db
+        .release_queue_status()
+        .await
+        .unwrap()
+        .surfaces
+        .iter()
+        .all(|s| !screenpipe_db::privacy_release::is_audio_surface(&s.kind)));
+    let old_job = db.release_pending("audio", 1).await.unwrap().remove(0);
+    db.defer_release(&old_job).await.unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let worker = screenpipe_redact::worker::Worker::new_with_writer(
+        db.pool.clone(),
+        db.coordinated_writer(),
+        Arc::new(CountingDetector {
+            calls: calls.clone(),
+            fail: Arc::new(AtomicBool::new(true)),
+            delay: std::time::Duration::ZERO,
+        }),
+        screenpipe_redact::worker::WorkerConfig {
+            resource_governor: None,
+            ..Default::default()
+        },
+    )
+    .with_frame_storage(db.clone());
+    for _ in 0..4 {
+        worker.process_release_batch(128).await.unwrap();
+    }
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "audio must never reach either AI backend"
+    );
+    assert!(db.release_ready("audio", "1").await.unwrap());
+    assert!(db.release_ready("segments", "1").await.unwrap());
+    let page = reader
+        .release_export_page("audio", 0, "2020-01-01", 10)
+        .await
+        .unwrap();
+    assert_eq!(page.rows[0]["transcription"], audio);
+    db.execute_raw_sql_write("UPDATE audio_transcriptions SET transcription='Bob' WHERE id=1")
+        .await
+        .unwrap();
+    assert!(
+        !db.release_ready("audio", "1").await.unwrap(),
+        "sync revisions must still revoke on edits"
+    );
+    let edited: String =
+        sqlx::query_scalar("SELECT transcription FROM audio_transcriptions WHERE id=1")
+            .fetch_one(&reader.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        edited, "Bob",
+        "local reads must not wait for sync bookkeeping"
+    );
+    reader.close().await;
+    db.close().await;
 }
 
 #[tokio::test]

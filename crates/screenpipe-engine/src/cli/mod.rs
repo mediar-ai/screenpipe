@@ -534,7 +534,7 @@ pub struct RecordArgs {
 
     /// Enable the async PII reconciliation worker. Runs a background
     /// task after capture that OVERWRITES PII in the source columns
-    /// of ocr_text, audio_transcriptions, frames.accessibility_text,
+    /// of ocr_text, frames.accessibility_text,
     /// ui_events.text_content, and elements.text. Raw secrets are
     /// gone after the worker processes the row. Off by default —
     /// capture path is unaffected either way.
@@ -582,7 +582,7 @@ pub struct RecordArgs {
     /// WHICH columns the redaction worker scrubs (comma-separated stable
     /// keys; orthogonal to --pii-redaction-labels which picks categories).
     /// Keys: accessibility_text, accessibility_tree, window_name,
-    /// browser_url, audio_transcription, ui_text_content, ui_element_value,
+    /// browser_url, ui_text_content, ui_element_value,
     /// ui_window_title, ui_element_name, ui_element_description,
     /// ui_element_ancestors, element_text, element_properties,
     /// a11y_url_field. The list is exact (key present → on, absent → off);
@@ -596,7 +596,7 @@ pub struct RecordArgs {
     #[arg(
         long,
         value_delimiter = ',',
-        default_value = "accessibility_text,accessibility_tree,window_name,audio_transcription,ui_text_content,ui_element_value,ui_window_title,ui_element_ancestors,element_text,element_properties"
+        default_value = "accessibility_text,accessibility_tree,window_name,ui_text_content,ui_element_value,ui_window_title,ui_element_ancestors,element_text,element_properties"
     )]
     pub pii_redaction_columns: Vec<String>,
 
