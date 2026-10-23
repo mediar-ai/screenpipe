@@ -475,6 +475,7 @@ async fn do_local_cleanup(
 
     while batch_start < cutoff {
         if screenpipe_core::background_work::is_suspended() {
+            info!(%batch_start, %cutoff, "retention: cleanup suspended; remaining range stays pending");
             break;
         }
         let hour_end = (batch_start + batch_size).min(cutoff);
@@ -539,7 +540,7 @@ async fn do_local_cleanup(
                     }
                     Err(e) => {
                         warn!(
-                            "retention: batch delete failed for range {} to {}: {}",
+                            "retention: batch delete failed for range {} to {}: {}; range remains pending",
                             batch_start, batch_end, e
                         );
                         batch_failed = true;
@@ -700,7 +701,103 @@ async fn do_local_cleanup(
 mod tests {
     use super::*;
 
+    // Share search_only's fixture lock when observing process-wide suspension.
     #[tokio::test]
+    #[serial_test::serial(background_work)]
+    async fn all_retention_resumes_pending_range_after_suspension() {
+        struct Restore(bool);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                screenpipe_core::background_work::set_suspended(self.0);
+            }
+        }
+        let _restore = Restore(screenpipe_core::background_work::is_suspended());
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("db.sqlite");
+        let config = screenpipe_config::DbConfig {
+            write_pool_max: 1,
+            ..Default::default()
+        };
+        let db = Arc::new(
+            DatabaseManager::new(path.to_str().unwrap(), config.clone())
+                .await
+                .unwrap(),
+        );
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp) VALUES(1,'2026-10-12T20:00:01+00:00'),(2,'2026-10-12T20:00:02+00:00')").await.unwrap();
+        // Suspend after the first slice has entered SQLite, before another
+        // slice can be admitted. The pending cursor must survive that stop.
+        {
+            let writer = db.coordinated_writer().lock().await.unwrap();
+            let mut conn = writer.pool().acquire().await.unwrap();
+            let mut handle = conn.lock_handle().await.unwrap();
+            let mut paused = false;
+            handle.set_progress_handler(1, move || {
+                if !paused {
+                    screenpipe_core::background_work::set_suspended(true);
+                    paused = true;
+                }
+                true
+            });
+        }
+        let start = "2026-10-12T20:00:00Z".parse().unwrap();
+        let cutoff = "2026-10-12T21:00:00Z".parse().unwrap();
+        let (deleted, pending) = do_local_cleanup(&db, start, cutoff, RetentionMode::All)
+            .await
+            .unwrap();
+        assert_eq!(deleted, 1);
+        assert_eq!(
+            pending,
+            "2026-10-12T20:00:01Z".parse::<DateTime<Utc>>().unwrap()
+        );
+        assert!(screenpipe_core::background_work::is_suspended());
+        {
+            let writer = db.coordinated_writer().lock().await.unwrap();
+            let mut conn = writer.pool().acquire().await.unwrap();
+            conn.lock_handle().await.unwrap().remove_progress_handler();
+        }
+        let (deleted, still_pending) = do_local_cleanup(&db, pending, cutoff, RetentionMode::All)
+            .await
+            .unwrap();
+        assert_eq!((deleted, still_pending), (0, pending));
+        // An already-admitted capture can still persist while optional cleanup
+        // is suspended, including before the later resume/restart.
+        db.insert_snapshot_frame(
+            "live-test",
+            Utc::now(),
+            "",
+            None,
+            None,
+            None,
+            true,
+            None,
+            Some("capture while cleanup paused"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        screenpipe_core::background_work::set_suspended(false);
+        let (deleted, completed) = do_local_cleanup(&db, pending, cutoff, RetentionMode::All)
+            .await
+            .unwrap();
+        assert_eq!((deleted, completed), (1, cutoff));
+        db.close().await;
+        let db = DatabaseManager::new(path.to_str().unwrap(), config)
+            .await
+            .unwrap();
+        let captures: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM frames WHERE device_name='live-test'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(captures, 1);
+        db.close().await;
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(background_work)]
     async fn all_retention_yields_archived_history_to_durable_capture() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("db.sqlite");
@@ -818,6 +915,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial(background_work)]
     async fn all_retention_failure_is_reported_and_retried_after_reopening() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("db.sqlite");
@@ -882,6 +980,102 @@ mod tests {
         db.close().await;
     }
 
+    #[tokio::test]
+    #[serial_test::serial(background_work)]
+    async fn all_retention_bulk_failure_rolls_back_reports_and_recovers_after_restart() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("db.sqlite");
+        let db = Arc::new(
+            DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+                .await
+                .unwrap(),
+        );
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-12T20:01:00+00:00','retained old capture'); INSERT INTO elements(id,frame_id,source,role,text) VALUES(1,1,'accessibility','AXText','retentionoriginal'); CREATE TRIGGER retention_fixture_failure BEFORE UPDATE OF version ON _bulk_element_state BEGIN SELECT RAISE(ABORT,'retention fixture interrupted after index mutation'); END;").await.unwrap();
+        let report = root.path().join("screenpipe.2026-10-23.log");
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .without_time()
+            .with_target(false)
+            .with_writer(std::sync::Mutex::new(
+                std::fs::File::create(&report).unwrap(),
+            ))
+            .finish();
+        let dispatch = tracing::Dispatch::new(subscriber);
+        let guard = tracing::dispatcher::set_default(&dispatch);
+        let start = "2026-10-12T20:00:00Z".parse().unwrap();
+        let cutoff = "2026-10-12T21:00:00Z".parse().unwrap();
+        let (deleted, pending) = do_local_cleanup(&db, start, cutoff, RetentionMode::All)
+            .await
+            .unwrap();
+        assert_eq!(deleted, 0);
+        assert_eq!(pending, start);
+        drop(guard);
+        let diagnostic = std::fs::read_to_string(&report).unwrap();
+        assert!(diagnostic.contains("retention: batch delete failed for range"));
+        assert!(diagnostic.contains("range remains pending"));
+        assert!(diagnostic.contains("retention fixture interrupted after index mutation"));
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/retention-bulk-failure-diagnostic.txt");
+
+        // The real writer must remain usable after the failed cleanup, before
+        // restart or removal of the failing fixture trigger.
+        db.insert_snapshot_frame(
+            "live-test",
+            Utc::now(),
+            "",
+            None,
+            None,
+            None,
+            true,
+            None,
+            Some("new durable capture"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        db.close().await;
+        let db = Arc::new(
+            DatabaseManager::new(path.to_str().unwrap(), Default::default())
+                .await
+                .unwrap(),
+        );
+        let restored: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM elements_fts WHERE elements_fts MATCH 'retentionoriginal'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            restored, 1,
+            "failed bulk deletion must restore search postings"
+        );
+        db.verify_storage().await.unwrap();
+        db.execute_raw_sql_write("DROP TRIGGER retention_fixture_failure")
+            .await
+            .unwrap();
+        let guard = tracing::dispatcher::set_default(&dispatch);
+        let (deleted, completed) = do_local_cleanup(&db, pending, cutoff, RetentionMode::All)
+            .await
+            .unwrap();
+        assert_eq!(deleted, 1);
+        assert_eq!(completed, cutoff);
+        drop(guard);
+        let diagnostic = std::fs::read_to_string(&report).unwrap();
+        assert!(diagnostic.contains("retention: batch deleted frames=1"));
+        std::fs::write(fixture,format!("// screenpipe — AI that knows everything you've seen, said, or heard\n// https://screenpipe.com\n\n{diagnostic}")).unwrap();
+        let captures: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM frames WHERE device_name='live-test'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(captures, 1);
+        db.verify_storage().await.unwrap();
+        db.close().await;
+    }
+
     #[test]
     fn enabled_policy_change_restarts_cleanup_before_new_settings_apply() {
         let current = RetentionConfig {
@@ -933,6 +1127,7 @@ mod tests {
     /// sleep. Resuming from the watermark `do_local_cleanup` now returns
     /// turns a steady-state cycle into a no-op instead of a full re-scan.
     #[tokio::test]
+    #[serial_test::serial(background_work)]
     async fn do_local_cleanup_resume_from_watermark_skips_reprocessed_range() {
         let db = Arc::new(
             DatabaseManager::new("sqlite::memory:", Default::default())
@@ -995,6 +1190,7 @@ mod tests {
     /// implementation, so the timing gap below is the fix's real, measured
     /// effect, not a reimplementation standing in for it.
     #[tokio::test]
+    #[serial_test::serial(background_work)]
     async fn simulated_retention_cycles_old_vs_new_calling_convention() {
         let db_old = Arc::new(
             DatabaseManager::new("sqlite::memory:", Default::default())
@@ -1071,6 +1267,7 @@ mod tests {
     /// return the watermark from *before* it, not the batch it failed to
     /// process.
     #[tokio::test]
+    #[serial_test::serial(background_work)]
     async fn do_local_cleanup_failed_batch_does_not_advance_watermark_past_it() {
         let db = Arc::new(
             DatabaseManager::new("sqlite::memory:", Default::default())

@@ -974,6 +974,7 @@ impl DatabaseManager {
 
         let start_str = start.to_rfc3339();
         let end_str = end.to_rfc3339();
+        let bulk = self.storage.as_ref().is_some_and(|s| s.has_bulk());
 
         // Collect snapshot files
         let snapshot_files: Vec<String> = sqlx::query_scalar(
@@ -1057,11 +1058,20 @@ impl DatabaseManager {
             .flatten();
 
             if let Some(new_id) = new_anchor_id {
-                sqlx::query("UPDATE elements SET frame_id = ?1 WHERE frame_id = ?2")
-                    .bind(new_id)
-                    .bind(anchor_id)
-                    .execute(&mut **tx.conn())
+                if bulk {
+                    crate::storage::bulk::mutate_retention_elements(
+                        tx.conn(),
+                        &[*anchor_id],
+                        Some(new_id),
+                    )
                     .await?;
+                } else {
+                    sqlx::query("UPDATE elements SET frame_id = ?1 WHERE frame_id = ?2")
+                        .bind(new_id)
+                        .bind(anchor_id)
+                        .execute(&mut **tx.conn())
+                        .await?;
+                }
                 sqlx::query(
                     "UPDATE frames SET elements_ref_frame_id = ?1 WHERE elements_ref_frame_id = ?2",
                 )
@@ -1076,14 +1086,25 @@ impl DatabaseManager {
             }
         }
 
-        // Delete elements
-        sqlx::query(
+        // Delete elements. A timestamp group can itself contain a large tree;
+        // avoid one nested virtual-table write/savepoint per archived element.
+        if bulk {
+            let ids: Vec<i64> =
+                sqlx::query_scalar("SELECT id FROM frames WHERE timestamp BETWEEN ?1 AND ?2")
+                    .bind(&start_str)
+                    .bind(&end_str)
+                    .fetch_all(&mut **tx.conn())
+                    .await?;
+            crate::storage::bulk::mutate_retention_elements(tx.conn(), &ids, None).await?;
+        } else {
+            sqlx::query(
             "DELETE FROM elements WHERE frame_id IN (SELECT id FROM frames WHERE timestamp BETWEEN ?1 AND ?2)",
         )
         .bind(&start_str)
         .bind(&end_str)
         .execute(&mut **tx.conn())
-        .await?;
+            .await?;
+        }
 
         // Delete frames
         let frames_result = sqlx::query("DELETE FROM frames WHERE timestamp BETWEEN ?1 AND ?2")
@@ -1764,6 +1785,207 @@ mod wal_maintenance_tests {
     use sqlx::Row;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+
+    // Keep the two large latency fixtures from competing with each other;
+    // each still queues a real capture concurrently with its cleanup.
+    static LARGE_RETENTION_FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[tokio::test]
+    async fn retention_oversized_archived_group_keeps_capture_durable() {
+        check_retention_large_tree(false).await;
+    }
+
+    #[tokio::test]
+    async fn retention_oversized_anchor_keeps_identity_and_capture_durable() {
+        check_retention_large_tree(true).await;
+    }
+
+    async fn check_retention_large_tree(retained_reference: bool) {
+        let _fixture = LARGE_RETENTION_FIXTURE.lock().await;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("db.sqlite");
+        let config = DbConfig {
+            write_pool_max: 1,
+            ..Default::default()
+        };
+        let db = DatabaseManager::new(path.to_str().unwrap(), config.clone())
+            .await
+            .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-12T20:00:00+00:00','old capture'); WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<100000) INSERT INTO elements(id,frame_id,source,role,text,sort_order,parent_id) SELECT i,1,'accessibility','AXText','old element '||i,i,CASE WHEN i>1 THEN i/2 END FROM n;").await.unwrap();
+        if retained_reference {
+            db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,elements_ref_frame_id) VALUES(2,'2026-10-23T00:00:00+00:00',1)").await.unwrap();
+        }
+        db.close().await;
+        crate::storage::migrate(root.path(), config.clone(), Default::default())
+            .await
+            .unwrap();
+        let db = Arc::new(
+            DatabaseManager::new(path.to_str().unwrap(), config.clone())
+                .await
+                .unwrap(),
+        );
+        // Mix a staged edit with archived records; its original identity and
+        // newer generation must win over the immutable archive.
+        db.execute_raw_sql_write(
+            "UPDATE elements SET text='edited retained token' WHERE id=100000",
+        )
+        .await
+        .unwrap();
+        let export = db.storage_export_token().await.unwrap();
+        let entered = Arc::new(tokio::sync::Notify::new());
+        {
+            let writer = db.coordinated_writer().lock().await.unwrap();
+            let mut conn = writer.pool().acquire().await.unwrap();
+            let mut handle = conn.lock_handle().await.unwrap();
+            let entered = entered.clone();
+            handle.set_progress_handler(1000, move || {
+                entered.notify_one();
+                true
+            });
+        }
+        let retention_db = db.clone();
+        let cleanup = tokio::spawn(async move {
+            retention_db
+                .delete_retention_time_slice(
+                    "2026-10-12T20:00:00Z".parse().unwrap(),
+                    "2026-10-12T20:00:00Z".parse().unwrap(),
+                    "2026-10-12T21:00:00Z".parse().unwrap(),
+                )
+                .await
+        });
+        entered.notified().await;
+        let started = std::time::Instant::now();
+        // The Windows event-driven capture caller has a 15-second operation
+        // deadline. Prove that persistence fits that existing tighter budget.
+        let capture = tokio::time::timeout(
+            Duration::from_secs(15),
+            db.insert_snapshot_frame(
+                "live-test",
+                chrono::Utc::now(),
+                "",
+                None,
+                None,
+                None,
+                true,
+                None,
+                Some("durable capture during retention"),
+                None,
+                None,
+                None,
+                None,
+            ),
+        )
+        .await;
+        println!(
+            "capture result={capture:?}, elapsed={:?}",
+            started.elapsed()
+        );
+        let deleted = cleanup.await.unwrap().unwrap();
+        assert_eq!(deleted.frames_deleted, 1);
+        assert!(crate::storage::is_revision_change(
+            &export.admit(&db.pool).await.unwrap_err()
+        ));
+        drop(export);
+        capture
+            .expect("single archived frame blocked live capture past its deadline")
+            .unwrap();
+        {
+            let writer = db.coordinated_writer().lock().await.unwrap();
+            let mut conn = writer.pool().acquire().await.unwrap();
+            conn.lock_handle().await.unwrap().remove_progress_handler();
+        }
+        db.close().await;
+        let db = DatabaseManager::new(path.to_str().unwrap(), config)
+            .await
+            .unwrap();
+        let captures: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM frames WHERE device_name='live-test'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(captures, 1);
+        let elements: i64 = sqlx::query_scalar("SELECT count(*) FROM elements")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(elements, if retained_reference { 100000 } else { 0 });
+        let search: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM elements_fts WHERE elements_fts MATCH 'edited'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(search, i64::from(retained_reference));
+        if retained_reference {
+            let moved: (i64, i64, i64) = sqlx::query_as(
+                "SELECT frame_id,parent_id,_archive_generation FROM elements WHERE id=100000",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+            assert_eq!(moved, (2, 50000, 3));
+            let search_owner: i64 = sqlx::query_scalar(
+                "SELECT frame_id FROM elements_fts WHERE elements_fts MATCH 'edited'",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+            assert_eq!(search_owner, 2);
+            let anchors: i64 =
+                sqlx::query_scalar("SELECT count(*) FROM frames WHERE elements_ref_frame_id=1")
+                    .fetch_one(&db.pool)
+                    .await
+                    .unwrap();
+            assert_eq!(anchors, 0);
+        }
+        db.verify_storage().await.unwrap();
+        db.close().await;
+    }
+
+    #[tokio::test]
+    async fn retention_preserves_external_parent_references_on_failure() {
+        let root = tempfile::tempdir().unwrap();
+        let db = DatabaseManager::new_hybrid(root.path(), Default::default(), Default::default())
+            .await
+            .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp) VALUES(1,'2026-10-12T20:00:00+00:00'),(2,'2026-10-23T00:00:00+00:00'); INSERT INTO elements(id,frame_id,source,role,text,parent_id) VALUES(1,1,'accessibility','AXText','oldparent',NULL),(2,2,'accessibility','AXText','retainedchild',1);").await.unwrap();
+        let start = "2026-10-12T20:00:00Z".parse().unwrap();
+        let end = "2026-10-12T21:00:00Z".parse().unwrap();
+        let error = db
+            .delete_retention_time_slice(start, start, end)
+            .await
+            .err()
+            .expect("retention must preserve the retained child's parent");
+        assert!(error
+            .to_string()
+            .contains("element parent is absent; retention tree remains pending"));
+        assert!(error
+            .to_string()
+            .contains("parent_id=1, retained_references=1"));
+        // Drain the normal transaction rollback before validating its indexes.
+        db.execute_raw_sql_write("SELECT 1").await.unwrap();
+        let elements: i64 = sqlx::query_scalar("SELECT count(*) FROM elements")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(elements, 2);
+        db.verify_storage().await.unwrap();
+        db.execute_raw_sql_write("UPDATE elements SET parent_id=NULL WHERE id=2")
+            .await
+            .unwrap();
+        let deleted = db
+            .delete_retention_time_slice(start, start, end)
+            .await
+            .unwrap();
+        assert_eq!(deleted.frames_deleted, 1);
+        let remaining: (i64, String) = sqlx::query_as("SELECT id,text FROM elements")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining, (2, "retainedchild".into()));
+        db.verify_storage().await.unwrap();
+        db.close().await;
+    }
 
     #[tokio::test]
     async fn retention_cursor_uses_all_streams_and_preserves_time_spelling() {
