@@ -166,6 +166,106 @@ pub struct ExportRows<'a> {
 }
 
 impl ExportRows<'_> {
+    pub fn record_count(&self) -> usize {
+        self.frames.len()
+            + self.audio.len()
+            + self.ui.len()
+            + self.snapshots.len()
+            + self.memories.len()
+            + self.parsed.len()
+            + self.activities.len()
+            + self.starred.len()
+            + self.feedback.len()
+    }
+
+    /// Read current certified copies by selected ID. Revoked rows stay in the
+    /// processing queue; a later completion has its own delivery sequence.
+    pub async fn refresh_protected(
+        &mut self,
+        db: &std::sync::Arc<screenpipe_db::DatabaseManager>,
+        local: &dyn LocalApiClient,
+    ) -> Result<(), EnterpriseSyncError> {
+        async fn refresh<T: serde::de::DeserializeOwned + Clone>(
+            rows: &mut Vec<T>,
+            db: &std::sync::Arc<screenpipe_db::DatabaseManager>,
+            kind: &str,
+            key: impl Fn(&T) -> (String, String),
+        ) -> Result<(), EnterpriseSyncError> {
+            if rows.is_empty() {
+                return Ok(());
+            }
+            let ids = rows.iter().map(|row| key(row).0).collect::<Vec<_>>();
+            let current = db
+                .refresh_release_export_selection(kind, &ids)
+                .await
+                .map_err(|e| EnterpriseSyncError::Storage {
+                    operation: "refresh protected export",
+                    cause: e.to_string(),
+                })?;
+            let current: Vec<T> = serde_json::from_value(current).map_err(|e| {
+                EnterpriseSyncError::LocalApi(format!("decode protected export: {e}"))
+            })?;
+            let current = current
+                .into_iter()
+                .map(|row| (key(&row), row))
+                .collect::<std::collections::HashMap<_, _>>();
+            rows.retain_mut(|row| match current.get(&key(row)) {
+                Some(fresh) => {
+                    *row = fresh.clone();
+                    true
+                }
+                None => false,
+            });
+            Ok(())
+        }
+        // A changed time belongs to a later completion/eligible range scan.
+        // Do not move an already selected ID across its enrollment boundary.
+        refresh(self.frames, db, "frames", |r| {
+            (r.frame_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.audio, db, "audio", |r| {
+            (r.transcription_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.ui, db, "input", |r| {
+            (r.event_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.memories, db, "memory", |r| {
+            (r.memory_id.to_string(), r.created_at.clone())
+        })
+        .await?;
+        refresh(self.parsed, db, "parsed", |r| {
+            (r.frame_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.activities, db, "activities", |r| {
+            (r.activity_id.clone(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.feedback, db, "feedback", |r| {
+            (r.feedback_id.clone(), r.updated_at.clone())
+        })
+        .await?;
+        // Image reads already enforce their independent receipt and original
+        // frame identity. Starred intervals carry structural fields only.
+        ExportRows {
+            frames: &mut vec![],
+            audio: &mut vec![],
+            ui: &mut vec![],
+            snapshots: self.snapshots,
+            memories: &mut vec![],
+            parsed: &mut vec![],
+            activities: &mut vec![],
+            starred: self.starred,
+            feedback: &mut vec![],
+        }
+        .refresh(local)
+        .await?;
+        Ok(())
+    }
+
     pub async fn refresh(
         &mut self,
         local: &dyn LocalApiClient,

@@ -211,8 +211,11 @@ mod imp {
 
     struct StorageExport {
         db: Arc<screenpipe_db::DatabaseManager>,
-        token: screenpipe_db::storage::StorageReadToken,
-        activities: Option<(tauri::AppHandle, std::collections::BTreeMap<String, String>)>,
+        token: tokio::sync::Mutex<screenpipe_db::storage::StorageReadToken>,
+        policy_generation: Option<i64>,
+        refresh_cause: std::sync::Mutex<Option<String>>,
+        activities: Option<tauri::AppHandle>,
+        selected_activities: std::sync::Mutex<std::collections::BTreeMap<String, String>>,
     }
 
     impl StorageExport {
@@ -221,21 +224,14 @@ mod imp {
             app: tauri::AppHandle,
         ) -> Result<Self, EnterpriseSyncError> {
             let mut export = Self::begin_storage(db.clone()).await?;
-            let activities = if crate::enterprise_policy::current_sync_streams().activities
+            if crate::enterprise_policy::current_sync_streams().activities
                 && db
                     .release_policy()
                     .await
                     .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
                     .text
             {
-                db.activity_export_versions()
-                    .await
-                    .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?
-            } else {
-                Default::default()
-            };
-            if !activities.is_empty() {
-                export.activities = Some((app, activities));
+                export.activities = Some(app);
             }
             Ok(export)
         }
@@ -250,10 +246,19 @@ mod imp {
                         operation: "prepare export",
                         cause: error.to_string(),
                     })?;
+            let policy_generation = db.release_policy_generation().await.map_err(|error| {
+                EnterpriseSyncError::Storage {
+                    operation: "prepare export policy",
+                    cause: error.to_string(),
+                }
+            })?;
             Ok(Self {
                 db,
-                token,
+                token: tokio::sync::Mutex::new(token),
+                policy_generation,
+                refresh_cause: Default::default(),
                 activities: None,
+                selected_activities: Default::default(),
             })
         }
     }
@@ -261,7 +266,12 @@ mod imp {
     #[async_trait::async_trait]
     impl crate::enterprise::sync::ExportFilter for StorageExport {
         async fn admit(&self) -> Result<Option<Box<dyn Send>>, EnterpriseSyncError> {
-            let history = if let Some((app, activities)) = &self.activities {
+            let selected_activities = self.selected_activities.lock().unwrap().clone();
+            let history = if let Some(app) = self
+                .activities
+                .as_ref()
+                .filter(|_| !selected_activities.is_empty())
+            {
                 let guard = app
                     .state::<crate::activity_history::ActivityHistoryState>()
                     .export_lock
@@ -275,18 +285,25 @@ mod imp {
                     .map(serde_json::to_value)
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
-                screenpipe_db::privacy_exports::validate_activity_exports(activities, &rows)
-                    .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))?;
+                screenpipe_db::privacy_exports::validate_activity_exports(
+                    &selected_activities,
+                    &rows,
+                )
+                .map_err(|e| EnterpriseSyncError::Configuration(e.to_string()))?;
                 Some(guard)
             } else {
                 None
             };
-            let storage = self.token.admit(&self.db.pool).await.map_err(|error| {
-                EnterpriseSyncError::Storage {
+            let storage = self
+                .token
+                .lock()
+                .await
+                .admit(&self.db.pool)
+                .await
+                .map_err(|error| EnterpriseSyncError::Storage {
                     operation: "admit export",
                     cause: error.to_string(),
-                }
-            })?;
+                })?;
             Ok(Some(Box::new((storage, history))))
         }
 
@@ -296,11 +313,117 @@ mod imp {
             local: &dyn LocalApiClient,
         ) -> Result<ee_sync::ExportFilterReport, EnterpriseSyncError> {
             if local.privacy_release_required().await? {
-                drop(self.admit().await?);
+                let generation = self.db.release_policy_generation().await.map_err(|e| {
+                    EnterpriseSyncError::Storage {
+                        operation: "validate export policy",
+                        cause: e.to_string(),
+                    }
+                })?;
+                if generation != self.policy_generation {
+                    return Err(EnterpriseSyncError::Configuration(
+                        "privacy policy changed during export; retry pending".into(),
+                    ));
+                }
+                // Activity sources live outside SQLite. Scope their validation
+                // to this request, retaining only unchanged certified versions.
+                self.selected_activities.lock().unwrap().clear();
+                if let Some(app) = self
+                    .activities
+                    .as_ref()
+                    .filter(|_| !rows.activities.is_empty())
+                {
+                    let history = app.state::<crate::activity_history::ActivityHistoryState>();
+                    let _guard = history.export_lock.lock().await;
+                    let staged = self.db.activity_export_versions().await.map_err(|e| {
+                        EnterpriseSyncError::Storage {
+                            operation: "read certified activity versions",
+                            cause: e.to_string(),
+                        }
+                    })?;
+                    let current = crate::activity_history::export_rows(app)
+                        .map_err(EnterpriseSyncError::LocalApi)?;
+                    let mut versions = std::collections::BTreeMap::new();
+                    for row in current {
+                        let value = serde_json::to_value(row)
+                            .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                        let id = value["activity_id"].as_str().ok_or_else(|| {
+                            EnterpriseSyncError::LocalApi("activity ID missing".into())
+                        })?;
+                        let version = screenpipe_db::privacy_exports::export_version(&value)
+                            .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                        if staged.get(id) == Some(&version) {
+                            versions.insert(id.to_string(), version);
+                        }
+                    }
+                    rows.activities
+                        .retain(|row| versions.contains_key(&row.activity_id));
+                    versions
+                        .retain(|id, _| rows.activities.iter().any(|row| &row.activity_id == id));
+                    *self.selected_activities.lock().unwrap() = versions;
+                }
+                let previous_cause = self.refresh_cause.lock().unwrap().clone();
+                let cause = match previous_cause {
+                    Some(cause) => cause,
+                    None => match self.admit().await {
+                        Ok(guard) => {
+                            drop(guard);
+                            return Ok(Default::default());
+                        }
+                        Err(EnterpriseSyncError::Storage { cause, .. })
+                            if screenpipe_db::storage::is_revision_change_message(&cause)
+                                || cause.contains("privacy revision changed") =>
+                        {
+                            cause
+                        }
+                        Err(error) => return Err(error),
+                    },
+                };
+                // The policy generation remains authoritative. A
+                // record revocation refreshes certified copies only.
+                let fresh = self.db.storage_export_token().await.map_err(|e| {
+                    EnterpriseSyncError::Storage {
+                        operation: "refresh protected admission",
+                        cause: e.to_string(),
+                    }
+                })?;
+                let selected_records = rows.record_count();
+                rows.refresh_protected(&self.db, local).await?;
+                let retained_records = rows.record_count();
+                drop(fresh.admit(&self.db.pool).await.map_err(|e| {
+                    EnterpriseSyncError::Storage {
+                        operation: "validate refreshed protected export",
+                        cause: e.to_string(),
+                    }
+                })?);
+                if self.db.release_policy_generation().await.map_err(|e| {
+                    EnterpriseSyncError::Storage {
+                        operation: "validate refreshed export policy",
+                        cause: e.to_string(),
+                    }
+                })? != self.policy_generation
+                {
+                    return Err(EnterpriseSyncError::Configuration(
+                        "privacy policy changed during export; retry pending".into(),
+                    ));
+                }
+                *self.token.lock().await = fresh;
+                // The serialized remainder still belongs to the old
+                // selection, so renewal must not authorize later chunks
+                // without checking their own certified copies.
+                *self.refresh_cause.lock().unwrap() = Some(cause.clone());
+                tracing::info!(
+                    cause,
+                    selected_records,
+                    retained_records,
+                    outcome = "certified survivors retained; stale selections excluded",
+                    "enterprise export refreshed after record revocation"
+                );
                 return Ok(Default::default());
             }
             // A token also detects enabling privacy after raw selection.
             self.token
+                .lock()
+                .await
                 .validate_privacy(&self.db.pool)
                 .await
                 .map_err(|error| EnterpriseSyncError::Storage {
@@ -312,7 +435,7 @@ mod imp {
             if self.db.storage_mode() == screenpipe_db::storage::StorageMode::Sqlite {
                 return rows.refresh(local).await;
             }
-            match self.token.admit(&self.db.pool).await {
+            match self.token.lock().await.admit(&self.db.pool).await {
                 Ok(guard) => {
                     drop(guard);
                     Ok(Default::default())
@@ -2434,7 +2557,7 @@ mod imp {
     }
 
     #[cfg(test)]
-    mod device_id_tests {
+    pub(crate) mod device_id_tests {
         use super::{
             choose_device_id, classify_failed_enterprise_response, credential_authorizes_policy,
             enterprise_license_hash, exact_frame_url, explicitly_rejects_authorization,
@@ -2758,12 +2881,24 @@ mod imp {
                 .await
                 .unwrap();
                 db.execute_raw_sql_write(
-                    "INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','safe')",
+                    "INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-16','safe'),(2,'2026-10-16','survivor')",
                 )
                 .await
                 .unwrap();
-                let job = db.release_pending("frames", 1).await.unwrap().remove(0);
-                assert!(db.publish_release(&job, &job.values).await.unwrap());
+                for job in db.release_pending("frames", 10).await.unwrap() {
+                    assert!(db.publish_release(&job, &job.values).await.unwrap());
+                }
+                let protected = db.protected_reads().await.unwrap();
+                let reused = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                {
+                    let mut conn = protected.pool.acquire().await.unwrap();
+                    let mut handle = conn.lock_handle().await.unwrap();
+                    let observed = reused.clone();
+                    handle.set_progress_handler(1, move || {
+                        observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        true
+                    });
+                }
                 let export = StorageExport::begin_storage(db.clone()).await.unwrap();
                 let mut frames = vec![FrameRow {
                     frame_id: 1,
@@ -2774,6 +2909,10 @@ mod imp {
                     browser_url: None,
                     accessibility_tree: None,
                 }];
+                let mut survivor = frames[0].clone();
+                survivor.frame_id = 2;
+                survivor.text = Some("survivor".into());
+                frames.push(survivor);
                 let mut rows = ExportRows {
                     frames: &mut frames,
                     audio: &mut vec![],
@@ -2787,16 +2926,631 @@ mod imp {
                 };
                 export.filter(&mut rows, &Protected).await.unwrap();
                 assert_eq!(rows.frames[0].text.as_deref(), Some("safe"));
-                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(2,'2026-10-16','new capture')").await.unwrap();
+                db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2026-10-16','new capture')").await.unwrap();
                 export.filter(&mut rows, &Protected).await.unwrap();
                 db.execute_raw_sql_write("UPDATE frames SET full_text='PRIVATE edit' WHERE id=1")
                     .await
                     .unwrap();
+                // A revoked record waits for a new completion; the certified
+                // survivor continues without reading any raw source API.
+                export.filter(&mut rows, &Protected).await.unwrap();
+                assert!(reused.load(std::sync::atomic::Ordering::SeqCst) > 0,
+                    "refresh must reuse the existing protected reader, not allocate a pool per chunk");
+                assert_eq!(rows.frames.len(), 1);
+                assert_eq!(rows.frames[0].frame_id, 2);
+                assert_eq!(rows.frames[0].text.as_deref(), Some("survivor"));
+                drop(export.admit().await.unwrap());
+                assert!(!db.release_pending("frames", 10).await.unwrap().is_empty());
+                db.execute_raw_sql_write("DELETE FROM frames WHERE id=2")
+                    .await
+                    .unwrap();
+                export.filter(&mut rows, &Protected).await.unwrap();
+                assert!(rows.frames.is_empty());
+                drop(export.admit().await.unwrap());
+                // Policy changes still revoke the entire prepared selection,
+                // even after all selected rows have been removed.
+                db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                    identity: "v2".into(),
+                    text: true,
+                    images: false,
+                })
+                .await
+                .unwrap();
                 assert!(export.filter(&mut rows, &Protected).await.is_err());
+                db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                    identity: "v1".into(),
+                    text: true,
+                    images: false,
+                })
+                .await
+                .unwrap();
+                assert!(
+                    export.filter(&mut rows, &Protected).await.is_err(),
+                    "a policy cycle must not revive an old export"
+                );
                 db.close().await;
             }
         }
 
+        #[tokio::test(flavor = "current_thread")]
+        async fn protected_upload_filters_revoked_rows_and_recovers_after_restart() {
+            let logs = tempfile::tempdir().unwrap();
+            check_protected_upload_revocations(logs.path()).await;
+        }
+
+        pub(crate) async fn check_protected_upload_revocations(logs: &std::path::Path) {
+            use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
+            use crate::enterprise::sync::{self, ExportFilter};
+            use screenpipe_db::privacy_release::{ReleasePage, ReleasePolicy};
+            use std::sync::{
+                atomic::{AtomicU8, Ordering},
+                Arc,
+            };
+            let _streams = crate::enterprise_policy::sync_streams_test_lock();
+            let _restore = sync::tests::RestoreDefaultSyncStreams;
+            crate::enterprise_policy::set_sync_streams(
+                true,
+                false,
+                false,
+                false,
+                false,
+                false,
+                "off".into(),
+                "off".into(),
+            );
+            let file = std::fs::File::create(logs.join("screenpipe-app.2026-10-23.log")).unwrap();
+            let _subscriber = tracing::subscriber::set_default(
+                tracing_subscriber::fmt()
+                    .with_ansi(false)
+                    .with_writer(std::sync::Mutex::new(file))
+                    .finish(),
+            );
+            struct Local {
+                db: Arc<screenpipe_db::DatabaseManager>,
+                protected: Arc<screenpipe_db::DatabaseManager>,
+                mutation: AtomicU8,
+            }
+            #[async_trait::async_trait]
+            impl LocalApiClient for Local {
+                async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                    Ok(true)
+                }
+                async fn begin_export(
+                    &self,
+                ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
+                    Ok(Some(Box::new(
+                        StorageExport::begin_storage(self.db.clone()).await?,
+                    )))
+                }
+                async fn fetch_release_page(
+                    &self,
+                    kind: &str,
+                    after: i64,
+                    cutoff: &str,
+                    end: Option<&str>,
+                    limit: u32,
+                ) -> Result<ReleasePage, EnterpriseSyncError> {
+                    let page = self
+                        .protected
+                        .release_export_range_page(kind, after, cutoff, end, limit)
+                        .await
+                        .unwrap();
+                    if kind == "frames" && !page.rows.as_array().unwrap().is_empty() {
+                        let mutation = self.mutation.swap(0, Ordering::SeqCst);
+                        let sql = match mutation {
+                            1 => Some("DELETE FROM frames WHERE id=1"),
+                            2 | 4 => Some(
+                                "UPDATE frames SET full_text='UNPROCESSED_PRIVATE_EDIT' WHERE id=1",
+                            ),
+                            3 => Some("DELETE FROM frames WHERE id IN (1,2)"),
+                            5 => Some(
+                                "UPDATE frames SET timestamp='2026-10-21T01:00:00Z' WHERE id=1",
+                            ),
+                            _ => None,
+                        };
+                        if let Some(sql) = sql {
+                            self.db.execute_raw_sql_write(sql).await.unwrap();
+                        }
+                        if matches!(mutation, 4 | 5) {
+                            let job = self
+                                .db
+                                .release_pending("frames", 10)
+                                .await
+                                .unwrap()
+                                .into_iter()
+                                .find(|j| j.id == "1")
+                                .unwrap();
+                            let mut safe = job.values.clone();
+                            safe.insert("full_text".into(), Some("new certified edit".into()));
+                            assert!(self.db.publish_release(&job, &safe).await.unwrap());
+                        }
+                        if mutation != 0 {
+                            self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2026-10-23T01:00:00Z','durable new capture')").await.unwrap();
+                        }
+                    }
+                    Ok(page)
+                }
+                async fn fetch_frames_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    panic!("protected upload must not use raw capture APIs")
+                }
+                async fn fetch_audio_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                    Ok(vec![])
+                }
+            }
+            for hybrid in [false, true] {
+                for mutation in 1..=5 {
+                    let dir = tempfile::tempdir().unwrap();
+                    let db = Arc::new(if hybrid {
+                        let mut options = screenpipe_db::storage::MigrationOptions::default();
+                        options.budget.disk_reserve_bytes = 0;
+                        screenpipe_db::DatabaseManager::new_hybrid(
+                            dir.path(),
+                            Default::default(),
+                            options,
+                        )
+                        .await
+                        .unwrap()
+                    } else {
+                        screenpipe_db::DatabaseManager::new(
+                            dir.path().join("db.sqlite").to_str().unwrap(),
+                            Default::default(),
+                        )
+                        .await
+                        .unwrap()
+                    });
+                    db.configure_release(&ReleasePolicy {
+                        identity: "fixture-v1".into(),
+                        text: true,
+                        images: false,
+                    })
+                    .await
+                    .unwrap();
+                    db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-23T01:00:00Z','PRIVATE_ORIGINAL'),(2,'2026-10-23T01:00:00Z','certified survivor')").await.unwrap();
+                    for job in db.release_pending("frames", 10).await.unwrap() {
+                        let mut safe = job.values.clone();
+                        if job.id == "1" {
+                            safe.insert("full_text".into(), Some("certified original".into()));
+                        }
+                        assert!(db.publish_release(&job, &safe).await.unwrap());
+                    }
+                    let server = wiremock::MockServer::start().await;
+                    let fail = Arc::new(std::sync::atomic::AtomicBool::new(mutation == 2));
+                    let response = fail.clone();
+                    wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+                        .respond_with(move |_: &wiremock::Request| {
+                            wiremock::ResponseTemplate::new(if response.load(Ordering::SeqCst) {
+                                503
+                            } else {
+                                200
+                            })
+                        })
+                        .mount(&server)
+                        .await;
+                    let cfg = sync::tests::test_cfg(&dir, format!("{}/ingest", server.uri()));
+                    let mut cursor = sync::Cursor::default();
+                    cursor.privacy.insert(
+                        "frames".into(),
+                        sync::PrivacyCursor {
+                            sequence: 0,
+                            cutoff: "2026-10-22T00:00:00Z".into(),
+                        },
+                    );
+                    let local = Local {
+                        protected: db.protected_reads().await.unwrap(),
+                        db: db.clone(),
+                        mutation: AtomicU8::new(mutation),
+                    };
+                    let http = reqwest::Client::new();
+                    let result = sync::run_one_sync(&cfg, &mut cursor, &local, &http).await;
+                    if mutation == 2 {
+                        assert!(result.is_err(), "real transport failure remains retryable");
+                        assert_eq!(
+                            sync::Cursor::load(&cfg.cursor_path).privacy["frames"].sequence,
+                            0
+                        );
+                        fail.store(false, Ordering::SeqCst);
+                        cursor = sync::Cursor::load(&cfg.cursor_path);
+                        assert_eq!(
+                            sync::run_one_sync(&cfg, &mut cursor, &local, &http)
+                                .await
+                                .unwrap()
+                                .frames,
+                            1
+                        );
+                    } else {
+                        assert_eq!(
+                            result.unwrap().frames,
+                            if mutation == 3 {
+                                0
+                            } else if mutation == 4 {
+                                2
+                            } else {
+                                1
+                            }
+                        );
+                    }
+                    assert!(sync::Cursor::load(&cfg.cursor_path).privacy["frames"].sequence > 0);
+                    let requests = server.received_requests().await.unwrap();
+                    if mutation == 3 {
+                        assert!(requests.is_empty());
+                    }
+                    for request in &requests {
+                        let body = String::from_utf8_lossy(&request.body);
+                        assert!(!body.contains("PRIVATE_ORIGINAL"));
+                        assert!(!body.contains("UNPROCESSED_PRIVATE_EDIT"));
+                        assert!(
+                            !body.contains("durable new capture"),
+                            "new captures stay outside the selected page"
+                        );
+                        assert!(body.contains("certified survivor"));
+                        assert!(!body.contains("2026-10-21"), "a corrected time outside the cutoff is not authorized by the old selection");
+                    }
+                    // Source edits remain pending after the surviving page was
+                    // acknowledged. Close/reopen both the DB and checkpoint,
+                    // then release the pending work and prove later delivery.
+                    drop(local);
+                    db.close().await;
+                    drop(db);
+                    // Reopen an existing logical root through the normal
+                    // startup path; new_hybrid initializes an empty root.
+                    let db = Arc::new(
+                        screenpipe_db::DatabaseManager::new(
+                            dir.path().join("db.sqlite").to_str().unwrap(),
+                            Default::default(),
+                        )
+                        .await
+                        .unwrap(),
+                    );
+                    let capture = db
+                        .frame_payloads(&[3], screenpipe_db::storage::Projection::All)
+                        .await
+                        .unwrap();
+                    assert_eq!(
+                        capture[&3].full_text.as_deref(),
+                        Some("durable new capture")
+                    );
+                    for job in db.release_pending("frames", 10).await.unwrap() {
+                        let mut safe = job.values.clone();
+                        if job.id == "1" {
+                            safe.insert("full_text".into(), Some("new certified edit".into()));
+                        }
+                        assert!(db.publish_release(&job, &safe).await.unwrap());
+                    }
+                    let local = Local {
+                        protected: db.protected_reads().await.unwrap(),
+                        db: db.clone(),
+                        mutation: AtomicU8::new(0),
+                    };
+                    let mut cursor = sync::Cursor::load(&cfg.cursor_path);
+                    let report = sync::run_one_sync(&cfg, &mut cursor, &local, &http)
+                        .await
+                        .unwrap();
+                    assert_eq!(report.frames, if matches!(mutation, 2 | 4) { 2 } else { 1 });
+                    let requests = server.received_requests().await.unwrap();
+                    let body = String::from_utf8_lossy(&requests.last().unwrap().body);
+                    assert!(body.contains("durable new capture"));
+                    if matches!(mutation, 2 | 4) {
+                        assert!(body.contains("new certified edit"));
+                    }
+                    db.close().await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn protected_upload_refreshes_every_remaining_http_chunk_after_revocation() {
+            use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
+            use crate::enterprise::sync::{self, ExportFilter, ExportFilterReport, ExportRows};
+            use std::sync::{
+                atomic::{AtomicBool, AtomicUsize, Ordering},
+                Arc,
+            };
+            let _streams = crate::enterprise_policy::sync_streams_test_lock();
+            let _restore = sync::tests::RestoreDefaultSyncStreams;
+            crate::enterprise_policy::set_sync_streams(
+                true,
+                false,
+                false,
+                false,
+                false,
+                false,
+                "off".into(),
+                "off".into(),
+            );
+            struct ChangingExport {
+                inner: StorageExport,
+                db: Arc<screenpipe_db::DatabaseManager>,
+                calls: AtomicUsize,
+                mutate: Arc<AtomicBool>,
+            }
+            #[async_trait::async_trait]
+            impl ExportFilter for ChangingExport {
+                async fn admit(&self) -> Result<Option<Box<dyn Send>>, EnterpriseSyncError> {
+                    self.inner.admit().await
+                }
+                async fn filter(
+                    &self,
+                    rows: &mut ExportRows<'_>,
+                    local: &dyn LocalApiClient,
+                ) -> Result<ExportFilterReport, EnterpriseSyncError> {
+                    if self.calls.fetch_add(1, Ordering::SeqCst) == 1
+                        && self.mutate.swap(false, Ordering::SeqCst)
+                    {
+                        // The preceding HTTP request has completed. Change two
+                        // later chunks before either reaches the real filter.
+                        self.db
+                            .execute_raw_sql_write("DELETE FROM frames WHERE id=2")
+                            .await
+                            .unwrap();
+                        self.db
+                            .execute_raw_sql_write(
+                                "UPDATE frames SET full_text='PRIVATE_CHANGED' WHERE id=3",
+                            )
+                            .await
+                            .unwrap();
+                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(4,'2026-10-23T03:00:00Z','new durable capture')").await.unwrap();
+                    }
+                    self.inner.filter(rows, local).await
+                }
+            }
+            struct Local {
+                db: Arc<screenpipe_db::DatabaseManager>,
+                protected: Arc<screenpipe_db::DatabaseManager>,
+                mutate: Arc<AtomicBool>,
+                finished: Arc<AtomicBool>,
+            }
+            #[async_trait::async_trait]
+            impl LocalApiClient for Local {
+                async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                    Ok(true)
+                }
+                async fn prepare_release_replay(
+                    &self,
+                    id: &str,
+                    streams: &[String],
+                    start: &str,
+                    end: &str,
+                    limit: u32,
+                ) -> Result<bool, EnterpriseSyncError> {
+                    self.db
+                        .prepare_release_replay(id, streams, start, end, limit)
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+                }
+                async fn release_replay_pending(
+                    &self,
+                    id: &str,
+                    streams: &[String],
+                    start: &str,
+                    end: &str,
+                    after: &std::collections::BTreeMap<String, i64>,
+                ) -> Result<bool, EnterpriseSyncError> {
+                    self.db
+                        .release_replay_pending(id, streams, start, end, Some(after))
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+                }
+                async fn finish_release_replay(&self, id: &str) -> Result<(), EnterpriseSyncError> {
+                    self.db
+                        .finish_release_replay(id)
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                    self.finished.store(true, Ordering::SeqCst);
+                    Ok(())
+                }
+                async fn begin_export(
+                    &self,
+                ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
+                    Ok(Some(Box::new(ChangingExport {
+                        inner: StorageExport::begin_storage(self.db.clone()).await?,
+                        db: self.db.clone(),
+                        calls: AtomicUsize::new(0),
+                        mutate: self.mutate.clone(),
+                    })))
+                }
+                async fn fetch_release_page(
+                    &self,
+                    kind: &str,
+                    after: i64,
+                    cutoff: &str,
+                    end: Option<&str>,
+                    limit: u32,
+                ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError>
+                {
+                    Ok(self
+                        .protected
+                        .release_export_range_page(kind, after, cutoff, end, limit)
+                        .await
+                        .unwrap())
+                }
+                async fn fetch_frames_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    panic!("raw frame refresh is forbidden")
+                }
+                async fn fetch_audio_since(
+                    &self,
+                    _: Option<&str>,
+                    _: u32,
+                    _: u32,
+                ) -> Result<Vec<AudioRow>, EnterpriseSyncError> {
+                    Ok(vec![])
+                }
+            }
+            for (hybrid, replay) in [false, true]
+                .into_iter()
+                .flat_map(|hybrid| [(hybrid, false), (hybrid, true)])
+            {
+                let dir = tempfile::tempdir().unwrap();
+                let db = Arc::new(if hybrid {
+                    let mut options = screenpipe_db::storage::MigrationOptions::default();
+                    options.budget.disk_reserve_bytes = 0;
+                    screenpipe_db::DatabaseManager::new_hybrid(
+                        dir.path(),
+                        Default::default(),
+                        options,
+                    )
+                    .await
+                    .unwrap()
+                } else {
+                    screenpipe_db::DatabaseManager::new(
+                        dir.path().join("db.sqlite").to_str().unwrap(),
+                        Default::default(),
+                    )
+                    .await
+                    .unwrap()
+                });
+                db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                    identity: "chunks-v1".into(),
+                    text: true,
+                    images: false,
+                })
+                .await
+                .unwrap();
+                // Match the actual HTTP transport target; each pair of records
+                // exceeds it, so every original record occupies its own chunk.
+                let text = "x".repeat(sync::HOSTED_INGEST_REQUEST_BYTES / 2);
+                for id in 1..=3 {
+                    db.execute_raw_sql_write(&format!("INSERT INTO frames(id,timestamp,full_text) VALUES({id},'2026-10-23T01:00:00Z','{text}')")).await.unwrap();
+                }
+                let mut jobs = db.release_pending("frames", 10).await.unwrap();
+                jobs.sort_by_key(|job| job.id.parse::<i64>().unwrap());
+                for job in jobs {
+                    assert!(db.publish_release(&job, &job.values).await.unwrap());
+                }
+                let server = wiremock::MockServer::start().await;
+                wiremock::Mock::given(wiremock::matchers::path("/ingest"))
+                    .respond_with(wiremock::ResponseTemplate::new(200))
+                    .mount(&server)
+                    .await;
+                let cfg = sync::tests::test_cfg(&dir, format!("{}/ingest", server.uri()));
+                let mut cursor = sync::Cursor::default();
+                cursor.privacy.insert(
+                    "frames".into(),
+                    sync::PrivacyCursor {
+                        sequence: 0,
+                        cutoff: "2026-10-22T00:00:00Z".into(),
+                    },
+                );
+                let request = serde_json::json!({
+                    "id": uuid::Uuid::new_v4().to_string(), "license_id": uuid::Uuid::new_v4().to_string(),
+                    "device_id": cfg.device_id, "start_at": "2026-10-22T00:00:00Z", "end_at": "2026-10-23T02:00:00Z",
+                    "streams": ["frames"], "images_only": false, "recover_images": false
+                });
+                let finished = Arc::new(AtomicBool::new(false));
+                let local = Local {
+                    db: db.clone(),
+                    protected: db.protected_reads().await.unwrap(),
+                    mutate: Arc::new(AtomicBool::new(true)),
+                    finished: finished.clone(),
+                };
+                let http = reqwest::Client::new();
+                let report = if replay {
+                    let (page, more) = sync::tests::requested_replay_page(
+                        &cfg,
+                        &mut cursor,
+                        &local,
+                        &http,
+                        request.clone(),
+                    )
+                    .await
+                    .unwrap();
+                    assert!(
+                        more,
+                        "revoked pending records must keep the accepted replay active"
+                    );
+                    assert!(!finished.load(Ordering::SeqCst));
+                    page
+                } else {
+                    sync::run_one_sync(&cfg, &mut cursor, &local, &http)
+                        .await
+                        .unwrap()
+                };
+                assert_eq!(report.frames, 1);
+                let requests = server.received_requests().await.unwrap();
+                assert_eq!(
+                    requests.len(),
+                    1,
+                    "revoked later chunks must never reach HTTP"
+                );
+                let record: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
+                assert_eq!(record["frame_id"], 1);
+                drop(local);
+                db.close().await;
+                drop(db);
+                let db = Arc::new(
+                    screenpipe_db::DatabaseManager::new(
+                        dir.path().join("db.sqlite").to_str().unwrap(),
+                        Default::default(),
+                    )
+                    .await
+                    .unwrap(),
+                );
+                assert_eq!(
+                    db.frame_payloads(&[4], screenpipe_db::storage::Projection::All)
+                        .await
+                        .unwrap()[&4]
+                        .full_text
+                        .as_deref(),
+                    Some("new durable capture")
+                );
+                let local = Local {
+                    db: db.clone(),
+                    protected: db.protected_reads().await.unwrap(),
+                    mutate: Arc::new(AtomicBool::new(false)),
+                    finished: finished.clone(),
+                };
+                for job in db.release_pending("frames", 10).await.unwrap() {
+                    let mut safe = job.values.clone();
+                    if job.id == "3" {
+                        safe.insert("full_text".into(), Some("certified changed record".into()));
+                    }
+                    assert!(db.publish_release(&job, &safe).await.unwrap());
+                }
+                let mut restarted = sync::Cursor::load(&cfg.cursor_path);
+                let report = if replay {
+                    let (page, more) = sync::tests::requested_replay_page(
+                        &cfg,
+                        &mut restarted,
+                        &local,
+                        &http,
+                        request,
+                    )
+                    .await
+                    .unwrap();
+                    assert!(
+                        !more,
+                        "unrelated captures outside the request must not strand replay"
+                    );
+                    assert!(finished.load(Ordering::SeqCst));
+                    page
+                } else {
+                    sync::run_one_sync(&cfg, &mut restarted, &local, &http)
+                        .await
+                        .unwrap()
+                };
+                assert_eq!(report.frames, if replay { 1 } else { 2 });
+                let requests = server.received_requests().await.unwrap();
+                let body = String::from_utf8_lossy(&requests.last().unwrap().body);
+                assert!(body.contains("certified changed record"));
+                assert_eq!(body.contains("new durable capture"), !replay);
+                assert!(!body.contains("PRIVATE_CHANGED"));
+                db.close().await;
+            }
+        }
         #[tokio::test]
         async fn export_upload_filters_deleted_rows_and_refreshes_redactions() {
             use super::{AudioRow, EnterpriseSyncError, FrameRow, LocalApiClient, StorageExport};
@@ -3570,6 +4324,9 @@ mod imp {
 
 #[cfg(feature = "enterprise-support")]
 pub use imp::{configure_telemetry_context, spawn};
+
+#[cfg(all(test, feature = "enterprise-support"))]
+pub(crate) use imp::device_id_tests::check_protected_upload_revocations;
 
 #[cfg(feature = "enterprise-support")]
 pub(crate) use imp::{authorize_startup, verify_recording_authorization};

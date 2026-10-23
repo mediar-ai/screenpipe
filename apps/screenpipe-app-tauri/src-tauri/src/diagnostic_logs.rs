@@ -579,6 +579,31 @@ mod tests {
         assert!(!report.contains("private-person@example.com"));
     }
 
+    #[cfg(feature = "enterprise-support")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn protected_upload_revocation_survives_collected_support_redaction() {
+        let dir = tempfile::tempdir().unwrap();
+        crate::enterprise_sync::check_protected_upload_revocations(dir.path()).await;
+        let path = dir.path().join("screenpipe-app.2026-10-23.log");
+        std::fs::rename(&path, dir.path().join("screenpipe-app.2026-10-23.1.log")).unwrap();
+        std::fs::write(
+            path,
+            "INFO recorder restarted contact=private-person@example.com\n",
+        )
+        .unwrap();
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("privacy revision changed"));
+        assert!(report.contains("certified survivors retained; stale selections excluded"));
+        assert!(report.contains("selected_records="));
+        assert!(report.contains("retained_records="));
+        assert!(report.contains("recorder restarted"));
+        assert!(!report.contains("private-person@example.com"));
+        assert!(!report.contains("PRIVATE_ORIGINAL"));
+        assert!(!report.contains("UNPROCESSED_PRIVATE_EDIT"));
+    }
+
     #[tokio::test]
     async fn installer_failure_reaches_redacted_support_bundle() {
         let dir = tempfile::tempdir().unwrap();
