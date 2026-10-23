@@ -319,7 +319,7 @@ impl ExportRows<'_> {
         .await?;
         report.parsed = filter_current_rows(
             self.parsed,
-            PAGE_LIMIT,
+            PARSED_PAGE_LIMIT,
             |r| r.frame_id,
             |r| r.timestamp.as_str(),
             |since, offset, limit| async move {
