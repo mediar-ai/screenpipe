@@ -4,6 +4,7 @@
 import { verifyToken } from '@clerk/backend';
 import { Env, AuthResult, type AccountPlan, type UsageTier, type UserTier } from '../types';
 import { TtlSingleFlightCache } from './ttl-single-flight-cache';
+import { parseTrainingMetadata } from '../services/experiential-metadata';
 
 /**
  * Verifies a JWT token from Clerk
@@ -113,6 +114,7 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
       ...(identityMatches && screenpipeUser.hostedAiTrial === true
         ? { hostedAiTrial: true }
         : {}),
+      ...(identityMatches && screenpipeUser.trainingMetadata ? { trainingMetadata: screenpipeUser.trainingMetadata } : {}),
       ...usageTierField(
         identityMatches ? screenpipeUser.accountPlan ?? 'unknown' : 'unknown',
         hasSubscription ? 'subscribed' : 'logged_in',
@@ -138,6 +140,7 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
         ...usageTierField(screenpipeUser.accountPlan ?? 'unknown', 'subscribed'),
         deviceId: resolvedUserId,
         userId: screenpipeUser.userId,
+        ...(screenpipeUser.trainingMetadata ? { trainingMetadata: screenpipeUser.trainingMetadata } : {}),
         // clerk_id here comes from the website's user row, not a verified Clerk
         // JWT, so a Clerk 404 on it may just mean the row is stale.
         ...(screenpipeUser.clerkUserId
@@ -153,6 +156,7 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
       ...(screenpipeUser.hostedAiTrial === true ? { hostedAiTrial: true } : {}),
       deviceId: resolvedUserId,
       userId: screenpipeUser.userId,
+      ...(screenpipeUser.trainingMetadata ? { trainingMetadata: screenpipeUser.trainingMetadata } : {}),
       ...(screenpipeUser.clerkUserId
         ? { clerkUserId: screenpipeUser.clerkUserId, clerkUserIdVerified: false }
         : {}),
@@ -174,6 +178,7 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
  * Validates a screenpipe JWT token
  */
 interface ScreenpipeUserData {
+  training_metadata?: unknown;
   id?: string;
   clerk_id?: string;
   email?: string;
@@ -191,6 +196,7 @@ interface ScreenpipeUserData {
 }
 
 type ScreenpipeTokenResult = {
+  trainingMetadata?: AuthResult['trainingMetadata'];
   isValid: boolean;
   userId?: string;
   clerkUserId?: string;
@@ -360,6 +366,7 @@ async function validateScreenpipeToken(token: string): Promise<ScreenpipeTokenRe
         return { isValid: false };
       }
       const accountPlan = resolveAccountPlan(userData);
+      const trainingMetadata = clerkUserId ? parseTrainingMetadata(userData.training_metadata) : null;
       return {
         isValid: true,
         userId,
@@ -373,6 +380,7 @@ async function validateScreenpipeToken(token: string): Promise<ScreenpipeTokenRe
           accountPlan === 'enterprise',
         accountPlan,
         hostedAiTrial: userData.hosted_ai_trial === true,
+        ...(trainingMetadata ? { trainingMetadata } : {}),
       };
     } else {
       console.log('Invalid screenpipe user token');

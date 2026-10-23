@@ -6,6 +6,7 @@ import type { Env, RequestBody } from '../types';
 import { getHostedChatGatewayConnection, type CloudflareGatewayProvider, type HostedChatGatewayContext } from './cloudflare-ai-gateway';
 import { getFlatGatewayTokenRates } from './cost-tracker';
 import { originalGatewayReason } from './experiential-routing-policy';
+import { getExperientialRequestTags } from './experiential-metadata';
 
 export const EXPERIENTIAL_INFERENCE_ORIGIN = 'https://api.experientiallabs.ai';
 export class HostedInferencePrivacyError extends Error {
@@ -77,6 +78,8 @@ export async function resolveHostedChatConnection(
   env: Env, provider: CloudflareGatewayProvider, context: HostedChatGatewayContext, model: string,
   body?: Pick<RequestBody, 'messages'>, forceOriginalReason?: string,
 ) {
+  const tags = getExperientialRequestTags(context);
+  const metadataHeaders: Record<string, string> = tags ? { 'X-Explabs-Tags': JSON.stringify(tags) } : {};
   const hybrid = env.HOSTED_CHAT_GATEWAY === 'experiential';
   const nativeProvider = provider === 'openai' || provider === 'anthropic';
   const retainedReason = forceOriginalReason ?? (hybrid && nativeProvider ? originalGatewayReason(model, body) : null);
@@ -92,6 +95,7 @@ export async function resolveHostedChatConnection(
     if (!url.pathname.endsWith(`/${provider}`)) throw new Error('Unexpected native Cloudflare provider URL');
     url.pathname = url.pathname.slice(0, -provider.length) + slug + (provider === 'openai' ? '/v1' : '');
     const defaultHeaders: Record<string, string | null> = { ...connection.defaultHeaders,
+      ...metadataHeaders,
       Authorization: `Bearer ${apiKey}`,
       'cf-aig-custom-cost': JSON.stringify(getFlatGatewayTokenRates(model)),
       ...(provider === 'anthropic' ? { 'x-api-key': null } : {}),
@@ -148,6 +152,7 @@ export async function resolveHostedChatConnection(
     maxRetries: 0,
     fetch: experientialPrivateFetch(provider === 'anthropic' ? EXPERIENTIAL_INFERENCE_ORIGIN : `${EXPERIENTIAL_INFERENCE_ORIGIN}/v1`),
     defaultHeaders: {
+      ...metadataHeaders,
       Authorization: `Bearer ${apiKey}`,
       ...(provider === 'anthropic' ? { 'x-api-key': null } : {}),
     },
