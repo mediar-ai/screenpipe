@@ -42,7 +42,7 @@ pub trait AlternateStt: Send {
 /// Optional alternate STT engine, wrapped for shared ownership + interior mutability.
 pub type AlternateSttEngine = Arc<StdMutex<Box<dyn AlternateStt + Send>>>;
 
-#[cfg(any(feature = "qwen3-asr", feature = "parakeet"))]
+#[cfg(any(feature = "qwen3-asr", feature = "parakeet", feature = "parakeet-mlx"))]
 impl AlternateStt for audiopipe::Model {
     fn transcribe(&mut self, audio: &[f32], sample_rate: u32) -> Result<String> {
         let opts = audiopipe::TranscribeOptions::default();
@@ -201,6 +201,7 @@ pub async fn stt(
         }
     } else if *audio_transcription_engine == AudioTranscriptionEngine::Qwen3Asr
         || *audio_transcription_engine == AudioTranscriptionEngine::Parakeet
+        || *audio_transcription_engine == AudioTranscriptionEngine::Bark
     {
         // Qwen3-ASR / Parakeet via alternate STT engine (audiopipe)
         if let Some(ref engine) = alternate_stt {

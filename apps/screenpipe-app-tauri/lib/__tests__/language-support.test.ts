@@ -15,6 +15,12 @@ import {
 } from "@/lib/language";
 
 describe("transcription engine language support", () => {
+  it("keeps Bark English-only when switching from another engine", () => {
+    expect(getLanguageOptionsForTranscriptionEngine("bark").map((o) => o.code)).toEqual([Language.english]);
+    expect(filterLanguagesForTranscriptionEngine([Language.english, Language.japanese], "bark")).toEqual([Language.english]);
+    expect(transcriptionEngineUsesLanguageHints("bark")).toBe(false);
+    expect(getTranscriptionEngineLanguageSupportKey("bark")).toBe("bark");
+  });
   it("limits Parakeet to its supported European language set", () => {
     const options = getLanguageOptionsForTranscriptionEngine("parakeet");
     const codes = options.map((option) => option.code);

@@ -2274,6 +2274,7 @@ impl AudioManager {
                 AudioTranscriptionEngine::Qwen3Asr
                     | AudioTranscriptionEngine::Parakeet
                     | AudioTranscriptionEngine::ParakeetMlx
+                    | AudioTranscriptionEngine::Bark
             );
 
             if should_try_audiopipe_refresh && engine_needs_refresh {

@@ -361,7 +361,16 @@ pub fn is_engine_unsafe_for_cpu(engine: &str, tier: DeviceTier, has_avx2: bool) 
         return true;
     }
 
-    let is_parakeet = engine == "parakeet" || engine == "parakeet-mlx";
+    if engine == "bark"
+        && !cfg!(any(
+            all(target_os = "macos", target_arch = "aarch64"),
+            all(target_os = "windows", target_arch = "x86_64")
+        ))
+    {
+        return true;
+    }
+    // Bark expands to f32 on MLX and ONNX; retain the high-memory device gate.
+    let is_parakeet = matches!(engine, "parakeet" | "parakeet-mlx" | "bark");
     if !is_parakeet {
         return false;
     }
@@ -392,7 +401,7 @@ pub fn is_engine_unsafe_for_cpu(engine: &str, tier: DeviceTier, has_avx2: bool) 
     {
         // Off-macOS, plain parakeet is ONNX CPU — safe on High tier. Only the
         // explicit MLX variant is impossible here (no MLX support).
-        engine == "parakeet-mlx"
+        engine == "parakeet-mlx" || engine == "bark"
     }
 }
 
@@ -454,6 +463,26 @@ pub fn apply_tier_defaults(settings: &mut RecordingSettings, tier: DeviceTier) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bark_retains_expanded_weight_memory_gate() {
+        for tier in [super::DeviceTier::Low, super::DeviceTier::Mid] {
+            assert!(super::is_engine_unsafe_for_cpu("bark", tier, true));
+            assert!(super::is_engine_unsafe_for_cpu("bark", tier, false));
+        }
+        #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+        {
+            assert!(!super::is_engine_unsafe_for_cpu(
+                "bark",
+                super::DeviceTier::High,
+                true
+            ));
+            assert!(!super::is_engine_unsafe_for_cpu(
+                "bark",
+                super::DeviceTier::High,
+                false
+            ));
+        }
+    }
     use super::*;
 
     #[test]
@@ -493,6 +522,8 @@ mod tests {
 
     #[test]
     fn parakeet_unsafe_on_low_and_mid_tier() {
+        assert!(is_engine_unsafe("bark", DeviceTier::Low));
+        assert!(is_engine_unsafe("bark", DeviceTier::Mid));
         assert!(is_engine_unsafe("parakeet", DeviceTier::Low));
         assert!(is_engine_unsafe("parakeet-mlx", DeviceTier::Low));
         assert!(is_engine_unsafe("parakeet", DeviceTier::Mid));

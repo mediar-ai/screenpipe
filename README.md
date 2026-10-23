@@ -237,6 +237,8 @@ Instead of recording every second, screenpipe listens for meaningful events — 
 ### Audio transcription
 Captures system audio (what you hear) and microphone input (what you say). Real-time speech-to-text using Whisper (Large-V3-Turbo) running locally on your device, or Deepgram for cloud transcription. Speaker identification and diarization. Works with any audio source — Zoom, Google Meet, Teams, or any other application.
 
+[Underdog Bark 3.0](crates/screenpipe-bark/README.md) is available as a native Rust transcription engine on supported Apple silicon builds. It supports English and decodes the compressed model locally.
+
 On macOS 14.4+, you can exclude specific apps from system-audio capture by listing their bundle IDs in `~/.screenpipe/audio-exclusions.json`. Enable Experimental CoreAudio System Audio in Settings → Recording first; the picker UI only appears once that flag is on.
 
 ```json

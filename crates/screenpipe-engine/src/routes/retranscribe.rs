@@ -834,7 +834,9 @@ fn meeting_retranscribe_max_batch_duration_secs(
 ) -> u64 {
     match engine {
         AudioTranscriptionEngine::Deepgram => 5000,
-        AudioTranscriptionEngine::Parakeet | AudioTranscriptionEngine::ParakeetMlx => 30,
+        AudioTranscriptionEngine::Parakeet
+        | AudioTranscriptionEngine::ParakeetMlx
+        | AudioTranscriptionEngine::Bark => 30,
         _ => screenpipe_audio::audio_manager::max_batch_duration_secs(engine, user_override),
     }
 }
