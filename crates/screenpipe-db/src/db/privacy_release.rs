@@ -573,22 +573,27 @@ impl DatabaseManager {
         if complete {
             return Ok(());
         }
-        let ids: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT id FROM {} WHERE id>? ORDER BY id LIMIT 128",
+        let ids: Vec<(i64, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "SELECT s.id,EXISTS(SELECT 1 FROM _privacy_work w WHERE w.kind=? AND w.id=CAST(s.id AS TEXT)) FROM {} s WHERE s.id>? ORDER BY s.id LIMIT 128",
             surface.table
         )))
+        .bind(surface.kind)
         .bind(after)
         .fetch_all(&mut **tx.conn())
         .await?;
-        for id in &ids {
+        for (id, already_queued) in &ids {
             sqlx::query("INSERT INTO _privacy_release(kind,id) VALUES(?,CAST(? AS TEXT)) ON CONFLICT(kind,id) DO UPDATE SET policy=NULL,attempts=0,retry_at=NULL WHERE policy IS NOT NULL AND policy!=(SELECT receipt_key FROM _privacy_policy WHERE identity=?)")
                 .bind(surface.kind).bind(id).bind(policy).execute(&mut **tx.conn()).await?;
-            // Also enroll pending receipts written by earlier draft versions.
-            sqlx::query("INSERT OR IGNORE INTO _privacy_work(kind,id,available_at) SELECT kind,id,COALESCE(retry_at,unixepoch()) FROM _privacy_release WHERE kind=? AND id=CAST(? AS TEXT) AND policy IS NULL")
-                .bind(surface.kind).bind(id).execute(&mut **tx.conn()).await?;
+            // Discovery is old work even though enrollment happens now. Giving
+            // it today's queue time lets every history page jump ahead of live
+            // capture in the recent-first lane. Keep existing capture/retry
+            // deadlines, and enroll newly discovered history at the old end.
+            // This also recovers pending receipts from earlier draft versions.
+            sqlx::query("INSERT INTO _privacy_work(kind,id,available_at) SELECT kind,id,COALESCE(retry_at,0) FROM _privacy_release WHERE kind=? AND id=CAST(? AS TEXT) AND policy IS NULL ON CONFLICT(kind,id) DO UPDATE SET available_at=excluded.available_at WHERE ?=0")
+                .bind(surface.kind).bind(id).bind(already_queued).execute(&mut **tx.conn()).await?;
         }
         sqlx::query("UPDATE _privacy_discovery SET after_id=?,complete=? WHERE kind=?")
-            .bind(ids.last().copied().unwrap_or(after))
+            .bind(ids.last().map(|(id, _)| *id).unwrap_or(after))
             .bind(ids.len() < 128)
             .bind(surface.kind)
             .execute(&mut **tx.conn())

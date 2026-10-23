@@ -595,7 +595,9 @@ export function PrivacySection() {
   // Where the AI workers run — one switch covers both modalities.
   const piiBackend = (settings.piiBackend as "local" | "tinfoil" | undefined) ?? "local";
   const handlePiiBackendChange = (next: "local" | "tinfoil") => {
-    if (sharingRequiresCloud) return;
+    // Sharing requires the enclave, but keep Cloud selectable so a stale or
+    // partially migrated Local setting can be repaired from this screen.
+    if (sharingRequiresCloud && next !== "tinfoil") return;
     handleSettingsChange({ piiBackend: next } as any, true);
   };
 
@@ -1492,7 +1494,7 @@ export function PrivacySection() {
               <div id="workflow-cloud-redaction" className="mt-3 ml-6 space-y-2 border-l-2 border-border pl-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                   <span className="font-medium text-foreground">Where it runs</span>
-                  <label className={`flex items-center gap-1.5 ${managedPiiBackend ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+                  <label className={`flex items-center gap-1.5 ${managedPiiBackend || sharingRequiresCloud ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
                     <input
                       type="radio"
                       name="piiBackend"
@@ -1507,14 +1509,16 @@ export function PrivacySection() {
                       type="radio"
                       name="piiBackend"
                       checked={piiBackend === "tinfoil"}
-                      disabled={!!managedPiiBackend || sharingRequiresCloud}
+                      disabled={!!managedPiiBackend}
                       onChange={() => handlePiiBackendChange("tinfoil")}
                     />
                     <span className="text-foreground">Cloud (enclave)</span>
                   </label>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {sharingRequiresCloud && <span className="block font-medium">Required while Workflows sharing is on. Turn off sharing above to change it. Shared chats always redact all sensitive categories; the choices below apply to recordings.</span>}
+                  {sharingRequiresCloud && <span className="block font-medium">{piiBackend === "tinfoil"
+                    ? "Cloud redaction is required while Workflows sharing is on. The choices below control redaction in recordings."
+                    : "Workflows sharing requires Cloud (enclave), but this device is still set to Local. Choose Cloud, then apply the change."}</span>}
                   Local stays on-device — strongest privacy, slower on weak
                   hardware. Cloud uses screenpipe&apos;s attested
                   confidential-compute enclave — fast everywhere; your device

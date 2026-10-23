@@ -26,6 +26,53 @@ async fn database() -> (tempfile::TempDir, Arc<DatabaseManager>) {
 }
 
 #[tokio::test]
+async fn history_discovery_does_not_jump_ahead_of_new_captures() {
+    let root = tempfile::tempdir().unwrap();
+    let db = DatabaseManager::new(
+        root.path().join("db.sqlite").to_str().unwrap(),
+        Default::default(),
+    )
+    .await
+    .unwrap();
+    // History predates the policy, so discovery enrolls it after live capture.
+    db.execute_raw_sql_write("WITH RECURSIVE history(id) AS (SELECT 1 UNION ALL SELECT id+1 FROM history WHERE id<512) INSERT INTO frames(id,timestamp,full_text) SELECT id,'2020-01-01','historical text' FROM history")
+        .await.unwrap();
+    db.configure_release(&ReleasePolicy {
+        identity: "history-priority-v1".into(),
+        text: true,
+        images: false,
+    })
+    .await
+    .unwrap();
+    for id in [1000, 1001] {
+        db.execute_raw_sql_write(&format!("INSERT INTO frames(id,timestamp,full_text) VALUES({id},'2026-10-23','new capture')"))
+            .await.unwrap();
+        let recent = db
+            .release_pending_ordered("frames", 1, 0, false)
+            .await
+            .unwrap()
+            .remove(0);
+        assert_eq!(
+            recent.id,
+            id.to_string(),
+            "discovering old history must not outrank a new capture"
+        );
+        assert!(db.publish_release(&recent, &recent.values).await.unwrap());
+        let historical = db
+            .release_pending_ordered("frames", 1, 0, true)
+            .await
+            .unwrap()
+            .remove(0);
+        assert!(
+            historical.id.parse::<i64>().unwrap() < 1000,
+            "history must also retain its processing turn"
+        );
+        assert!(db.publish_release(&historical, &historical.values).await.unwrap());
+    }
+    db.close().await;
+}
+
+#[tokio::test]
 async fn pending_capture_is_durable_but_not_released_and_late_completion_is_not_lost() {
     let (_root, db) = database().await;
     db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-14T10:00:00Z','SYNTHETIC_SECRET_OLDER'),(2,'2026-10-14T10:01:00Z','SYNTHETIC_SECRET_NEWER')").await.unwrap();
