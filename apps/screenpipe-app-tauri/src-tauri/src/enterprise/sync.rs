@@ -1284,26 +1284,6 @@ async fn run_one_sync_page(
             checkpoint.sequence = page.sequence;
             ready.insert(kind, page.rows);
         }
-        if let Some(request) = backfill {
-            let kinds = protected_streams
-                .iter()
-                .filter(|(_, enabled)| *enabled)
-                .map(|(kind, _)| (*kind).to_string())
-                .collect::<Vec<_>>();
-            let after = privacy_next
-                .iter()
-                .map(|(kind, cursor)| (kind.clone(), cursor.sequence))
-                .collect();
-            privacy_more |= local
-                .release_replay_pending(
-                    &request.id,
-                    &kinds,
-                    &request.start_at.to_rfc3339(),
-                    &request.end_at.to_rfc3339(),
-                    &after,
-                )
-                .await?;
-        }
     }
     let mut pending_read = false;
     let starred_since = cursor.boundary.starred_since.clone().unwrap_or_else(|| {
@@ -1621,6 +1601,9 @@ async fn run_one_sync_page(
                     .await?;
                 drop(token.admit().await?);
             }
+            privacy_more |=
+                protected_replay_pending(local, backfill, &protected_streams, &privacy_next)
+                    .await?;
             cursor.privacy = privacy_next;
             cursor.save(&cfg.cursor_path)?;
             local.acknowledge_release_exports(&cursor.privacy).await?;
@@ -1929,6 +1912,14 @@ async fn run_one_sync_page(
         }
     }
 
+    // Per-request filtering can exclude a record revoked during an earlier
+    // HTTP wait. Keep its replay active until processing and delivery finish.
+    if protected {
+        privacy_more |=
+            protected_replay_pending(local, backfill, &protected_streams, &next_cursor.privacy)
+                .await?;
+    }
+
     // Advance cursor only on success — partial failure must not skip records.
     *cursor = next_cursor;
     // The backfill caller commits an image-only cursor with its parent (or
@@ -1942,6 +1933,35 @@ async fn run_one_sync_page(
 
     report.privacy_more = privacy_more;
     Ok(report)
+}
+
+async fn protected_replay_pending(
+    local: &dyn LocalApiClient,
+    request: Option<&backfill::BackfillRequest>,
+    streams: &[(&str, bool)],
+    cursors: &std::collections::BTreeMap<String, PrivacyCursor>,
+) -> Result<bool, EnterpriseSyncError> {
+    let Some(request) = request else {
+        return Ok(false);
+    };
+    let kinds = streams
+        .iter()
+        .filter(|(_, enabled)| *enabled)
+        .map(|(kind, _)| (*kind).to_string())
+        .collect::<Vec<_>>();
+    let after = cursors
+        .iter()
+        .map(|(kind, cursor)| (kind.clone(), cursor.sequence))
+        .collect();
+    local
+        .release_replay_pending(
+            &request.id,
+            &kinds,
+            &request.start_at.to_rfc3339(),
+            &request.end_at.to_rfc3339(),
+            &after,
+        )
+        .await
 }
 
 fn advance_timestamp_boundary<T>(
@@ -5199,6 +5219,19 @@ pub(crate) mod tests {
                 .pop()
                 .unwrap_or_default())
         }
+    }
+
+    pub(crate) async fn requested_replay_page(
+        cfg: &EnterpriseSyncConfig,
+        cursor: &mut Cursor,
+        local: &dyn LocalApiClient,
+        http: &reqwest::Client,
+        request: serde_json::Value,
+    ) -> Result<(SyncTickReport, bool), EnterpriseSyncError> {
+        let request: backfill::BackfillRequest = serde_json::from_value(request).unwrap();
+        let page = backfill::run_replay_page(cfg, cursor, local, http, &request).await?;
+        let more = page.may_have_more();
+        Ok((page, more))
     }
 
     pub(crate) fn test_cfg(dir: &TempDir, ingest_url: String) -> EnterpriseSyncConfig {

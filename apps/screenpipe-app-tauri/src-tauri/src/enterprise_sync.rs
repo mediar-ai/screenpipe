@@ -3298,7 +3298,7 @@ mod imp {
                             )
                             .await
                             .unwrap();
-                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(4,'2026-10-23T01:00:00Z','new durable capture')").await.unwrap();
+                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(4,'2026-10-23T03:00:00Z','new durable capture')").await.unwrap();
                     }
                     self.inner.filter(rows, local).await
                 }
@@ -3307,11 +3307,46 @@ mod imp {
                 db: Arc<screenpipe_db::DatabaseManager>,
                 protected: Arc<screenpipe_db::DatabaseManager>,
                 mutate: Arc<AtomicBool>,
+                finished: Arc<AtomicBool>,
             }
             #[async_trait::async_trait]
             impl LocalApiClient for Local {
                 async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
                     Ok(true)
+                }
+                async fn prepare_release_replay(
+                    &self,
+                    id: &str,
+                    streams: &[String],
+                    start: &str,
+                    end: &str,
+                    limit: u32,
+                ) -> Result<bool, EnterpriseSyncError> {
+                    self.db
+                        .prepare_release_replay(id, streams, start, end, limit)
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+                }
+                async fn release_replay_pending(
+                    &self,
+                    id: &str,
+                    streams: &[String],
+                    start: &str,
+                    end: &str,
+                    after: &std::collections::BTreeMap<String, i64>,
+                ) -> Result<bool, EnterpriseSyncError> {
+                    self.db
+                        .release_replay_pending(id, streams, start, end, Some(after))
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))
+                }
+                async fn finish_release_replay(&self, id: &str) -> Result<(), EnterpriseSyncError> {
+                    self.db
+                        .finish_release_replay(id)
+                        .await
+                        .map_err(|e| EnterpriseSyncError::LocalApi(e.to_string()))?;
+                    self.finished.store(true, Ordering::SeqCst);
+                    Ok(())
                 }
                 async fn begin_export(
                     &self,
@@ -3355,7 +3390,10 @@ mod imp {
                     Ok(vec![])
                 }
             }
-            for hybrid in [false, true] {
+            for (hybrid, replay) in [false, true]
+                .into_iter()
+                .flat_map(|hybrid| [(hybrid, false), (hybrid, true)])
+            {
                 let dir = tempfile::tempdir().unwrap();
                 let db = Arc::new(if hybrid {
                     let mut options = screenpipe_db::storage::MigrationOptions::default();
@@ -3407,15 +3445,40 @@ mod imp {
                         cutoff: "2026-10-22T00:00:00Z".into(),
                     },
                 );
+                let request = serde_json::json!({
+                    "id": uuid::Uuid::new_v4().to_string(), "license_id": uuid::Uuid::new_v4().to_string(),
+                    "device_id": cfg.device_id, "start_at": "2026-10-22T00:00:00Z", "end_at": "2026-10-23T02:00:00Z",
+                    "streams": ["frames"], "images_only": false, "recover_images": false
+                });
+                let finished = Arc::new(AtomicBool::new(false));
                 let local = Local {
                     db: db.clone(),
                     protected: db.protected_reads().await.unwrap(),
                     mutate: Arc::new(AtomicBool::new(true)),
+                    finished: finished.clone(),
                 };
                 let http = reqwest::Client::new();
-                let report = sync::run_one_sync(&cfg, &mut cursor, &local, &http)
+                let report = if replay {
+                    let (page, more) = sync::tests::requested_replay_page(
+                        &cfg,
+                        &mut cursor,
+                        &local,
+                        &http,
+                        request.clone(),
+                    )
                     .await
                     .unwrap();
+                    assert!(
+                        more,
+                        "revoked pending records must keep the accepted replay active"
+                    );
+                    assert!(!finished.load(Ordering::SeqCst));
+                    page
+                } else {
+                    sync::run_one_sync(&cfg, &mut cursor, &local, &http)
+                        .await
+                        .unwrap()
+                };
                 assert_eq!(report.frames, 1);
                 let requests = server.received_requests().await.unwrap();
                 assert_eq!(
@@ -3425,6 +3488,31 @@ mod imp {
                 );
                 let record: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
                 assert_eq!(record["frame_id"], 1);
+                drop(local);
+                db.close().await;
+                drop(db);
+                let db = Arc::new(
+                    screenpipe_db::DatabaseManager::new(
+                        dir.path().join("db.sqlite").to_str().unwrap(),
+                        Default::default(),
+                    )
+                    .await
+                    .unwrap(),
+                );
+                assert_eq!(
+                    db.frame_payloads(&[4], screenpipe_db::storage::Projection::All)
+                        .await
+                        .unwrap()[&4]
+                        .full_text
+                        .as_deref(),
+                    Some("new durable capture")
+                );
+                let local = Local {
+                    db: db.clone(),
+                    protected: db.protected_reads().await.unwrap(),
+                    mutate: Arc::new(AtomicBool::new(false)),
+                    finished: finished.clone(),
+                };
                 for job in db.release_pending("frames", 10).await.unwrap() {
                     let mut safe = job.values.clone();
                     if job.id == "3" {
@@ -3433,17 +3521,32 @@ mod imp {
                     assert!(db.publish_release(&job, &safe).await.unwrap());
                 }
                 let mut restarted = sync::Cursor::load(&cfg.cursor_path);
-                assert_eq!(
+                let report = if replay {
+                    let (page, more) = sync::tests::requested_replay_page(
+                        &cfg,
+                        &mut restarted,
+                        &local,
+                        &http,
+                        request,
+                    )
+                    .await
+                    .unwrap();
+                    assert!(
+                        !more,
+                        "unrelated captures outside the request must not strand replay"
+                    );
+                    assert!(finished.load(Ordering::SeqCst));
+                    page
+                } else {
                     sync::run_one_sync(&cfg, &mut restarted, &local, &http)
                         .await
                         .unwrap()
-                        .frames,
-                    2
-                );
+                };
+                assert_eq!(report.frames, if replay { 1 } else { 2 });
                 let requests = server.received_requests().await.unwrap();
                 let body = String::from_utf8_lossy(&requests.last().unwrap().body);
                 assert!(body.contains("certified changed record"));
-                assert!(body.contains("new durable capture"));
+                assert_eq!(body.contains("new durable capture"), !replay);
                 assert!(!body.contains("PRIVATE_CHANGED"));
                 db.close().await;
             }
