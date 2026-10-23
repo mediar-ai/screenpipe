@@ -90,6 +90,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[tokio::test]
+    #[serial_test::serial(background_work)]
     async fn quit_drains_admitted_mutations_and_rejects_late_starts() {
         struct Reset;
         impl Drop for Reset {

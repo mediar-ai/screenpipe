@@ -1,0 +1,7 @@
+// screenpipe — AI that knows everything you've seen, said, or heard
+// https://screenpipe.com
+
+ WARN ImmediateTx dropped without commit — rolling back
+ WARN retention: batch delete failed for range 2026-10-12 20:00:00 UTC to 2026-10-12 20:01:00 UTC: error returned from database: (code: 1811) retention fixture interrupted after index mutation; range remains pending
+ INFO retention: batch deleted frames=1 audio=0 ui_events=0 (video_files=0 snapshot_files=0 audio_files=0)
+ INFO retention: running incremental vacuum (reclaims pages only under auto_vacuum=incremental)

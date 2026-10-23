@@ -281,9 +281,12 @@ mod tests {
         let emitted = include_str!(
             "../../../../crates/screenpipe-engine/tests/fixtures/retention-failure-diagnostic.txt"
         );
+        let bulk = include_str!(
+            "../../../../crates/screenpipe-engine/tests/fixtures/retention-bulk-failure-diagnostic.txt"
+        );
         tokio::fs::write(
             root.path().join("screenpipe.2026-10-21.log"),
-            format!("{emitted}\npassword=hunter2\n"),
+            format!("{emitted}\n{bulk}\npassword=hunter2\n"),
         )
         .await
         .unwrap();
@@ -292,6 +295,10 @@ mod tests {
             .unwrap();
         assert!(bundle.contains("retention: batch delete failed"));
         assert!(bundle.contains("no such table: video_chunks"));
+        assert!(bundle.contains("retention fixture interrupted after index mutation"));
+        assert!(bundle.contains("(code: 1811)"));
+        assert!(bundle.contains("range remains pending"));
+        assert!(bundle.contains("retention: batch deleted frames=1"));
         assert!(bundle.contains("2026-10-12 20:00:00"));
         assert!(!bundle.contains("hunter2"));
     }
