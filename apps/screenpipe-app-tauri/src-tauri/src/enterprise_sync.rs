@@ -1233,18 +1233,23 @@ mod imp {
         true
     }
 
+    fn default_parsed_sync_stream() -> bool {
+        let enabled = crate::enterprise_policy::SyncStreams::default().parsed;
+        info!("enterprise: parsed sync policy omitted; applying shared default parsed={enabled}");
+        enabled
+    }
+
     /// Native mirror of the policy endpoint's `syncStreams` block.
     ///
     /// The Home webview normally applies this block through a Tauri command,
     /// but managed-background deployments may never create that webview. Keep
-    /// the defaults aligned with the frontend: established text/event streams
-    /// remain enabled for older control planes, while newer data classes fail
-    /// closed until the server explicitly opts in.
+    /// parsed-data default aligned with the shared sync state and frontend.
+    /// Explicit opt-outs remain off; image and feedback modes fail closed.
     #[derive(Debug, PartialEq, Eq, Deserialize)]
     struct NativeSyncStreams {
         #[serde(default = "default_enabled_sync_stream")]
         frames: bool,
-        #[serde(default)]
+        #[serde(default = "default_parsed_sync_stream")]
         parsed: bool,
         #[serde(default)]
         activities: bool,
@@ -1268,7 +1273,7 @@ mod imp {
         fn default() -> Self {
             Self {
                 frames: true,
-                parsed: false,
+                parsed: default_parsed_sync_stream(),
                 activities: false,
                 starred: true,
                 audio: true,
@@ -3341,9 +3346,85 @@ mod imp {
             .unwrap();
 
             assert_eq!(response.sync_streams, NativeSyncStreams::default());
+            assert!(response.sync_streams.parsed);
             assert!(response.sync_streams.starred);
             assert_eq!(response.sync_streams.frame_images_mode(), "off");
             assert_eq!(response.sync_streams.feedback_mode(), "off");
+        }
+
+        #[tokio::test]
+        async fn native_policy_parsed_rows_upload_by_default_and_respect_explicit_opt_out() {
+            use tracing::instrument::WithSubscriber;
+            use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+
+            let _guard = crate::enterprise_policy::sync_streams_test_lock();
+            let server = MockServer::start().await;
+            let http = reqwest::Client::new();
+            for (body, expected, omitted) in [
+                (serde_json::json!({}), true, true),
+                (serde_json::json!({"syncStreams": {}}), true, true),
+                (
+                    serde_json::json!({"syncStreams": {"parsed": true}}),
+                    true,
+                    false,
+                ),
+                (
+                    serde_json::json!({"syncStreams": {"parsed": false}}),
+                    false,
+                    false,
+                ),
+            ] {
+                server.reset().await;
+                Mock::given(method("GET"))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(body))
+                    .mount(&server)
+                    .await;
+                let logs = tempfile::tempdir().unwrap();
+                let file = std::fs::File::create(logs.path().join("screenpipe-app.log")).unwrap();
+                let subscriber = tracing_subscriber::fmt()
+                    .with_ansi(false)
+                    .with_writer(std::sync::Mutex::new(file))
+                    .finish();
+                async {
+                    // Refresh twice, as the hidden watcher does without a Home
+                    // webview. Each fresh response must preserve the same choice.
+                    for _ in 0..2 {
+                        let policy = super::fetch_and_apply_native_policy(
+                            &http,
+                            &format!("{}/policy", server.uri()),
+                            "fixture-device",
+                            &super::EnterprisePolicyCredential::LicenseKey("fixture-key".into()),
+                            |_| {},
+                        )
+                        .await
+                        .unwrap();
+                        policy.sync_streams.apply();
+                        assert_eq!(
+                            crate::enterprise_policy::current_sync_streams().parsed,
+                            expected
+                        );
+                    }
+                }
+                .with_subscriber(subscriber)
+                .await;
+                // Support receives the actual native decision after collection
+                // and redaction, without the policy credential or record content.
+                let report =
+                    crate::diagnostic_logs::collect_redacted_from_dirs(&[logs.path().into()])
+                        .await
+                        .unwrap();
+                if omitted {
+                    assert!(report.contains("parsed sync policy omitted"), "{report}");
+                    assert!(
+                        report.contains("applying shared default parsed=true"),
+                        "{report}"
+                    );
+                } else {
+                    assert!(!report.contains("parsed sync policy omitted"), "{report}");
+                }
+                assert!(!report.contains("fixture-key"));
+            }
+            NativeSyncStreams::default().apply();
         }
 
         #[test]

@@ -262,15 +262,31 @@ async fn build_bundle(files: &[LogFile]) -> String {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "enterprise-build")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn parsed_backlog_failure_and_recovery_survive_collected_support_upload() {
+        let logs = tempfile::tempdir().unwrap();
+        let report =
+            crate::enterprise::sync::tests::check_parsed_backlog_restart(logs.path()).await;
+        assert!(report.contains("ingest server error: status 503"));
+        assert!(report.contains("pending data retained"));
+        assert!(report.contains("pushed 0 frames, 101 parsed"));
+        assert!(report.contains("across 2 page(s)"));
+        assert!(!report.contains("hunter2"));
+    }
+
     #[tokio::test]
     async fn enterprise_retention_failure_survives_support_redaction() {
         let root = tempfile::tempdir().unwrap();
         let emitted = include_str!(
             "../../../../crates/screenpipe-engine/tests/fixtures/retention-failure-diagnostic.txt"
         );
+        let bulk = include_str!(
+            "../../../../crates/screenpipe-engine/tests/fixtures/retention-bulk-failure-diagnostic.txt"
+        );
         tokio::fs::write(
             root.path().join("screenpipe.2026-10-21.log"),
-            format!("{emitted}\npassword=hunter2\n"),
+            format!("{emitted}\n{bulk}\npassword=hunter2\n"),
         )
         .await
         .unwrap();
@@ -279,6 +295,10 @@ mod tests {
             .unwrap();
         assert!(bundle.contains("retention: batch delete failed"));
         assert!(bundle.contains("no such table: video_chunks"));
+        assert!(bundle.contains("retention fixture interrupted after index mutation"));
+        assert!(bundle.contains("(code: 1811)"));
+        assert!(bundle.contains("range remains pending"));
+        assert!(bundle.contains("retention: batch deleted frames=1"));
         assert!(bundle.contains("2026-10-12 20:00:00"));
         assert!(!bundle.contains("hunter2"));
     }
