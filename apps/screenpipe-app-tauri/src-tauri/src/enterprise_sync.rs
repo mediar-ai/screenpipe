@@ -2954,25 +2954,7 @@ mod imp {
                 Arc,
             };
             let _streams = crate::enterprise_policy::sync_streams_test_lock();
-            // Exact stream policy for this fixture; restore the default afterward.
-            struct Restore;
-            impl Drop for Restore {
-                fn drop(&mut self) {
-                    crate::enterprise_policy::set_sync_streams(
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        true,
-                        "off".into(),
-                        "off".into(),
-                    );
-                    crate::enterprise_policy::set_activity_sync_enabled(false);
-                    crate::enterprise_policy::set_starred_sync_enabled(true);
-                }
-            }
-            let _restore = Restore;
+            let _restore = sync::tests::RestoreDefaultSyncStreams;
             crate::enterprise_policy::set_sync_streams(
                 true,
                 false,

@@ -4767,7 +4767,7 @@ pub(crate) mod tests {
 
     /// Restore the process-global stream policy even when an intentionally
     /// red regression test panics on its assertion.
-    pub(super) struct RestoreDefaultSyncStreams;
+    pub(crate) struct RestoreDefaultSyncStreams;
 
     impl Drop for RestoreDefaultSyncStreams {
         fn drop(&mut self) {
