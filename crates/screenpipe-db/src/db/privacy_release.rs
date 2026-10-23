@@ -117,7 +117,12 @@ pub(crate) const SURFACES: &[Surface] = &[
     },
 ];
 
-/// Text worker scheduling follows the same registry as receipts and read gates.
+/// Audio receipts track sync revisions only; transcripts never require AI redaction.
+pub fn is_audio_surface(kind: &str) -> bool {
+    matches!(kind, "audio" | "segments")
+}
+
+/// Scheduling includes audio receipt bookkeeping, which never invokes a detector.
 pub fn text_release_kinds() -> Vec<&'static str> {
     SURFACES
         .iter()
@@ -454,7 +459,14 @@ impl DatabaseManager {
         // Candidate traversal is bounded even for malformed/future timestamps.
         // Young images move to a future deadline; subsequent polls advance past
         // them. The source lookup never scans certified capture history.
-        let sql = format!("WITH candidates AS MATERIALIZED (SELECT kind,id,available_at,sequence FROM _privacy_work INDEXED BY _privacy_work_due WHERE kind=? AND available_at<=unixepoch() ORDER BY available_at {order},sequence {order} LIMIT 256) SELECT CAST(s.id AS TEXT) AS source_id,r.revision,{columns} FROM candidates w CROSS JOIN _privacy_release r ON r.kind=w.kind AND r.id=w.id CROSS JOIN {} s ON s.id=w.id WHERE r.policy IS NULL{age} ORDER BY w.available_at {order},w.sequence {order} LIMIT ?", surface.table);
+        // Audio no longer uses the detector that scheduled old retry deadlines.
+        // Complete its revision bookkeeping without waiting for those failures.
+        let due = if is_audio_surface(kind) {
+            "1"
+        } else {
+            "available_at<=unixepoch()"
+        };
+        let sql = format!("WITH candidates AS MATERIALIZED (SELECT kind,id,available_at,sequence FROM _privacy_work INDEXED BY _privacy_work_due WHERE kind=? AND {due} ORDER BY available_at {order},sequence {order} LIMIT 256) SELECT CAST(s.id AS TEXT) AS source_id,r.revision,{columns} FROM candidates w CROSS JOIN _privacy_release r ON r.kind=w.kind AND r.id=w.id CROSS JOIN {} s ON s.id=w.id WHERE r.policy IS NULL{age} ORDER BY w.available_at {order},w.sequence {order} LIMIT ?", surface.table);
         let mut rows = sqlx::query(sqlx::AssertSqlSafe(sql.clone()))
             .bind(kind)
             .bind(limit.min(256))
@@ -754,7 +766,10 @@ impl DatabaseManager {
         }
         let storage = self.storage.clone();
         let mut views = Vec::new();
-        for surface in SURFACES.iter().filter(|s| s.kind != "image") {
+        for surface in SURFACES
+            .iter()
+            .filter(|s| s.kind != "image" && !is_audio_surface(s.kind))
+        {
             let exists: bool =
                 sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name=?)")
                     .bind(surface.table)
@@ -892,7 +907,6 @@ impl DatabaseManager {
         for (kind, table, timestamp) in [
             ("frames", "frames", "timestamp"),
             ("input", "ui_events", "timestamp"),
-            ("audio", "audio_transcriptions", "timestamp"),
         ] {
             let pending: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                 "SELECT EXISTS(SELECT 1 FROM {table} s CROSS JOIN _privacy_policy p WHERE p.id=1 AND s.{timestamp}>=? AND s.{timestamp}<? AND julianday(s.{timestamp}) BETWEEN julianday(?) AND julianday(?) AND NOT EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=? AND r.id=CAST(s.id AS TEXT) AND r.policy=CAST(p.receipt_key AS TEXT)))")))
@@ -1114,7 +1128,7 @@ impl DatabaseManager {
                 if s.kind == "image" {
                     policy.images
                 } else {
-                    policy.text
+                    policy.text && !is_audio_surface(s.kind)
                 }
             }) {
                 let complete: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_discovery WHERE kind=? AND policy=? AND complete=1)")

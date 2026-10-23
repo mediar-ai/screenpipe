@@ -531,7 +531,8 @@ impl Worker {
             // (the a11y value/placeholder/help_text of the control).
             TargetTable::Elements => self.process_elements(batch_size).await,
             // Single-column targets gated by the per-column config.
-            TargetTable::AudioTranscription if !cols.audio_transcription => Ok(0),
+            // Legacy saved column lists must not re-enable AI audio redaction.
+            TargetTable::AudioTranscription => Ok(0),
             // `Accessibility` is the fallback pass for `frames.accessibility_text`
             // (the primary path is propagation in process_frames_fulltext);
             // both honor the same toggle.

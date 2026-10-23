@@ -24,14 +24,12 @@ pub(crate) async fn release_middleware(
         return next.run(request).await;
     }
     let path = request.uri().path();
-    // These endpoints expose raw containers, files, live events, or unverified
+    // Meeting/audio streams are exempt; /ws/events filters other content.
+    // These endpoints expose raw containers, files, or unverified
     // derivatives. They cannot borrow a frame-text receipt as authorization.
-    if matches!(
-        path,
-        "/raw_sql" | "/export" | "/ws/events" | "/ws/meeting-overlay" | "/ws/meeting-status"
-    ) || path.starts_with("/frames/preview-media/")
+    if matches!(path, "/raw_sql" | "/export")
+        || path.starts_with("/frames/preview-media/")
         || path.starts_with("/artifacts")
-        || path.starts_with("/speakers/sample/")
         || path == "/data/backup"
         || path == "/stream/frames"
         || (request.method() == axum::http::Method::POST
@@ -217,6 +215,81 @@ mod tests {
         let client = reqwest::Client::new();
         let base = format!("http://{address}");
         let search = format!("{base}/search?content_type=ocr&limit=10");
+        // Audio is available even with a pending screen privacy backlog.
+        db.execute_raw_sql_write("INSERT INTO audio_chunks(id,file_path) VALUES(1,'test.wav'); INSERT INTO audio_transcriptions(id,audio_chunk_id,offset_index,timestamp,transcription,device) VALUES(1,1,0,'2026-10-14T10:00:00Z','AUDIO_EXEMPT_SECRET','test'); INSERT INTO meeting_transcript_segments(meeting_id,provider,item_id,transcript,captured_at) VALUES(1,'test','one','AUDIO_EXEMPT_SECRET','2026-10-14T10:00:00Z')").await.unwrap();
+        // The real websocket routes stay available, and the shared route
+        // forwards audio without leaking screen events under protection.
+        use futures::StreamExt;
+        for path in ["/ws/meeting-status", "/ws/meeting-overlay"] {
+            let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}{path}"))
+                .await
+                .unwrap();
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .is_ok()
+            );
+            socket.close(None).await.unwrap();
+        }
+        let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}/ws/events"))
+            .await
+            .unwrap();
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(20));
+        let received = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                tokio::select! {
+                    _ = tick.tick() => {
+                        let _ = screenpipe_events::send_event("ocr_result", serde_json::json!({"text":"SCREEN_MUST_STAY_PRIVATE"}));
+                        let _ = screenpipe_events::send_event("meeting_transcript_delta", serde_json::json!({"delta":"AUDIO_EXEMPT_SECRET"}));
+                    }
+                    message = socket.next() => {
+                        let message = message.unwrap().unwrap();
+                        if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
+                            assert!(!text.contains("SCREEN_MUST_STAY_PRIVATE"));
+                            if text.contains("AUDIO_EXEMPT_SECRET") { break text; }
+                        }
+                    }
+                }
+            }
+        }).await.unwrap();
+        assert!(received.contains("AUDIO_EXEMPT_SECRET"));
+        assert!(!received.contains("SCREEN_MUST_STAY_PRIVATE"));
+        socket.close(None).await.unwrap();
+        let audio = client
+            .get(format!("{base}/search?content_type=audio&limit=10"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(audio.contains("AUDIO_EXEMPT_SECRET"));
+        let transcript = client
+            .get(format!("{base}/meetings/1/transcript"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(transcript.contains("AUDIO_EXEMPT_SECRET"));
+        let sample = client
+            .get(format!("{base}/speakers/sample/999999"))
+            .send()
+            .await
+            .unwrap();
+        assert_ne!(
+            sample.status().as_u16(),
+            503,
+            "audio samples must not be privacy-gated"
+        );
+
         let meeting: serde_json::Value = client
             .get(format!("{base}/meetings/1"))
             .send()
@@ -263,7 +336,6 @@ mod tests {
             "/frames/1",
             "/frames/1/thumbnail",
             "/frames/preview-media/1",
-            "/speakers/sample/1",
             "/stream/frames",
             "/data/backup",
         ] {

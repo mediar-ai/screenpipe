@@ -264,6 +264,21 @@ pub(crate) struct EventsQuery {
     images: Option<bool>,
 }
 
+// Under screen privacy protection the shared socket carries only audio events.
+// Keep this explicit: unknown future events may contain raw screen content.
+fn audio_event_allowed(name: &str) -> bool {
+    matches!(
+        name,
+        "meeting_transcript_delta"
+            | "meeting_transcript_final"
+            | "meeting_status_changed"
+            | "meeting_streaming_status_changed"
+            | "meeting_streaming_session_started"
+            | "meeting_streaming_session_ended"
+            | "meeting_streaming_error"
+    )
+}
+
 // websocket events handler
 pub(crate) async fn ws_events_handler(
     ws: WebSocketUpgrade,
@@ -272,10 +287,11 @@ pub(crate) async fn ws_events_handler(
     query: Query<EventsQuery>,
 ) -> Response {
     let lifecycle = WebSocketLifecycle::from_extension(lifecycle);
+    let audio_only = state.db.protected_reads_enabled();
     // Check connection limit before upgrading
     match try_acquire_ws_connection(&state.ws_connection_count) {
         Some(guard) => lifecycle.on_upgrade(ws, move |socket, lifecycle| {
-            handle_socket(socket, query, guard, lifecycle)
+            handle_socket(socket, query, guard, lifecycle, audio_only)
         }),
         None => Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
@@ -289,11 +305,17 @@ async fn handle_socket(
     query: Query<EventsQuery>,
     _guard: WsConnectionGuard,
     lifecycle: WebSocketLifecycle,
+    audio_only: bool,
 ) {
     let (mut sender, mut receiver) = socket.split();
 
     let incoming = lifecycle.spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
+            // Protected clients may consume audio, but cannot inject arbitrary
+            // events into the internal bus through this socket.
+            if audio_only {
+                continue;
+            }
             if let Message::Text(t) = msg {
                 if let Ok(event) = serde_json::from_str::<ScreenpipeEvent>(&t) {
                     let _ = send_event(&event.name, event.data);
@@ -310,6 +332,7 @@ async fn handle_socket(
             tokio::select! {
                 event = stream.next() => {
                     if let Some(mut event) = event {
+                        if audio_only && !audio_event_allowed(&event.name) { continue; }
                         if !query.images.unwrap_or(false) && (event.name == "ocr_result" || event.name == "ui_frame") {
                             if let Some(data) = event.data.as_object_mut() {
                                 data.remove("image");
@@ -710,6 +733,15 @@ async fn handle_metrics_socket(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn protected_event_stream_allows_audio_but_not_screen_content() {
+        assert!(audio_event_allowed("meeting_transcript_delta"));
+        assert!(audio_event_allowed("meeting_transcript_final"));
+        for name in ["ocr_result", "ui_frame", "window_changed", "unknown_event"] {
+            assert!(!audio_event_allowed(name), "{name}");
+        }
+    }
 
     #[test]
     fn events_websocket_ping_interval_is_not_busy() {
