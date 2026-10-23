@@ -117,7 +117,12 @@ pub(crate) const SURFACES: &[Surface] = &[
     },
 ];
 
-/// Text worker scheduling follows the same registry as receipts and read gates.
+/// Audio receipts track sync revisions only; transcripts never require AI redaction.
+pub fn is_audio_surface(kind: &str) -> bool {
+    matches!(kind, "audio" | "segments")
+}
+
+/// Scheduling includes audio receipt bookkeeping, which never invokes a detector.
 pub fn text_release_kinds() -> Vec<&'static str> {
     SURFACES
         .iter()
@@ -454,7 +459,14 @@ impl DatabaseManager {
         // Candidate traversal is bounded even for malformed/future timestamps.
         // Young images move to a future deadline; subsequent polls advance past
         // them. The source lookup never scans certified capture history.
-        let sql = format!("WITH candidates AS MATERIALIZED (SELECT kind,id,available_at,sequence FROM _privacy_work INDEXED BY _privacy_work_due WHERE kind=? AND available_at<=unixepoch() ORDER BY available_at {order},sequence {order} LIMIT 256) SELECT CAST(s.id AS TEXT) AS source_id,r.revision,{columns} FROM candidates w CROSS JOIN _privacy_release r ON r.kind=w.kind AND r.id=w.id CROSS JOIN {} s ON s.id=w.id WHERE r.policy IS NULL{age} ORDER BY w.available_at {order},w.sequence {order} LIMIT ?", surface.table);
+        // Audio no longer uses the detector that scheduled old retry deadlines.
+        // Complete its revision bookkeeping without waiting for those failures.
+        let due = if is_audio_surface(kind) {
+            "1"
+        } else {
+            "available_at<=unixepoch()"
+        };
+        let sql = format!("WITH candidates AS MATERIALIZED (SELECT kind,id,available_at,sequence FROM _privacy_work INDEXED BY _privacy_work_due WHERE kind=? AND {due} ORDER BY available_at {order},sequence {order} LIMIT 256) SELECT CAST(s.id AS TEXT) AS source_id,r.revision,{columns} FROM candidates w CROSS JOIN _privacy_release r ON r.kind=w.kind AND r.id=w.id CROSS JOIN {} s ON s.id=w.id WHERE r.policy IS NULL{age} ORDER BY w.available_at {order},w.sequence {order} LIMIT ?", surface.table);
         let mut rows = sqlx::query(sqlx::AssertSqlSafe(sql.clone()))
             .bind(kind)
             .bind(limit.min(256))
@@ -573,22 +585,27 @@ impl DatabaseManager {
         if complete {
             return Ok(());
         }
-        let ids: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT id FROM {} WHERE id>? ORDER BY id LIMIT 128",
+        let ids: Vec<(i64, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "SELECT s.id,EXISTS(SELECT 1 FROM _privacy_work w WHERE w.kind=? AND w.id=CAST(s.id AS TEXT)) FROM {} s WHERE s.id>? ORDER BY s.id LIMIT 128",
             surface.table
         )))
+        .bind(surface.kind)
         .bind(after)
         .fetch_all(&mut **tx.conn())
         .await?;
-        for id in &ids {
+        for (id, already_queued) in &ids {
             sqlx::query("INSERT INTO _privacy_release(kind,id) VALUES(?,CAST(? AS TEXT)) ON CONFLICT(kind,id) DO UPDATE SET policy=NULL,attempts=0,retry_at=NULL WHERE policy IS NOT NULL AND policy!=(SELECT receipt_key FROM _privacy_policy WHERE identity=?)")
                 .bind(surface.kind).bind(id).bind(policy).execute(&mut **tx.conn()).await?;
-            // Also enroll pending receipts written by earlier draft versions.
-            sqlx::query("INSERT OR IGNORE INTO _privacy_work(kind,id,available_at) SELECT kind,id,COALESCE(retry_at,unixepoch()) FROM _privacy_release WHERE kind=? AND id=CAST(? AS TEXT) AND policy IS NULL")
-                .bind(surface.kind).bind(id).execute(&mut **tx.conn()).await?;
+            // Discovery is old work even though enrollment happens now. Giving
+            // it today's queue time lets every history page jump ahead of live
+            // capture in the recent-first lane. Keep existing capture/retry
+            // deadlines, and enroll newly discovered history at the old end.
+            // This also recovers pending receipts from earlier draft versions.
+            sqlx::query("INSERT INTO _privacy_work(kind,id,available_at) SELECT kind,id,COALESCE(retry_at,0) FROM _privacy_release WHERE kind=? AND id=CAST(? AS TEXT) AND policy IS NULL ON CONFLICT(kind,id) DO UPDATE SET available_at=excluded.available_at WHERE ?=0")
+                .bind(surface.kind).bind(id).bind(already_queued).execute(&mut **tx.conn()).await?;
         }
         sqlx::query("UPDATE _privacy_discovery SET after_id=?,complete=? WHERE kind=?")
-            .bind(ids.last().copied().unwrap_or(after))
+            .bind(ids.last().map(|(id, _)| *id).unwrap_or(after))
             .bind(ids.len() < 128)
             .bind(surface.kind)
             .execute(&mut **tx.conn())
@@ -749,7 +766,10 @@ impl DatabaseManager {
         }
         let storage = self.storage.clone();
         let mut views = Vec::new();
-        for surface in SURFACES.iter().filter(|s| s.kind != "image") {
+        for surface in SURFACES
+            .iter()
+            .filter(|s| s.kind != "image" && !is_audio_surface(s.kind))
+        {
             let exists: bool =
                 sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name=?)")
                     .bind(surface.table)
@@ -887,7 +907,6 @@ impl DatabaseManager {
         for (kind, table, timestamp) in [
             ("frames", "frames", "timestamp"),
             ("input", "ui_events", "timestamp"),
-            ("audio", "audio_transcriptions", "timestamp"),
         ] {
             let pending: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                 "SELECT EXISTS(SELECT 1 FROM {table} s CROSS JOIN _privacy_policy p WHERE p.id=1 AND s.{timestamp}>=? AND s.{timestamp}<? AND julianday(s.{timestamp}) BETWEEN julianday(?) AND julianday(?) AND NOT EXISTS(SELECT 1 FROM _privacy_release r WHERE r.kind=? AND r.id=CAST(s.id AS TEXT) AND r.policy=CAST(p.receipt_key AS TEXT)))")))
@@ -1109,7 +1128,7 @@ impl DatabaseManager {
                 if s.kind == "image" {
                     policy.images
                 } else {
-                    policy.text
+                    policy.text && !is_audio_surface(s.kind)
                 }
             }) {
                 let complete: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _privacy_discovery WHERE kind=? AND policy=? AND complete=1)")

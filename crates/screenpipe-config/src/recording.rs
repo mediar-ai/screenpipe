@@ -1103,7 +1103,6 @@ fn default_pii_redaction_columns() -> Vec<String> {
         "accessibility_text",
         "accessibility_tree",
         "window_name",
-        "audio_transcription",
         "ui_text_content",
         "ui_element_value",
         "ui_window_title",

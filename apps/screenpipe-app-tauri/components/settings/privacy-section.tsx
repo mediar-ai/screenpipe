@@ -363,7 +363,7 @@ function RedactionWherePreview({
             <div className="h-1.5 w-full rounded bg-foreground" />
             <div className="h-1.5 w-4/5 rounded bg-foreground" />
             <div className="text-[9px] text-muted-foreground">
-              Typed text, transcripts &amp; on-screen text — always hidden
+              Typed text &amp; on-screen text — always hidden
             </div>
           </div>
         </div>
@@ -595,7 +595,9 @@ export function PrivacySection() {
   // Where the AI workers run — one switch covers both modalities.
   const piiBackend = (settings.piiBackend as "local" | "tinfoil" | undefined) ?? "local";
   const handlePiiBackendChange = (next: "local" | "tinfoil") => {
-    if (sharingRequiresCloud) return;
+    // Sharing requires the enclave, but keep Cloud selectable so a stale or
+    // partially migrated Local setting can be repaired from this screen.
+    if (sharingRequiresCloud && next !== "tinfoil") return;
     handleSettingsChange({ piiBackend: next } as any, true);
   };
 
@@ -656,7 +658,7 @@ export function PrivacySection() {
   };
 
   // Secrets-only scrub of coding-agent (pi) session logs at rest. Distinct
-  // from the screen/audio PII workers above: agents persist full sessions
+  // from the screen PII workers above: agents persist full sessions
   // (bash output, tool args) unredacted, so credentials land in plaintext on
   // disk. Regex secrets-only + on-device; opt-in, default off.
   const redactAgentSessionSecrets = Boolean(
@@ -670,7 +672,7 @@ export function PrivacySection() {
   };
 
   // WHICH captured columns get scrubbed (orthogonal to the categories
-  // above). Typed text / clipboard / transcripts / window titles /
+  // above). Typed text / clipboard / window titles /
   // on-screen text are always redacted; these extra surfaces are opt-in.
   // Stored as the full list of stable column keys in `piiRedactionColumns`
   // (see `RedactColumns` in screenpipe-redact). The core keys are always
@@ -679,7 +681,6 @@ export function PrivacySection() {
     "accessibility_text",
     "accessibility_tree",
     "window_name",
-    "audio_transcription",
     "ui_text_content",
     "ui_element_value",
     "ui_window_title",
@@ -1460,7 +1461,7 @@ export function PrivacySection() {
                           </span>
                           <span className="text-muted-foreground">
                             {" "}— scrub captured text (OCR, accessibility,
-                            transcripts, typed &amp; clipboard input)
+                            typed &amp; clipboard input)
                           </span>
                         </span>
                       </label>
@@ -1488,11 +1489,16 @@ export function PrivacySection() {
                 </div>
               </div>
             )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Audio and meeting transcripts are excluded from AI redaction,
+              including when synced. Basic pattern filtering remains available.
+            </p>
+
             {(aiPiiRemovalEnabled || sharingRequiresCloud) && (
               <div id="workflow-cloud-redaction" className="mt-3 ml-6 space-y-2 border-l-2 border-border pl-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                   <span className="font-medium text-foreground">Where it runs</span>
-                  <label className={`flex items-center gap-1.5 ${managedPiiBackend ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+                  <label className={`flex items-center gap-1.5 ${managedPiiBackend || sharingRequiresCloud ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
                     <input
                       type="radio"
                       name="piiBackend"
@@ -1507,14 +1513,16 @@ export function PrivacySection() {
                       type="radio"
                       name="piiBackend"
                       checked={piiBackend === "tinfoil"}
-                      disabled={!!managedPiiBackend || sharingRequiresCloud}
+                      disabled={!!managedPiiBackend}
                       onChange={() => handlePiiBackendChange("tinfoil")}
                     />
                     <span className="text-foreground">Cloud (enclave)</span>
                   </label>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {sharingRequiresCloud && <span className="block font-medium">Required while Workflows sharing is on. Turn off sharing above to change it. Shared chats always redact all sensitive categories; the choices below apply to recordings.</span>}
+                  {sharingRequiresCloud && <span className="block font-medium">{piiBackend === "tinfoil"
+                    ? "Cloud redaction is required while Workflows sharing is on. The choices below control redaction in recordings."
+                    : "Workflows sharing requires Cloud (enclave), but this device is still set to Local. Choose Cloud, then apply the change."}</span>}
                   Local stays on-device — strongest privacy, slower on weak
                   hardware. Cloud uses screenpipe&apos;s attested
                   confidential-compute enclave — fast everywhere; your device
@@ -1592,7 +1600,7 @@ export function PrivacySection() {
                     <div className="mt-2 space-y-1.5">
                       <p className="text-[11px] text-muted-foreground">
                         We always scan what you type, your clipboard,
-                        transcripts, window titles, and on-screen text. Turn on
+                        window titles, and on-screen text. Turn on
                         any of these extra places the same info can hide —
                         hover a row to see what it covers.
                       </p>
