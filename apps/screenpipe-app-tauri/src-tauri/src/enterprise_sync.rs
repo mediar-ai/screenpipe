@@ -3172,7 +3172,7 @@ mod imp {
                             result.unwrap().frames,
                             if mutation == 3 {
                                 0
-                            } else if matches!(mutation, 4 | 5) {
+                            } else if mutation == 4 {
                                 2
                             } else {
                                 1
