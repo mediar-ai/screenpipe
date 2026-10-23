@@ -5,6 +5,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Slice } from "prosemirror-model";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
@@ -31,6 +32,7 @@ export function WorkflowRichText({
   className = "",
   fullDocument = false,
   imageUrl,
+  toolbarHost,
 }: {
   value: string;
   onChange?: (value: string) => void;
@@ -40,8 +42,11 @@ export function WorkflowRichText({
   className?: string;
   fullDocument?: boolean;
   imageUrl?: (src: string) => string | null;
+  /** Undefined keeps the inline toolbar; null suppresses it until a shared host is ready. */
+  toolbarHost?: HTMLElement | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView>();
   const current = useRef({ value, onChange, maxLength, imageUrl });
   current.current = { value, onChange, maxLength, imageUrl };
@@ -235,24 +240,25 @@ export function WorkflowRichText({
     { label: "Undo", icon: Undo2, command: undo },
     { label: "Redo", icon: Redo2, command: redo },
   ] : [];
-  return (
-    <div
-      className={`${styles.root} ${className}`}
-      data-testid="procedure-markdown"
-      onFocusCapture={() => setFocusWithin(true)}
-      onBlurCapture={event => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-          setFocusWithin(false);
-      }}
-    >
-      {editable && fullDocument && focusWithin && hasTextSelection && <div className={styles.toolbar} role="toolbar" aria-label={`${label} formatting`}>
+  const toolbar = editable && fullDocument && focusWithin && hasTextSelection ? <div ref={toolbarRef} className={`${styles.toolbar} ${toolbarHost ? styles.embeddedToolbar : ""}`} role={toolbarHost ? "group" : "toolbar"} aria-label={`${label} formatting`}>
         {controls.map(control => <button key={control.label} type="button" aria-label={control.label} title={control.label} aria-pressed={control.active}
           disabled={!view.current || !control.command(view.current.state)}
           onMouseDown={event => event.preventDefault()}
           onClick={() => { const editor = view.current; if (editor) { control.command(editor.state, editor.dispatch, editor); editor.focus(); } }}>
           <control.icon size={15} />
         </button>)}
-      </div>}
+      </div> : null;
+  return (
+    <div
+      className={`${styles.root} ${className}`}
+      data-testid="procedure-markdown"
+      onFocusCapture={() => setFocusWithin(true)}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !toolbarRef.current?.contains(event.relatedTarget as Node | null))
+          setFocusWithin(false);
+      }}
+    >
+      {toolbarHost === undefined ? toolbar : toolbarHost && toolbar ? createPortal(toolbar, toolbarHost) : null}
       <div
         id={id}
         className={!fullDocument && long && !expanded ? styles.collapsed : undefined}
