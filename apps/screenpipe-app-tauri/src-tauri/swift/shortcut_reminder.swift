@@ -207,6 +207,7 @@ struct OverlayNotificationAction: Identifiable, Equatable {
     let label: String
     let primary: Bool
     let payload: String
+    let isMeetingJoin: Bool
     let meetingProvider: MeetingJoinProvider?
     let screenDetailBody: String?
 }
@@ -221,10 +222,13 @@ struct OverlayNotification: Equatable {
     let autoDismissMs: Int?
     let isMeetingJoin: Bool
 
+    static let meetingJoinWidth: CGFloat = 460
+    static let meetingJoinHeight: CGFloat = 124
+
     func size(scale: CGFloat) -> NSSize {
         NSSize(
-            width: (isMeetingJoin ? 460 : kBaseNotificationW) * scale,
-            height: (isMeetingJoin ? 124 : kBaseNotificationH) * scale
+            width: (isMeetingJoin ? Self.meetingJoinWidth : kBaseNotificationW) * scale,
+            height: (isMeetingJoin ? Self.meetingJoinHeight : kBaseNotificationH) * scale
         )
     }
 
@@ -232,18 +236,19 @@ struct OverlayNotification: Equatable {
         actions.first { $0.screenDetailBody != nil }
     }
 
-    /// Both visible meeting buttons join in one click. The screen-detail variant
-    /// replaces the standalone capture action while preserving its eligibility.
+    /// Meeting choices share one light surface. The optional screen-detail
+    /// variant replaces the standalone capture action while preserving eligibility.
     var displayActions: [OverlayNotificationAction] {
         guard isMeetingJoin, let detailAction = screenDetailAction,
-              let join = actions.first(where: { $0.meetingProvider != nil })
+              let join = actions.first(where: { $0.isMeetingJoin })
         else { return actions }
         let combined = joining(join, captureScreenDetail: true)
         return actions.map { action in
             guard action.id == detailAction.id else { return action }
             return OverlayNotificationAction(
                 id: action.id, label: uiText("join + HD"), primary: false,
-                payload: combined.payload, meetingProvider: combined.meetingProvider,
+                payload: combined.payload, isMeetingJoin: combined.isMeetingJoin,
+                meetingProvider: combined.meetingProvider,
                 screenDetailBody: nil
             )
         }
@@ -251,7 +256,7 @@ struct OverlayNotification: Equatable {
 
     /// Compose capture and joining into one dispatch, with capture starting first.
     func joining(_ action: OverlayNotificationAction, captureScreenDetail: Bool) -> OverlayNotificationAction {
-        guard captureScreenDetail, action.meetingProvider != nil,
+        guard captureScreenDetail, action.isMeetingJoin,
               let body = screenDetailAction?.screenDetailBody,
               let bodyData = body.data(using: .utf8),
               let detail = try? JSONSerialization.jsonObject(with: bodyData),
@@ -263,7 +268,8 @@ struct OverlayNotification: Equatable {
               let json = String(data: updated, encoding: .utf8) else { return action }
         return OverlayNotificationAction(
             id: action.id, label: action.label, primary: action.primary,
-            payload: json, meetingProvider: action.meetingProvider, screenDetailBody: nil
+            payload: json, isMeetingJoin: action.isMeetingJoin,
+            meetingProvider: action.meetingProvider, screenDetailBody: nil
         )
     }
 
@@ -298,6 +304,7 @@ struct OverlayNotification: Equatable {
                 label: label,
                 primary: (action["primary"] as? Bool) ?? false,
                 payload: payload,
+                isMeetingJoin: action["type"] as? String == "meeting_join",
                 meetingProvider: action["type"] as? String == "meeting_join"
                     ? MeetingJoinProvider.from(url: action["url"] as? String ?? "")
                     : nil,
@@ -1670,6 +1677,8 @@ private struct DockStatusCell<Content: View>: View {
 @available(macOS 13.0, *)
 private struct OverlayNotificationView: View {
     @ObservedObject private var uiLocalization = UILocalization.shared
+    @State private var hoveredJoinButton: String?
+    @State private var hoveringDismiss = false
     let notification: OverlayNotification
     let scale: CGFloat
     let onAction: (OverlayNotificationAction) -> Void
@@ -1701,9 +1710,10 @@ private struct OverlayNotificationView: View {
         VStack(alignment: .leading, spacing: s(8)) {
             HStack(alignment: .top, spacing: s(10)) {
                 Image(systemName: "video.fill")
-                    .font(.system(size: 16 * scale, weight: .medium))
+                    .font(.system(size: 20 * scale, weight: .medium))
                     .foregroundColor(.white.opacity(0.75))
-                    .frame(height: s(24))
+                    .frame(width: s(20), height: s(24))
+                    .padding(.top, s(3))
                 VStack(alignment: .leading, spacing: s(4)) {
                     Text(notification.title)
                         .font(Brand.swiftUIMonoFont(size: 14 * scale, weight: .semibold))
@@ -1732,14 +1742,9 @@ private struct OverlayNotificationView: View {
     /// and its label explicitly includes joining rather than a recording toggle.
     @ViewBuilder
     private var meetingJoinActions: some View {
-        if let join = notification.actions.first(where: { $0.meetingProvider != nil }),
-           let detailID = notification.screenDetailAction?.id,
-           let detail = notification.displayActions.first(where: { $0.id == detailID }) {
-            ForEach(orderedActions.filter { $0.id != join.id && $0.id != detailID }) { action in
-                Button(action.label) { onAction(action) }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.white.opacity(0.88))
-            }
+        if let join = notification.actions.first(where: { $0.isMeetingJoin }) {
+            let detailID = notification.screenDetailAction?.id
+            let detail = detailID.flatMap { id in notification.displayActions.first(where: { $0.id == id }) }
             HStack(spacing: 0) {
                 Button(action: { onAction(join) }) {
                     HStack(spacing: s(7)) {
@@ -1753,36 +1758,48 @@ private struct OverlayNotificationView: View {
                                     .accessibilityHidden(true)
                             } else {
                                 Image(systemName: "video.fill")
-                                    .font(.system(size: 16 * scale))
+                                    .font(.system(size: 18 * scale))
                                     .frame(width: s(18), height: s(18))
                                     .accessibilityHidden(true)
                             }
+                        } else {
+                            Image(systemName: "video.fill")
+                                .font(.system(size: 18 * scale))
+                                .frame(width: s(18), height: s(18))
+                                .accessibilityHidden(true)
                         }
                         Text(join.label)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                     .padding(.horizontal, s(12))
                     .frame(height: s(36))
+                    .background(hoveredJoinButton == "join" ? Color.black.opacity(0.08) : Color.clear)
                     .contentShape(Rectangle())
                 }
-                Rectangle()
-                    .fill(Color.black.opacity(0.15))
-                    .frame(width: 1, height: s(20))
-                    .accessibilityHidden(true)
-                Button(action: { onAction(detail) }) {
-                    Text(detail.label)
-                        .padding(.horizontal, s(12))
-                        .frame(height: s(36))
-                        .contentShape(Rectangle())
+                .onHover { hovered in hoveredJoinButton = hovered ? "join" : nil }
+                if let detail {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.15))
+                        .frame(width: 1, height: s(20))
+                        .accessibilityHidden(true)
+                    Button(action: { onAction(detail) }) {
+                        Text(uiText("join + HD"))
+                            .padding(.horizontal, s(12))
+                            .frame(height: s(36))
+                            .background(hoveredJoinButton == "hd" ? Color.black.opacity(0.08) : Color.clear)
+                            .contentShape(Rectangle())
+                    }
+                    .onHover { hovered in hoveredJoinButton = hovered ? "hd" : nil }
+                    .help(uiText("Join and take notes with HD screen recording: more frequent screenshots for smoother replay. Uses more storage."))
+                    .accessibilityLabel(uiText("Join and take notes with HD screen recording"))
                 }
-                .help(uiText("Join and take notes with HD screen recording: more frequent screenshots for smoother replay. Uses more storage."))
-                .accessibilityLabel(uiText("Join and take notes with HD screen recording"))
             }
             .font(Brand.swiftUIMonoFont(size: 13 * scale, weight: .medium))
             .foregroundColor(.black)
             .buttonStyle(.plain)
             .background(Color.white.opacity(0.92))
             .clipShape(RoundedRectangle(cornerRadius: s(6)))
-            .fixedSize()
         } else {
             actionButtons
         }
@@ -1864,9 +1881,12 @@ private struct OverlayNotificationView: View {
                 .font(.system(size: (notification.isMeetingJoin ? 11 : 8) * scale, weight: .semibold))
                 .foregroundColor(.white.opacity(0.55))
                 .frame(width: s(notification.isMeetingJoin ? 24 : 14), height: s(notification.isMeetingJoin ? 24 : 22))
+                .background(hoveringDismiss && notification.isMeetingJoin ? Color.white.opacity(0.10) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: s(5)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hoveringDismiss = $0 }
         .accessibilityLabel(uiText("dismiss notification"))
     }
 }

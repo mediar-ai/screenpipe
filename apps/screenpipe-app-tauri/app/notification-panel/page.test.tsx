@@ -169,6 +169,16 @@ describe("meeting join notification delivery", () => {
     expect(bridge.execute).toHaveBeenCalledWith(expect.objectContaining({ type: "meeting_join", url: meeting.actions[0].url, screen_detail: { boundTo: "prewarm_pending" } }), expect.anything());
     expect(screen.queryByRole("button", { name: "Notification options" })).toBeNull();
   });
+  it("dismisses immediately while the join action is still running", async () => {
+    let finish!: () => void;
+    bridge.execute.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<NotificationPanelPage />);
+    await deliver(meeting);
+    fireEvent.click(screen.getByRole("button", { name: "Join and take notes with HD screen recording" }));
+    await waitFor(() => expect(bridge.hide).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("region", { name: "Meeting starting" })).toBeNull();
+    await act(async () => finish());
+  });
   it("shows capture failure only after closing the join card", async () => {
     bridge.execute.mockImplementationOnce(async (_action, context) => context.onScreenDetailError());
     render(<NotificationPanelPage />);

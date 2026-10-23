@@ -14,6 +14,22 @@ const actions: NotificationAction[] = [
 const props = { title: "meeting starting in 1 min", body: "Weekly team sync", actions, onDismiss: vi.fn() };
 
 describe("shared desktop join card", () => {
+  it("keeps the shared footprint, scaled geometry, and action surface with or without HD", () => {
+    const { container, rerender } = render(<MeetingJoinNotification {...props} onAction={vi.fn()} />);
+    const card = screen.getByRole("region", { name: "Meeting starting" });
+    expect(card).toHaveStyle({ width: "460px", height: "124px" });
+    const controls = container.querySelector(".meeting-join-controls");
+    expect(controls).toHaveStyle({ borderRadius: "6px", background: "rgb(235, 235, 235)" });
+
+    for (const scale of [1, 1.5, 2]) {
+      rerender(<MeetingJoinNotification {...props} scale={scale} onAction={vi.fn()} />);
+      expect((container.firstElementChild as HTMLDivElement).style.transform).toBe(`scale(${scale})`);
+    }
+    rerender(<MeetingJoinNotification {...props} actions={[actions[0]]} onAction={vi.fn()} />);
+    expect(container.querySelector(".meeting-join-controls")).toHaveStyle({
+      borderRadius: "6px", background: "rgb(235, 235, 235)",
+    });
+  });
   it("joins normally in one click without starting HD", async () => {
     const onAction = vi.fn().mockResolvedValue(undefined);
     render(<MeetingJoinNotification {...props} onAction={onAction} />);
@@ -40,6 +56,16 @@ describe("shared desktop join card", () => {
     render(<MeetingJoinNotification {...props} actions={[actions[0]]} onAction={vi.fn()} />);
     expect(screen.queryByText("join + HD")).toBeNull();
     expect(meetingJoinChoices([actions[0], { ...actions[1], url: "/unrelated" }])?.hd).toBeNull();
+  });
+  it("keeps the HD choice visible while truncating a long join label", () => {
+    const longLabel = "join and take notes for the quarterly planning meeting";
+    render(<MeetingJoinNotification {...props}
+      actions={[{ ...actions[0], label: longLabel }, actions[1]]} onAction={vi.fn()} />);
+    const joinButton = screen.getByRole("button", { name: longLabel });
+    expect(joinButton.style.minWidth).toBe("0");
+    expect(joinButton.style.flexGrow).toBe("1");
+    expect(joinButton.querySelector("span")).toHaveStyle({ overflow: "hidden", textOverflow: "ellipsis" });
+    expect(screen.getByRole("button", { name: "Join and take notes with HD screen recording" })).toBeInTheDocument();
   });
   it.each([
     ["https://meet.google.com/example", "googleMeet"], ["https://us02web.zoom.us/j/1", "zoom"],

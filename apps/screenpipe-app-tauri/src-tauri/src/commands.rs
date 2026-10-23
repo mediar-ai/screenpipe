@@ -4074,7 +4074,35 @@ pub(crate) fn notification_belongs_to_overlay(notification_type: Option<&str>) -
     matches!(notification_type, Some("meeting"))
 }
 
-/// Join cards share a compact landscape surface on every platform.
+/// The webview fallback uses the same logical bounds as the native SwiftUI card.
+const MEETING_JOIN_NOTIFICATION_WIDTH: f64 = 460.0;
+const MEETING_JOIN_NOTIFICATION_HEIGHT: f64 = 124.0;
+
+fn shortcut_overlay_scale(size: &str) -> f64 {
+    match size {
+        "large" => 2.0,
+        "medium" => 1.5,
+        _ => 1.0,
+    }
+}
+
+fn meeting_join_notification_size(scale: f64) -> (f64, f64) {
+    (
+        MEETING_JOIN_NOTIFICATION_WIDTH * scale,
+        MEETING_JOIN_NOTIFICATION_HEIGHT * scale,
+    )
+}
+
+fn meeting_join_notification_payload(payload: &str, scale: f64) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(payload) else {
+        return payload.to_owned();
+    };
+    if let Some(object) = value.as_object_mut() {
+        object.insert("overlayScale".to_owned(), serde_json::json!(scale));
+    }
+    serde_json::to_string(&value).unwrap_or_else(|_| payload.to_owned())
+}
+
 fn notification_is_meeting_join(payload: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(payload)
         .ok()
@@ -4093,6 +4121,25 @@ fn notification_is_meeting_join(payload: &str) -> bool {
 #[cfg(test)]
 mod meeting_join_notification_tests {
     use super::notification_is_meeting_join;
+
+    #[test]
+    fn meeting_join_panel_uses_shared_logical_bounds() {
+        let expected = [
+            ("small", 460.0, 124.0),
+            ("medium", 690.0, 186.0),
+            ("large", 920.0, 248.0),
+        ];
+        for (size, width, height) in expected {
+            let scale = super::shortcut_overlay_scale(size);
+            assert_eq!(super::meeting_join_notification_size(scale), (width, height));
+            let payload = super::meeting_join_notification_payload(
+                r#"{"id":"meeting","actions":[]}"#,
+                scale,
+            );
+            let value: serde_json::Value = serde_json::from_str(&payload).unwrap();
+            assert_eq!(value["overlayScale"].as_f64(), Some(scale));
+        }
+    }
 
     #[test]
     fn meeting_join_uses_typed_action_instead_of_localized_copy() {
@@ -4256,10 +4303,24 @@ pub(crate) async fn deliver_notification_panel(
         }
     }
 
+    let overlay_scale = if meeting_join {
+        let size = crate::store::SettingsStore::get(&app_handle)
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .shortcut_overlay_size;
+        shortcut_overlay_scale(&size)
+    } else {
+        1.0
+    };
     let (window_width, window_height) = if meeting_join {
-        (460.0, 124.0)
+        meeting_join_notification_size(overlay_scale)
     } else {
         (340.0, 380.0)
+    };
+    let panel_payload = if meeting_join {
+        meeting_join_notification_payload(&payload, overlay_scale)
+    } else {
+        payload.clone()
     };
 
     // Position at top-right of the screen where the cursor is
@@ -4317,7 +4378,7 @@ pub(crate) async fn deliver_notification_panel(
             .set_size(tauri::LogicalSize::new(window_width, window_height))
             .map_err(|e| e.to_string())?;
         let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
-        let _ = app_handle.emit_to(label, "notification-panel-update", &payload);
+        let _ = app_handle.emit_to(label, "notification-panel-update", &panel_payload);
 
         // On macOS, skip window.show() — it calls makeKeyAndOrderFront which
         // steals focus from the user's current app. Use orderFront: on the
@@ -4460,7 +4521,7 @@ pub(crate) async fn deliver_notification_panel(
 
     // Wait for webview to mount React and register event listeners before emitting
     let app_clone = app_handle.clone();
-    let payload_clone = payload.clone();
+    let payload_clone = panel_payload;
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         info!("Emitting notification-panel-update event");
