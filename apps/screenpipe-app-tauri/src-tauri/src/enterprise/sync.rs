@@ -5285,7 +5285,12 @@ pub(crate) mod tests {
         }
 
         let dir = TempDir::new().unwrap();
-        let cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", server.uri()));
+        let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", server.uri()));
+        if cause.is_some() {
+            // The caller reopens and recollects after this helper returns.
+            // Keep the production-retained failure in its surviving directory.
+            cfg.cursor_path = log_dir.join("cursor.json");
+        }
         let cursor_path = cfg.cursor_path.clone();
         let mut diagnostic_cfg = cfg.clone();
         diagnostic_cfg.log_dirs = vec![log_dir.to_path_buf()];
