@@ -14,6 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
 describe("passive team identity", () => {
   it("uses membership identity independently of plan and never creates invites", async () => {
     const fetcher = vi
@@ -63,6 +64,7 @@ describe("passive team identity", () => {
   it("does not read personal teams for enterprise, hidden, or signed-out states", () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
+    Object.assign(build, { isEnterprise: true });
     const enterprise = renderHook(() =>
       useTeamSummary({ ...base, enterprise: true, orgName: "Northstar" }),
     );
@@ -74,6 +76,7 @@ describe("passive team identity", () => {
       useTeamSummary({ ...base, enabled: false }),
     );
     expect(hidden.result.current).toBeUndefined();
+    Object.assign(build, { isEnterprise: false });
     const signedOut = renderHook(() =>
       useTeamSummary({ ...base, token: null }),
     );
@@ -134,29 +137,28 @@ describe("passive team identity", () => {
     unmount();
   });
 });
-
-describe("Enterprise app visibility", () => {
+describe("Unified app team visibility", () => {
   it.each([
-    { isEnterprise: true, resolved: true, error: false },
     { isEnterprise: false, resolved: false, error: false },
     { isEnterprise: false, resolved: false, error: true },
-  ])("hides the shared Chat/Workflows entry and skips lookup for %j", (status) => {
+  ])("waits for the build check before showing a signed-out consumer entry %j", (status) => {
     Object.assign(build, status);
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
-    const { result } = renderHook(() => useTeamSummary(base));
+    const { result } = renderHook(() => useTeamSummary({ ...base, token: null }));
     expect(result.current).toBeUndefined();
     expect(fetcher).not.toHaveBeenCalled();
   });
-  it("removes a previously resolved team when the build is Enterprise", async () => {
+
+  it("keeps a resolved B2C team when build status changes to Enterprise", async () => {
     const fetcher = vi.fn().mockResolvedValue(reply({ id: "studio", name: "Studio" }));
     vi.stubGlobal("fetch", fetcher);
     const { result, rerender } = renderHook(() => useTeamSummary(base));
     await waitFor(() => expect(result.current?.label).toBe("Studio"));
     Object.assign(build, { isEnterprise: true });
     rerender();
-    expect(result.current).toBeUndefined();
+    expect(result.current?.label).toBe("Studio");
     act(() => window.dispatchEvent(new Event("focus")));
-    expect(fetcher).toHaveBeenCalledOnce();
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
   });
 });
