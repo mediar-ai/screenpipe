@@ -3187,24 +3187,16 @@ mod imp {
                     drop(local);
                     db.close().await;
                     drop(db);
-                    let db = Arc::new(if hybrid {
-                        let mut options = screenpipe_db::storage::MigrationOptions::default();
-                        options.budget.disk_reserve_bytes = 0;
-                        screenpipe_db::DatabaseManager::new_hybrid(
-                            dir.path(),
-                            Default::default(),
-                            options,
-                        )
-                        .await
-                        .unwrap()
-                    } else {
+                    // Reopen an existing logical root through the normal
+                    // startup path; new_hybrid initializes an empty root.
+                    let db = Arc::new(
                         screenpipe_db::DatabaseManager::new(
                             dir.path().join("db.sqlite").to_str().unwrap(),
                             Default::default(),
                         )
                         .await
-                        .unwrap()
-                    });
+                        .unwrap(),
+                    );
                     let capture = db
                         .frame_payloads(&[3], screenpipe_db::storage::Projection::All)
                         .await
