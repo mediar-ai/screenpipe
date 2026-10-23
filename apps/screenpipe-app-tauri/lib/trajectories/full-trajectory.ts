@@ -28,16 +28,25 @@ type Ports = {
 // Remove recordings and credential fields before even the local outbox write.
 // Text and tool arguments/results still pass through strict attested redaction.
 export function contributionText(value: unknown): string {
-  return JSON.stringify(value, function (key, item) {
+  const text = JSON.stringify(value, function (key, item) {
     if (/^(authorization|cookie|password|(?:api|access|refresh|client)?[_-]?(?:key|token|secret))$/i.test(key)) return "[CREDENTIAL OMITTED]";
     if (item && typeof item === "object" && /^(image|image_url|input_image|audio|input_audio|video|file)$/i.test(item.type ?? "")) {
       return { type: item.type, omitted: "recording" };
     }
-    if (typeof item === "string") return item.replace(/data:(?:image|audio|video)\/[^;]+;base64,[A-Za-z0-9+/=]+/g, "[RECORDING OMITTED]")
-      .replace(/\S+/gu, token => Array.from(token).length > redactionContract.maxInputCharacters - redactionContract.prefix.length
-        ? "[OVERSIZED TOKEN REDACTED]" : token);
+    if (typeof item === "string") return item.replace(/data:(?:image|audio|video)\/[^;]+;base64,[A-Za-z0-9+/=]+/g, "[RECORDING OMITTED]");
     return item;
   }, 2);
+  // Count the encoded token, including escaped tabs/newlines and string/key
+  // punctuation. Replace only string contents so an oversized token never
+  // corrupts JSON and strands the rest of an otherwise valid conversation.
+  const capacity = redactionContract.maxInputCharacters - redactionContract.prefix.length;
+  return text.replace(/"(?:\\.|[^"\\])*"[:,]?/gu, literal => {
+    if (literal.split(" ").every(token => Array.from(token).length <= capacity)) return literal;
+    const closingQuote = literal.lastIndexOf('"');
+    const suffix = literal.slice(closingQuote);
+    return '"' + literal.slice(1, closingQuote).replace(/[^ ]+/gu, token =>
+      Array.from('"' + token + suffix).length > capacity ? "[OVERSIZED TOKEN REDACTED]" : token) + suffix;
+  });
 }
 
 // This is the enclave's published 100000-character /filter boundary minus

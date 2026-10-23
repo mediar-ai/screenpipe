@@ -165,6 +165,10 @@ describe("full Workflows trajectory collection", () => {
     ] });
     expect(text).toContain("Keep this text"); expect(text).not.toContain("PRIVATE"); expect(text).not.toContain("base64");
     expect([...redactionSegments("a".repeat(100000))]).toEqual(["[OVERSIZED TOKEN REDACTED] "]);
+    // JSON escapes can join otherwise separate lines into one service token.
+    const encoded = contributionText({ text: "word\n".repeat(25000), keep: "Remaining conversation" });
+    expect(JSON.parse(encoded)).toEqual({ text: "[OVERSIZED TOKEN REDACTED]", keep: "Remaining conversation" });
+    expect([...redactionSegments(encoded)].join("")).toBe(encoded);
   });
   it("preserves upload failure and progress in the normal redacted support evidence", async () => {
     browserLogs.reset(); support.write.mockClear();
