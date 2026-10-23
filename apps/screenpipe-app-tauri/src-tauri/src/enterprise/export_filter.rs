@@ -182,12 +182,12 @@ impl ExportRows<'_> {
     /// processing queue; a later completion has its own delivery sequence.
     pub async fn refresh_protected(
         &mut self,
-        db: &screenpipe_db::DatabaseManager,
+        db: &std::sync::Arc<screenpipe_db::DatabaseManager>,
         local: &dyn LocalApiClient,
     ) -> Result<(), EnterpriseSyncError> {
         async fn refresh<T: serde::de::DeserializeOwned + Clone>(
             rows: &mut Vec<T>,
-            db: &screenpipe_db::DatabaseManager,
+            db: &std::sync::Arc<screenpipe_db::DatabaseManager>,
             kind: &str,
             key: impl Fn(&T) -> String,
         ) -> Result<(), EnterpriseSyncError> {

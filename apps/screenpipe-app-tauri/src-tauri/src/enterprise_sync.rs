@@ -386,16 +386,8 @@ mod imp {
                         cause: e.to_string(),
                     }
                 })?;
-                let protected =
-                    self.db
-                        .protected_reads()
-                        .await
-                        .map_err(|e| EnterpriseSyncError::Storage {
-                            operation: "open protected export",
-                            cause: e.to_string(),
-                        })?;
                 let selected_records = rows.record_count();
-                rows.refresh_protected(&protected, local).await?;
+                rows.refresh_protected(&self.db, local).await?;
                 let retained_records = rows.record_count();
                 drop(fresh.admit(&self.db.pool).await.map_err(|e| {
                     EnterpriseSyncError::Storage {
@@ -2896,6 +2888,17 @@ mod imp {
                 for job in db.release_pending("frames", 10).await.unwrap() {
                     assert!(db.publish_release(&job, &job.values).await.unwrap());
                 }
+                let protected = db.protected_reads().await.unwrap();
+                let reused = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                {
+                    let mut conn = protected.pool.acquire().await.unwrap();
+                    let mut handle = conn.lock_handle().await.unwrap();
+                    let observed = reused.clone();
+                    handle.set_progress_handler(1, move || {
+                        observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        true
+                    });
+                }
                 let export = StorageExport::begin_storage(db.clone()).await.unwrap();
                 let mut frames = vec![FrameRow {
                     frame_id: 1,
@@ -2931,6 +2934,8 @@ mod imp {
                 // A revoked record waits for a new completion; the certified
                 // survivor continues without reading any raw source API.
                 export.filter(&mut rows, &Protected).await.unwrap();
+                assert!(reused.load(std::sync::atomic::Ordering::SeqCst) > 0,
+                    "refresh must reuse the existing protected reader, not allocate a pool per chunk");
                 assert_eq!(rows.frames.len(), 1);
                 assert_eq!(rows.frames[0].frame_id, 2);
                 assert_eq!(rows.frames[0].text.as_deref(), Some("survivor"));

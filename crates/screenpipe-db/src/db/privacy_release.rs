@@ -842,7 +842,11 @@ impl DatabaseManager {
         }
         registry.push(pool.clone());
         drop(registry);
-        Ok(Arc::new(Self {
+        Ok(self.protected_read_adapter(pool))
+    }
+
+    fn protected_read_adapter(self: &Arc<Self>, pool: SqlitePool) -> Arc<Self> {
+        Arc::new(Self {
             release_owner: Some(Arc::clone(self)),
             release_read_pools: Arc::clone(&self.release_read_pools),
             storage: self.storage.clone(),
@@ -856,7 +860,7 @@ impl DatabaseManager {
             persistent_failure_hook: self.persistent_failure_hook.clone(),
             manager_lease: None,
             close_token: self.close_token.clone(),
-        }))
+        })
     }
 
     /// Revokes assembled uploads only when already released content or the
@@ -1046,6 +1050,36 @@ impl DatabaseManager {
     /// Refresh only selected IDs through current completion receipts. Never
     /// replace a processed export with a raw source, or enroll new captures.
     pub async fn refresh_release_export_selection(
+        self: &Arc<Self>,
+        kind: &str,
+        ids: &[String],
+    ) -> Result<serde_json::Value, sqlx::Error> {
+        if self.close_token.is_cancelled() {
+            return Err(sqlx::Error::PoolClosed);
+        }
+        let reader = if self.protected_reads_enabled() {
+            Arc::clone(self)
+        } else {
+            // API admission already registered its protected pool. Reuse it
+            // across chunks/ticks instead of accumulating a pool per refresh.
+            let existing = self
+                .release_read_pools
+                .lock()
+                .await
+                .iter()
+                .find(|pool| !pool.is_closed())
+                .cloned();
+            match existing {
+                Some(pool) => self.protected_read_adapter(pool),
+                None => self.protected_reads().await?,
+            }
+        };
+        reader
+            .refresh_release_export_selection_inner(kind, ids)
+            .await
+    }
+
+    async fn refresh_release_export_selection_inner(
         &self,
         kind: &str,
         ids: &[String],
