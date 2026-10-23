@@ -575,9 +575,7 @@ mod tests {
             .await
             .unwrap();
         assert!(report.contains("privacy revision changed"));
-        assert!(
-            report.contains("certified survivors retained; unready or deleted records excluded")
-        );
+        assert!(report.contains("certified survivors retained; stale selections excluded"));
         assert!(report.contains("selected_records="));
         assert!(report.contains("retained_records="));
         assert!(report.contains("recorder restarted"));

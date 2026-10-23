@@ -189,12 +189,12 @@ impl ExportRows<'_> {
             rows: &mut Vec<T>,
             db: &std::sync::Arc<screenpipe_db::DatabaseManager>,
             kind: &str,
-            key: impl Fn(&T) -> String,
+            key: impl Fn(&T) -> (String, String),
         ) -> Result<(), EnterpriseSyncError> {
             if rows.is_empty() {
                 return Ok(());
             }
-            let ids = rows.iter().map(&key).collect::<Vec<_>>();
+            let ids = rows.iter().map(|row| key(row).0).collect::<Vec<_>>();
             let current = db
                 .refresh_release_export_selection(kind, &ids)
                 .await
@@ -218,13 +218,36 @@ impl ExportRows<'_> {
             });
             Ok(())
         }
-        refresh(self.frames, db, "frames", |r| r.frame_id.to_string()).await?;
-        refresh(self.audio, db, "audio", |r| r.transcription_id.to_string()).await?;
-        refresh(self.ui, db, "input", |r| r.event_id.to_string()).await?;
-        refresh(self.memories, db, "memory", |r| r.memory_id.to_string()).await?;
-        refresh(self.parsed, db, "parsed", |r| r.frame_id.to_string()).await?;
-        refresh(self.activities, db, "activities", |r| r.activity_id.clone()).await?;
-        refresh(self.feedback, db, "feedback", |r| r.feedback_id.clone()).await?;
+        // A changed time belongs to a later completion/eligible range scan.
+        // Do not move an already selected ID across its enrollment boundary.
+        refresh(self.frames, db, "frames", |r| {
+            (r.frame_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.audio, db, "audio", |r| {
+            (r.transcription_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.ui, db, "input", |r| {
+            (r.event_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.memories, db, "memory", |r| {
+            (r.memory_id.to_string(), r.created_at.clone())
+        })
+        .await?;
+        refresh(self.parsed, db, "parsed", |r| {
+            (r.frame_id.to_string(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.activities, db, "activities", |r| {
+            (r.activity_id.clone(), r.timestamp.clone())
+        })
+        .await?;
+        refresh(self.feedback, db, "feedback", |r| {
+            (r.feedback_id.clone(), r.updated_at.clone())
+        })
+        .await?;
         // Image reads already enforce their independent receipt and original
         // frame identity. Starred intervals carry structural fields only.
         ExportRows {

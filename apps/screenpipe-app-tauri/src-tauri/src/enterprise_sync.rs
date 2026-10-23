@@ -415,7 +415,7 @@ mod imp {
                     cause,
                     selected_records,
                     retained_records,
-                    outcome = "certified survivors retained; unready or deleted records excluded",
+                    outcome = "certified survivors retained; stale selections excluded",
                     "enterprise export refreshed after record revocation"
                 );
                 return Ok(Default::default());
@@ -3043,12 +3043,15 @@ mod imp {
                                 "UPDATE frames SET full_text='UNPROCESSED_PRIVATE_EDIT' WHERE id=1",
                             ),
                             3 => Some("DELETE FROM frames WHERE id IN (1,2)"),
+                            5 => Some(
+                                "UPDATE frames SET timestamp='2026-10-21T01:00:00Z' WHERE id=1",
+                            ),
                             _ => None,
                         };
                         if let Some(sql) = sql {
                             self.db.execute_raw_sql_write(sql).await.unwrap();
                         }
-                        if mutation == 4 {
+                        if matches!(mutation, 4 | 5) {
                             let job = self
                                 .db
                                 .release_pending("frames", 10)
@@ -3085,7 +3088,7 @@ mod imp {
                 }
             }
             for hybrid in [false, true] {
-                for mutation in 1..=4 {
+                for mutation in 1..=5 {
                     let dir = tempfile::tempdir().unwrap();
                     let db = Arc::new(if hybrid {
                         let mut options = screenpipe_db::storage::MigrationOptions::default();
@@ -3169,7 +3172,7 @@ mod imp {
                             result.unwrap().frames,
                             if mutation == 3 {
                                 0
-                            } else if mutation == 4 {
+                            } else if matches!(mutation, 4 | 5) {
                                 2
                             } else {
                                 1
@@ -3190,6 +3193,7 @@ mod imp {
                             "new captures stay outside the selected page"
                         );
                         assert!(body.contains("certified survivor"));
+                        assert!(!body.contains("2026-10-21"), "a corrected time outside the cutoff is not authorized by the old selection");
                     }
                     // Source edits remain pending after the surviving page was
                     // acknowledged. Close/reopen both the DB and checkpoint,
