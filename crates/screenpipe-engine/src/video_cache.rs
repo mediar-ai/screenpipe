@@ -773,8 +773,8 @@ async fn extract_frame(
         "12",
         "-qmax",
         "15",
-        "-vsync",
-        "0",
+        "-fps_mode",
+        "passthrough",
         "-threads",
         "1",         // Limit to single thread
         "-cpu-used", // Faster encoding
@@ -949,8 +949,8 @@ async fn extract_frames_individually(
             video_file_path,
             "-vf",
             &format!("select=eq(n\\,{offset}),format=yuv420p,scale=iw*0.8:ih*0.8"),
-            "-vsync",
-            "0",
+            "-fps_mode",
+            "passthrough",
             "-frames:v",
             "1",
             "-f",
