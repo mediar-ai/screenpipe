@@ -2804,6 +2804,10 @@ mod imp {
             }
             #[async_trait::async_trait]
             impl LocalApiClient for CapturingLocal {
+                async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                    Ok(self.change == 5)
+                }
+
                 async fn begin_export(
                     &self,
                 ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
@@ -2855,7 +2859,7 @@ mod imp {
                                     .await
                                     .unwrap();
                             }
-                            4 => {
+                            4 | 5 => {
                                 let chunk = self
                                     .db
                                     .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
@@ -2881,7 +2885,7 @@ mod imp {
                     Ok(Vec::new())
                 }
             }
-            for (change, hybrid) in (0..5).flat_map(|change| [(change, false), (change, true)]) {
+            for (change, hybrid) in (0..6).flat_map(|change| [(change, false), (change, true)]) {
                 let dir = tempfile::tempdir().unwrap();
                 let db = Arc::new(if hybrid {
                     // Synthetic export fixture; disk admission is covered by
@@ -2904,8 +2908,23 @@ mod imp {
                     .unwrap()
                 });
                 db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload'),(2,'2026-10-09','surviving record')").await.unwrap();
-                if change == 4 {
+                if change >= 4 {
                     db.execute_raw_sql_write("UPDATE frames SET snapshot_path='redacted.jpg',full_text_redacted_at=1,image_redacted_at=1 WHERE id=1").await.unwrap();
+                }
+                if change == 5 {
+                    db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                        identity: "compaction-image-v1".into(),
+                        text: false,
+                        images: true,
+                    })
+                    .await
+                    .unwrap();
+                    let image = db.release_pending("image", 1).await.unwrap().remove(0);
+                    assert_eq!(image.id, "2");
+                    assert!(db.publish_image_release(&image).await.unwrap());
+                    let image = db.release_pending("image", 1).await.unwrap().remove(0);
+                    assert_eq!(image.id, "1");
+                    assert!(db.publish_image_release(&image).await.unwrap());
                 }
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
@@ -2942,10 +2961,10 @@ mod imp {
                         !body.contains("new capture"),
                         "new rows belong to the next page"
                     );
-                    assert_eq!(body.contains("pending upload"), matches!(change, 0 | 4));
+                    assert_eq!(body.contains("pending upload"), matches!(change, 0 | 4 | 5));
                     assert_eq!(body.contains("[REDACTED]"), change == 2);
                 }
-                if hybrid && change == 4 {
+                if (hybrid && change == 4) || change == 5 {
                     assert_eq!(
                         local.reads.load(std::sync::atomic::Ordering::SeqCst),
                         1,

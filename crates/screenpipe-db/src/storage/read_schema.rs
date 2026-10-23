@@ -7,6 +7,10 @@
 use super::{storage_error, HybridStorage};
 use sqlx::{Connection, Row, SqliteConnection};
 
+/// The compaction writer replaces a JPEG locator with its video locator while
+/// preserving the captured image. Privacy receipts use the same exception.
+pub(crate) const SNAPSHOT_MEDIA_RELOCATION: &str = "OLD.snapshot_path IS NOT NULL AND NEW.snapshot_path IS NULL AND NEW.video_chunk_id IS NOT NULL AND OLD.video_chunk_id IS NOT NEW.video_chunk_id";
+
 const REVOCATION: &str = r#"
 CREATE TABLE IF NOT EXISTS _storage_revocation(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);
 INSERT OR IGNORE INTO _storage_revocation VALUES(1,0);
@@ -167,23 +171,29 @@ async fn upgrade_export_revocation(conn: &mut SqliteConnection) -> Result<bool, 
                 &revocation(&name, true),
             )
         };
-        let sql = if name == "hybrid_read_revoke_redaction_frames"
-            && !sql.contains("AFTER UPDATE OF")
-        {
-            // UPDATE OF matters: a repeated image watermark in the same second
-            // still revokes, even if a statement also relocates its media.
-            let content = sql.replace(
-                "AFTER UPDATE ON",
-                &format!("AFTER UPDATE OF {content_updates} ON"),
-            );
-            let media_name = "hybrid_read_revoke_media_frames";
-            let media = sql.replace(&name, media_name)
-                .replace("AFTER UPDATE ON", &format!("AFTER UPDATE OF {} ON", MEDIA.join(",")))
-                .replace(" BEGIN ", " AND NOT (OLD.snapshot_path IS NOT NULL AND NEW.snapshot_path IS NULL AND NEW.video_chunk_id IS NOT NULL AND OLD.video_chunk_id IS NOT NEW.video_chunk_id) BEGIN ");
-            format!("{content}; {media}")
-        } else {
-            sql
-        };
+        let sql =
+            if name == "hybrid_read_revoke_redaction_frames" && !sql.contains("AFTER UPDATE OF") {
+                // UPDATE OF matters: a repeated image watermark in the same second
+                // still revokes, even if a statement also relocates its media.
+                let content = sql.replace(
+                    "AFTER UPDATE ON",
+                    &format!("AFTER UPDATE OF {content_updates} ON"),
+                );
+                let media_name = "hybrid_read_revoke_media_frames";
+                let media = sql
+                    .replace(&name, media_name)
+                    .replace(
+                        "AFTER UPDATE ON",
+                        &format!("AFTER UPDATE OF {} ON", MEDIA.join(",")),
+                    )
+                    .replace(
+                        " BEGIN ",
+                        &format!(" AND NOT ({SNAPSHOT_MEDIA_RELOCATION}) BEGIN "),
+                    );
+                format!("{content}; {media}")
+            } else {
+                sql
+            };
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "DROP TRIGGER \"{}\"; {sql}",
             name.replace('"', "\"\"")
