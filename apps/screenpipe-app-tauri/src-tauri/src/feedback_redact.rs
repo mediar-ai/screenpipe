@@ -453,8 +453,7 @@ mod tests {
     }
 }
 
-/// Strict contribution redaction. No regex-only fallback, no content-bearing
-/// errors or capture settings. The enclave windows long inputs with overlap.
+// Strict contribution redaction uses the enclave's overlapping token windows.
 static CONTRIBUTION_REDACTION: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
     serde_json::from_str(include_str!(
         "../../lib/trajectories/redaction-contract.json"
@@ -475,6 +474,8 @@ fn contribution_fits_enclave(text: &str) -> bool {
                 .unwrap() as usize
 }
 
+/// Strict contribution redaction. No regex-only fallback, no content-bearing
+/// errors, no capture settings, and no chunk boundaries through identifiers.
 #[tauri::command]
 #[specta::specta]
 pub async fn redact_workflow_contribution(text: String) -> Result<String, String> {
