@@ -45,6 +45,12 @@ export function MeetingJoinNotification(props: Props) {
     cursor: pending ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 7,
     whiteSpace: "nowrap" as const,
   };
+  const joinButtonStyle = {
+    ...buttonStyle,
+    minWidth: 0,
+    flex: choices.hd ? "1 1 0" : "0 1 auto",
+  };
+  const hdButtonStyle = { ...buttonStyle, flex: "0 0 auto" };
   return (
     <div style={{ width: MEETING_JOIN_CARD_WIDTH, height: MEETING_JOIN_CARD_HEIGHT,
       transform: `scale(${scale})`, transformOrigin: "top left" }}>
@@ -75,14 +81,14 @@ export function MeetingJoinNotification(props: Props) {
           className="meeting-join-dismiss"
           style={{ background: "transparent", border: 0, color: "#999", padding: 4, cursor: "pointer", borderRadius: 5 }}><X size={16} /></button>
       </div>
-      <div className="meeting-join-controls" style={{ alignSelf: "flex-end", marginTop: "auto", display: "flex", alignItems: "center", borderRadius: 6, background: "#ebebeb", maxWidth: "100%" }}>
-        <button type="button" className="meeting-join-action" disabled={pending} onClick={() => void join(choices.join)} style={buttonStyle}>
+      <div className="meeting-join-controls" style={{ alignSelf: "flex-end", marginTop: "auto", display: "flex", alignItems: "center", borderRadius: 6, background: "#ebebeb", maxWidth: "100%", minWidth: 0 }}>
+        <button type="button" className="meeting-join-action" disabled={pending} onClick={() => void join(choices.join)} style={joinButtonStyle}>
           {provider ? <img src={`/images/meeting-providers/${provider}.png`} width={18} height={18} alt="" /> : <Video size={18} fill="currentColor" aria-hidden="true" />}
           <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{choices.join.label || ui("join and take notes")}</span>
         </button>
         {choices.hd && <>
           <span aria-hidden="true" style={{ width: 1, height: 20, flexShrink: 0, background: "#00000026" }} />
-          <button type="button" className="meeting-join-action" disabled={pending} onClick={() => void join(choices.hd!)} style={buttonStyle}
+          <button type="button" className="meeting-join-action" disabled={pending} onClick={() => void join(choices.hd!)} style={hdButtonStyle}
             aria-label={ui("Join and take notes with HD screen recording")}
             title={ui("Join and take notes with HD screen recording: more frequent screenshots for smoother replay. Uses more storage.")}>
             {ui("join + HD")}

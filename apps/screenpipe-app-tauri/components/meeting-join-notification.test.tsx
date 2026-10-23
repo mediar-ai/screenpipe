@@ -57,6 +57,16 @@ describe("shared desktop join card", () => {
     expect(screen.queryByText("join + HD")).toBeNull();
     expect(meetingJoinChoices([actions[0], { ...actions[1], url: "/unrelated" }])?.hd).toBeNull();
   });
+  it("keeps the HD choice visible while truncating a long join label", () => {
+    const longLabel = "join and take notes for the quarterly planning meeting";
+    render(<MeetingJoinNotification {...props}
+      actions={[{ ...actions[0], label: longLabel }, actions[1]]} onAction={vi.fn()} />);
+    const joinButton = screen.getByRole("button", { name: longLabel });
+    expect(joinButton.style.minWidth).toBe("0");
+    expect(joinButton.style.flexGrow).toBe("1");
+    expect(joinButton.querySelector("span")).toHaveStyle({ overflow: "hidden", textOverflow: "ellipsis" });
+    expect(screen.getByRole("button", { name: "Join and take notes with HD screen recording" })).toBeInTheDocument();
+  });
   it.each([
     ["https://meet.google.com/example", "googleMeet"], ["https://us02web.zoom.us/j/1", "zoom"],
     ["https://teams.microsoft.com/l/meetup-join/1", "teams"], ["https://example.webex.com/meet/test", "webex"],
