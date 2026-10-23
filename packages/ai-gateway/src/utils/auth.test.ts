@@ -521,6 +521,26 @@ describe('validateAuth — verified identities only', () => {
 		});
 	});
 
+  it('only propagates identity-matched website metadata and ignores caller tag headers', async () => {
+    const tags = { audience: 'enterprise', user_id_hash: 'a'.repeat(64), enterprise_id_hash: 'b'.repeat(64) };
+    verifyTokenMock.mockImplementation(async () => ({ sub: 'user_metadata' }) as any);
+    let subject = 'user_metadata';
+    let metadata: unknown = tags;
+    globalThis.fetch = mock(async () => Response.json({ success: true, user: {
+      clerk_id: subject, app_entitled: true, cloud_subscribed: true, subscription_plan: 'pro',
+      entitlement: { active: true, plan: 'pro', features: { app: true } }, training_metadata: metadata,
+    } })) as typeof fetch;
+    const request = requestFor('eyJ.metadata.clerk');
+    request.headers.set('X-Explabs-Tags', JSON.stringify({ audience: 'consumer', user_id_hash: 'forged' }));
+    expect((await validateAuth(request, env)).trainingMetadata).toEqual(tags);
+    __resetAuthEntitlementCacheForTests();
+    subject = 'other_account';
+    expect((await validateAuth(request, env)).trainingMetadata).toBeUndefined();
+    __resetAuthEntitlementCacheForTests();
+    subject = 'user_metadata'; metadata = { ...tags, user_id_hash: 'raw-user-id' };
+    expect((await validateAuth(request, env)).trainingMetadata).toBeUndefined();
+  });
+
   it('uses canonical Max and Ultra billing plans with desktop-compatible access labels', async () => {
     for (const [plan, accountPlan, usageTier] of [
       ['pro_max', 'business_max', 'business_max'],
