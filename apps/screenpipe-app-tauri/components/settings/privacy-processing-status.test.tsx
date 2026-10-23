@@ -2,7 +2,7 @@
 // https://screenpipe.com
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PrivacyProcessingStatus, PrivacyStatusView, type PrivacyQueueStatus } from "./privacy-processing-status";
 import { localFetch } from "@/lib/api";
 vi.mock("@/lib/api", () => ({ localFetch: vi.fn() }));
@@ -13,6 +13,21 @@ const status: PrivacyQueueStatus = { enabled:true,scope:"protected_capture_surfa
 ] };
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
 describe("privacy processing status", () => {
+  it("keeps queue counts visible while explanatory details are collapsed", () => {
+    render(<PrivacyStatusView status={status} unavailable={false} />);
+    const toggle = screen.getByRole("button", { name: "About these counts" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("12")).toBeVisible();
+    expect(screen.getByText("5")).toBeVisible();
+    expect(screen.queryByText(/This status covers privacy processing/)).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/This status covers privacy processing/)).toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("12")).toBeVisible();
+    expect(screen.getByText("5")).toBeVisible();
+  });
   it("shows pending text and images separately without claiming synced", () => {
     render(<PrivacyStatusView status={status} unavailable={false} />);
     expect(screen.getByRole("status").textContent).toBe("Privacy processing");
