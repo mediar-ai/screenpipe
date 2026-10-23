@@ -2799,6 +2799,7 @@ mod imp {
             use std::sync::Arc;
             struct CapturingLocal {
                 db: Arc<screenpipe_db::DatabaseManager>,
+                protected: Option<Arc<screenpipe_db::DatabaseManager>>,
                 change: u8,
                 reads: std::sync::atomic::AtomicUsize,
             }
@@ -2806,6 +2807,41 @@ mod imp {
             impl LocalApiClient for CapturingLocal {
                 async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
                     Ok(self.change == 5)
+                }
+
+                async fn fetch_release_page(
+                    &self,
+                    kind: &str,
+                    after: i64,
+                    cutoff: &str,
+                    end: Option<&str>,
+                    limit: u32,
+                ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError>
+                {
+                    let page = self
+                        .protected
+                        .as_ref()
+                        .unwrap()
+                        .release_export_range_page(kind, after, cutoff, end, limit)
+                        .await
+                        .unwrap();
+                    if kind == "frames" && !page.rows.as_array().unwrap().is_empty() {
+                        assert_eq!(
+                            self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+                            0
+                        );
+                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2026-10-09','new capture')").await.unwrap();
+                        let chunk = self
+                            .db
+                            .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
+                            .await
+                            .unwrap();
+                        self.db
+                            .compact_snapshots_queued(chunk, vec![(1, 0)])
+                            .await
+                            .unwrap();
+                    }
+                    Ok(page)
                 }
 
                 async fn begin_export(
@@ -2821,6 +2857,7 @@ mod imp {
                     _: u32,
                     _: u32,
                 ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    assert_ne!(self.change, 5, "protected exports must use certified pages");
                     let first = self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
                     let ids = if first { vec![1, 2] } else { vec![1, 2, 3] };
                     let payloads = self
@@ -2859,7 +2896,7 @@ mod imp {
                                     .await
                                     .unwrap();
                             }
-                            4 | 5 => {
+                            4 => {
                                 let chunk = self
                                     .db
                                     .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
@@ -2914,11 +2951,14 @@ mod imp {
                 if change == 5 {
                     db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
                         identity: "compaction-image-v1".into(),
-                        text: false,
+                        text: true,
                         images: true,
                     })
                     .await
                     .unwrap();
+                    for job in db.release_pending("frames", 10).await.unwrap() {
+                        assert!(db.publish_release(&job, &job.values).await.unwrap());
+                    }
                     let image = db.release_pending("image", 1).await.unwrap().remove(0);
                     assert_eq!(image.id, "2");
                     assert!(db.publish_image_release(&image).await.unwrap());
@@ -2934,8 +2974,22 @@ mod imp {
                     .await;
                 let cfg = sync::tests::test_cfg(&dir, format!("{}/ingest", server.uri()));
                 let mut cursor = sync::Cursor::default();
+                if change == 5 {
+                    cursor.privacy.insert(
+                        "frames".into(),
+                        sync::PrivacyCursor {
+                            sequence: 0,
+                            cutoff: "2026-10-09T00:00:00Z".into(),
+                        },
+                    );
+                }
                 let local = CapturingLocal {
                     db: db.clone(),
+                    protected: if change == 5 {
+                        Some(db.protected_reads().await.unwrap())
+                    } else {
+                        None
+                    },
                     change,
                     reads: std::sync::atomic::AtomicUsize::new(0),
                 };
@@ -2947,12 +3001,12 @@ mod imp {
                     _ => 2,
                 };
                 assert_eq!(result.unwrap().frames, expected);
-                assert_eq!(
-                    sync::Cursor::load(&cfg.cursor_path)
-                        .last_frame_ts
-                        .as_deref(),
-                    Some("2026-10-09T00:00:00Z")
-                );
+                let saved = sync::Cursor::load(&cfg.cursor_path);
+                if change == 5 {
+                    assert!(saved.privacy["frames"].sequence > 0);
+                } else {
+                    assert_eq!(saved.last_frame_ts.as_deref(), Some("2026-10-09T00:00:00Z"));
+                }
                 let requests = server.received_requests().await.unwrap();
                 if change != 3 {
                     let body = String::from_utf8_lossy(&requests[0].body);
