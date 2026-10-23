@@ -637,7 +637,7 @@ mod workflow_contribution_tests {
     }
     #[tokio::test]
     async fn full_redaction_output_is_not_rejected_by_the_old_eight_kilobyte_gate() {
-        let output = Box::leak("[REDACTED]".repeat(1000).into_boxed_str());
+        let output: &'static str = Box::leak("[REDACTED]".repeat(1000).into_boxed_str());
         let result = strict_workflow_redaction(
             &FakeRedactor(output),
             "Full workflow",
