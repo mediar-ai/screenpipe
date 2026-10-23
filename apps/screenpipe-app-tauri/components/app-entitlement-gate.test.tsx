@@ -166,6 +166,33 @@ describe("AppEntitlementGate", () => {
     vi.unstubAllEnvs();
   });
 
+  it("shows the branded loader until local settings are ready", () => {
+    mocks.state.isSettingsLoaded = false;
+
+    const { rerender } = render(
+      <AppEntitlementGate authenticationStatus="not_required">
+        {protectedApp}
+      </AppEntitlementGate>,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Starting Screenpipe…");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Turn what people know into what computers can scale",
+    );
+    expect(screen.queryByTestId("protected-app")).not.toBeInTheDocument();
+    expect(screen.queryByText(/checking local settings/i)).not.toBeInTheDocument();
+
+    mocks.state.isSettingsLoaded = true;
+    rerender(
+      <AppEntitlementGate authenticationStatus="not_required">
+        {protectedApp}
+      </AppEntitlementGate>,
+    );
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("protected-app")).toBeInTheDocument();
+  });
+
   it("starts the application without an account when authentication is not required", () => {
     render(
       <AppEntitlementGate authenticationStatus="not_required">
@@ -298,7 +325,11 @@ describe("AppEntitlementGate", () => {
       <AppEntitlementGate>{protectedApp}</AppEntitlementGate>,
     );
 
-    expect(screen.getByText(/checking access/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Starting Screenpipe…");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Turn what people know into what computers can scale",
+    );
+    expect(screen.queryByText(/checking access/i)).not.toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.stopScreenpipe).not.toHaveBeenCalled();
 
@@ -346,7 +377,11 @@ describe("AppEntitlementGate", () => {
       <AppEntitlementGate>{protectedApp}</AppEntitlementGate>,
     );
 
-    expect(screen.getByText(/checking enterprise access/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Starting Screenpipe…");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Turn what people know into what computers can scale",
+    );
+    expect(screen.queryByText(/checking enterprise access/i)).not.toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.stopScreenpipe).not.toHaveBeenCalled();
     expect(mocks.capture).not.toHaveBeenCalledWith(

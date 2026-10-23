@@ -37,6 +37,7 @@ import { useManagedPolicy } from "@/lib/hooks/use-managed-policy";
 import { isPrimaryWindow } from "@/lib/utils/is-primary-window";
 import { commands } from "@/lib/utils/tauri";
 import { EnterpriseLicensePrompt } from "@/components/enterprise-license-prompt";
+import { StartupLoader } from "@/components/startup-loader";
 import { useGT } from "gt-react";
 
 
@@ -691,12 +692,10 @@ export function AppEntitlementGate({
 
   if (!isSettingsLoaded) {
     return (
-      <EntitlementShell
-        title={ui("Loading")}
-        description={ui("Checking local settings before starting screenpipe.")}
-      >
-        <div className="h-10 w-full animate-pulse bg-muted" />
-      </EntitlementShell>
+      <StartupLoader
+        label={ui("Starting Screenpipe…")}
+        vision={ui("Turn what people know into what computers can scale")}
+      />
     );
   }
 
@@ -726,23 +725,19 @@ export function AppEntitlementGate({
       );
     }
     return (
-      <EntitlementShell
-        title={ui("Checking access")}
-        description={ui("Checking which screenpipe build is installed on this device.")}
-      >
-        <div className="h-10 w-full animate-pulse bg-muted" />
-      </EntitlementShell>
+      <StartupLoader
+        label={ui("Starting Screenpipe…")}
+        vision={ui("Turn what people know into what computers can scale")}
+      />
     );
   }
 
   if (isManagedDeployment && authenticationState === "checking") {
     return (
-      <EntitlementShell
-        title={ui("Checking enterprise access")}
-        description={ui("Checking this device for an existing account or enterprise key.")}
-      >
-        <div className="h-10 w-full animate-pulse bg-muted" />
-      </EntitlementShell>
+      <StartupLoader
+        label={ui("Starting Screenpipe…")}
+        vision={ui("Turn what people know into what computers can scale")}
+      />
     );
   }
 

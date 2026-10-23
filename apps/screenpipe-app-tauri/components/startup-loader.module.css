@@ -1,0 +1,68 @@
+/* screenpipe — AI that knows everything you've seen, said, or heard */
+/* https://screenpipe.com */
+
+.mark {
+  position: relative;
+  width: 232px;
+  height: 210px;
+}
+
+.mark img {
+  position: absolute;
+  left: 86px;
+  top: 75px;
+  width: 60px;
+  height: 60px;
+  animation: focus 4s ease-in-out infinite;
+}
+
+.fragment {
+  position: absolute;
+  left: 113px;
+  top: 102px;
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  opacity: 0;
+  animation: gather 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.vision {
+  width: 100%;
+  max-width: 390px;
+  margin-top: 20px;
+  font-family: Georgia, Baskerville, serif;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-wrap: balance;
+  animation: reveal 0.9s ease-out both;
+}
+
+@keyframes gather {
+  0% { transform: translate(var(--x), var(--y)) rotate(45deg); opacity: 0; }
+  15% { opacity: 0.6; }
+  58% { transform: translate(0, 0) rotate(0); opacity: 0.25; }
+  75%, 100% { transform: translate(0, 0); opacity: 0; }
+}
+
+@keyframes focus {
+  0%, 100% { opacity: 0.4; transform: scale(0.94); }
+  55%, 80% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fragment {
+    display: none;
+  }
+
+  .mark img,
+  .vision {
+    animation: none;
+  }
+}
