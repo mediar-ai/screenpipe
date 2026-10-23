@@ -1098,7 +1098,7 @@ pub(crate) fn resume_deferred_account_start(app: tauri::AppHandle) {
     });
 }
 
-/// Schedule one bounded native recovery request for this intent generation.
+/// Schedule one paced native recovery request for this intent generation.
 /// Policy refresh remains free to revoke access while startup is retrying.
 #[cfg(feature = "enterprise-support")]
 pub(crate) async fn resume_enterprise_recording(app: &tauri::AppHandle) {
@@ -1155,6 +1155,14 @@ pub(crate) async fn resume_enterprise_recording(app: &tauri::AppHandle) {
                         Ok(())
                     })
                     .await
+                    .map_err(|error| {
+                        recovery_log::append(
+                            &crate::db_relaunch::active_data_dir(),
+                            "enterprise_start_retry_failed",
+                            &error,
+                        );
+                        error
+                    })
                 },
                 &delays,
             )

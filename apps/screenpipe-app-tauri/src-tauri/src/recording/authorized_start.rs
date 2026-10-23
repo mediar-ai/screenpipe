@@ -61,7 +61,7 @@ impl Recovery {
         retry_delays: &[Duration],
     ) -> Result<(), String> {
         let _owner = self.owner.lock().await;
-        let mut attempts = 0;
+        let mut attempts = 0usize;
         loop {
             if !self.is_current(generation) || !should_start() {
                 self.finish(generation);
@@ -73,11 +73,12 @@ impl Recovery {
                     return Ok(());
                 }
                 Err(error) => {
-                    let Some(delay) = retry_delays.get(attempts) else {
+                    let Some(delay) = retry_delays.get(attempts).or_else(|| retry_delays.last())
+                    else {
                         self.finish(generation);
                         return Err(error);
                     };
-                    attempts += 1;
+                    attempts = attempts.saturating_add(1);
                     tracing::warn!("enterprise: recording start failed; native retry {attempts} in {delay:?}: {error}");
                     // Do not hold the recorder lifecycle during backoff. A stop
                     // cancels this generation and wakes its owner immediately.
@@ -174,33 +175,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn repeated_failure_exhausts_one_paced_budget() {
+    async fn recovery_continues_past_initial_delays_until_prerequisite_recovers() {
         let recovery = Recovery::default();
         let attempts = AtomicUsize::new(0);
         let started = tokio::time::Instant::now();
-        let result = recovery
-            .run(
-                0,
-                || true,
-                || async {
-                    attempts.fetch_add(1, Ordering::SeqCst);
-                    Err("unavailable".into())
-                },
-                &SHORT_RETRY,
-            )
-            .await;
-        assert_eq!(result, Err("unavailable".into()));
-        assert_eq!(attempts.load(Ordering::SeqCst), 3);
-        assert!(started.elapsed() >= SHORT_RETRY.iter().sum::<Duration>());
         recovery
             .run(
                 0,
                 || true,
-                || async { panic!("exhausted request restarted") },
+                || async {
+                    if attempts.fetch_add(1, Ordering::SeqCst) < 4 {
+                        Err("unavailable".into())
+                    } else {
+                        Ok(())
+                    }
+                },
                 &SHORT_RETRY,
             )
             .await
             .unwrap();
+        assert_eq!(attempts.load(Ordering::SeqCst), 5);
+        assert!(
+            started.elapsed() >= SHORT_RETRY[0] + SHORT_RETRY[1].saturating_mul(3),
+            "retries after the initial schedule must retain the terminal cadence"
+        );
     }
 
     #[tokio::test]
