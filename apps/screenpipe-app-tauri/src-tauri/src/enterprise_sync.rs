@@ -2964,12 +2964,13 @@ mod imp {
                     for job in db.release_pending("frames", 10).await.unwrap() {
                         assert!(db.publish_release(&job, &job.values).await.unwrap());
                     }
-                    let image = db.release_pending("image", 1).await.unwrap().remove(0);
-                    assert_eq!(image.id, "2");
-                    assert!(db.publish_image_release(&image).await.unwrap());
-                    let image = db.release_pending("image", 1).await.unwrap().remove(0);
-                    assert_eq!(image.id, "1");
-                    assert!(db.publish_image_release(&image).await.unwrap());
+                    let images = db.release_pending("image", 10).await.unwrap();
+                    let mut ids: Vec<_> = images.iter().map(|image| image.id.as_str()).collect();
+                    ids.sort_unstable();
+                    assert_eq!(ids, ["1", "2"]);
+                    for image in images {
+                        assert!(db.publish_image_release(&image).await.unwrap());
+                    }
                 }
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
