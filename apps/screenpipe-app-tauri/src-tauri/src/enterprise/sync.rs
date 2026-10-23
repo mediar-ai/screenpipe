@@ -1600,6 +1600,22 @@ async fn run_one_sync_page(
     {
         if protected {
             if let Some(token) = &export {
+                token
+                    .filter(
+                        &mut ExportRows {
+                            frames: &mut frames,
+                            audio: &mut audio,
+                            ui: &mut ui,
+                            snapshots: &mut snapshots,
+                            memories: &mut memories,
+                            parsed: &mut parsed,
+                            activities: &mut activities,
+                            starred: &mut starred,
+                            feedback: &mut feedback,
+                        },
+                        local,
+                    )
+                    .await?;
                 drop(token.admit().await?);
             }
             cursor.privacy = privacy_next;
