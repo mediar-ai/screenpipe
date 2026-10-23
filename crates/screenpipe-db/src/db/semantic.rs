@@ -81,6 +81,12 @@ pub struct SemanticContextQuery {
     pub order: Order,
 }
 
+impl SemanticContextQuery {
+    /// Existing local-search page budget, applied before hydrating item bodies.
+    /// Pagination callers must use this boundary to recognize a full page.
+    pub const MAX_PAGE_SIZE: u32 = 100;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, OaSchema)]
 pub struct SemanticActorAlias {
     pub id: i64,
@@ -561,7 +567,7 @@ impl DatabaseManager {
             Order::Descending => sql.push("ORDER BY f.timestamp DESC, f.id DESC "),
         };
         sql.push("LIMIT ")
-            .push_bind(query.limit.clamp(1, 100))
+            .push_bind(query.limit.clamp(1, SemanticContextQuery::MAX_PAGE_SIZE))
             .push(" OFFSET ")
             .push_bind(query.offset);
 
