@@ -17,6 +17,7 @@ mod tests;
 use super::{storage_error, HybridStorage};
 pub(crate) use connection::{pool_options, register as register_connection};
 pub(crate) use connection::{register_hash, register_hash_extension};
+pub(crate) use elements::retention::mutate as mutate_retention_elements;
 pub(super) use lifecycle::export;
 pub(super) use schema::{
     bootstrap, bootstrap_in_place, ensure_cleanup_indexes, finish_indexes, upgrade_recording,

@@ -5,6 +5,7 @@
 //! per-frame range references, relationship counts, and the live FTS index.
 
 mod lifecycle;
+pub(crate) mod retention;
 mod vtab;
 
 use super::{integer, real, text, Column, Kind, Table};
