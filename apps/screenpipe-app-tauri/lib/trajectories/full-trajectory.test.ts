@@ -197,6 +197,28 @@ describe("full Workflows trajectory collection", () => {
     expect(JSON.parse(encoded)).toEqual({ text: "[OVERSIZED TOKEN REDACTED]", keep: "Remaining conversation" });
     expect([...redactionSegments(encoded)].join("")).toBe(encoded);
   });
+  it("reports metadata setup failures through redacted support logs and resumes retained work", async () => {
+    browserLogs.reset(); support.write.mockClear();
+    const f = fixture();
+    f.ports.report.mockImplementation(evidence => writeBrowserLogNow("error", JSON.stringify(evidence)));
+    f.ports.request.mockImplementation(async method => {
+      if (method === "POST") throw Object.assign(new Error("PRIVATE database response"), {
+        code: "training_metadata_storage_unavailable", originCode: "42703",
+      });
+      return f.status;
+    });
+    try {
+      await f.collector.completeFull(f.ticket, [{ text: "PRIVATE" }]);
+      const report = JSON.stringify(support.write.mock.calls);
+      for (const text of ["training_metadata_storage_unavailable", "42703", "pending", "uploadedParts", "migration"]) expect(report).toContain(text);
+      expect(report).not.toContain("PRIVATE"); expect(report).not.toContain("SECRET_BEARER");
+      expect(f.jobs.size).toBe(1);
+      f.ports.request.mockImplementation(async () => ({ ...f.status, accepted: true }));
+      await createFullTrajectoryCollector(f.ports).resume();
+      expect(f.jobs.size).toBe(0);
+    } finally { browserLogs.reset(); }
+  });
+
   it("preserves upload failure and progress in the normal redacted support evidence", async () => {
     browserLogs.reset(); support.write.mockClear();
     const f = fixture();
