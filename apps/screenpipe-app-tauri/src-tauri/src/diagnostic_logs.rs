@@ -579,6 +579,73 @@ mod tests {
         assert!(!report.contains("private-person@example.com"));
     }
 
+    #[cfg(feature = "enterprise-build")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn image_source_revocation_and_recovery_survive_support_collection() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = screenpipe_db::DatabaseManager::new(
+            dir.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+            identity: "image-test-v1".into(),
+            text: false,
+            images: true,
+        })
+        .await
+        .unwrap();
+        db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,snapshot_path) VALUES(1,'2026-10-16','private-person@example.com.jpg')").await.unwrap();
+        let job = db.release_pending("image", 1).await.unwrap().remove(0);
+        assert!(db.publish_image_release(&job).await.unwrap());
+        let export = db.storage_export_token().await.unwrap();
+        db.execute_raw_sql_write("UPDATE frames SET snapshot_path='replacement.jpg' WHERE id=1")
+            .await
+            .unwrap();
+        let error = export.admit(&db.pool).await.unwrap_err();
+        let job = db.release_pending("image", 1).await.unwrap().remove(0);
+        // Send the real database failure through the production sync worker,
+        // retry retention, recovery acknowledgement and support upload path.
+        let uploaded = crate::enterprise::sync::tests::check_sync_retry_failure_with_cause(
+            dir.path(),
+            Some(&error.to_string()),
+        )
+        .await;
+        assert!(uploaded.contains("privacy revision changed"));
+        assert!(uploaded.contains("pending data retained"));
+        let current = dir.path().join("screenpipe-app.log");
+        drop(export);
+        db.close().await;
+        tokio::fs::rename(&current, dir.path().join("screenpipe-app.2026-10-23.1.log"))
+            .await
+            .unwrap();
+        let db = screenpipe_db::DatabaseManager::new(
+            dir.path().join("db.sqlite").to_str().unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        assert!(db.publish_image_release(&job).await.unwrap());
+        let export = db.storage_export_token().await.unwrap();
+        drop(export.admit(&db.pool).await.unwrap());
+        drop(export);
+        db.close().await;
+        tokio::fs::write(
+            &current,
+            "INFO recorder restarted contact=private-person@example.com\n",
+        )
+        .await
+        .unwrap();
+        let report = collect_redacted_from_dirs(&[dir.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert!(report.contains("privacy revision changed"));
+        assert!(report.contains("pending data retained"));
+        assert!(report.contains("recorder restarted"));
+        assert!(!report.contains("private-person@example.com"));
+    }
+
     #[cfg(feature = "enterprise-support")]
     #[tokio::test(flavor = "current_thread")]
     async fn protected_upload_revocation_survives_collected_support_redaction() {

@@ -5606,6 +5606,13 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn check_sync_retry_failure(log_dir: &std::path::Path) -> String {
+        check_sync_retry_failure_with_cause(log_dir, None).await
+    }
+
+    pub(crate) async fn check_sync_retry_failure_with_cause(
+        log_dir: &std::path::Path,
+        cause: Option<&str>,
+    ) -> String {
         let _env_lock = ENV_LOCK.lock().unwrap();
         let _mode_env = UploadModeEnvGuard::clear();
         let server = wiremock::MockServer::start().await;
@@ -5652,7 +5659,12 @@ pub(crate) mod tests {
         }
 
         let dir = TempDir::new().unwrap();
-        let cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", server.uri()));
+        let mut cfg = test_cfg(&dir, format!("{}/api/enterprise/ingest", server.uri()));
+        if cause.is_some() {
+            // The caller reopens and recollects after this helper returns.
+            // Keep the production-retained failure in its surviving directory.
+            cfg.cursor_path = log_dir.join("cursor.json");
+        }
         let cursor_path = cfg.cursor_path.clone();
         let mut diagnostic_cfg = cfg.clone();
         diagnostic_cfg.log_dirs = vec![log_dir.to_path_buf()];
@@ -5690,12 +5702,13 @@ pub(crate) mod tests {
                     } else {
                         "prepare export"
                     },
-                    cause: if attempt % 2 == 0 {
-                        "database disk image is malformed"
-                    } else {
-                        "frame storage: payload read deadline exceeded"
-                    }
-                    .into(),
+                    cause: cause
+                        .unwrap_or(if attempt % 2 == 0 {
+                            "database disk image is malformed"
+                        } else {
+                            "frame storage: payload read deadline exceeded"
+                        })
+                        .into(),
                 }))
                 .unwrap();
             tokio::time::timeout(Duration::from_secs(10), async {
@@ -5774,8 +5787,12 @@ pub(crate) mod tests {
             .unwrap();
         let logged = std::fs::read_to_string(log_path).unwrap();
         assert!(logged.contains("enterprise upload storage prepare export failed"));
-        assert!(logged.contains("frame storage: payload read deadline exceeded"));
-        assert!(logged.contains("database disk image is malformed"));
+        if let Some(cause) = cause {
+            assert!(logged.contains(cause));
+        } else {
+            assert!(logged.contains("frame storage: payload read deadline exceeded"));
+            assert!(logged.contains("database disk image is malformed"));
+        }
         assert!(logged.contains("pending work retained, retrying in 300s"));
         assert!(!logged.contains("backing off 3600s"));
         String::from_utf8(diagnostic.body.clone()).unwrap()

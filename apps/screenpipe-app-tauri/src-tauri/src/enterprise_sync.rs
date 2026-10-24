@@ -3558,11 +3558,51 @@ mod imp {
             use std::sync::Arc;
             struct CapturingLocal {
                 db: Arc<screenpipe_db::DatabaseManager>,
+                protected: Option<Arc<screenpipe_db::DatabaseManager>>,
                 change: u8,
                 reads: std::sync::atomic::AtomicUsize,
             }
             #[async_trait::async_trait]
             impl LocalApiClient for CapturingLocal {
+                async fn privacy_release_required(&self) -> Result<bool, EnterpriseSyncError> {
+                    Ok(self.change == 5)
+                }
+
+                async fn fetch_release_page(
+                    &self,
+                    kind: &str,
+                    after: i64,
+                    cutoff: &str,
+                    end: Option<&str>,
+                    limit: u32,
+                ) -> Result<screenpipe_db::privacy_release::ReleasePage, EnterpriseSyncError>
+                {
+                    let page = self
+                        .protected
+                        .as_ref()
+                        .unwrap()
+                        .release_export_range_page(kind, after, cutoff, end, limit)
+                        .await
+                        .unwrap();
+                    if kind == "frames" && !page.rows.as_array().unwrap().is_empty() {
+                        assert_eq!(
+                            self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+                            0
+                        );
+                        self.db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(3,'2026-10-09','new capture')").await.unwrap();
+                        let chunk = self
+                            .db
+                            .insert_video_chunk_with_fps("compacted.mp4", "test", 1.0)
+                            .await
+                            .unwrap();
+                        self.db
+                            .compact_snapshots_queued(chunk, vec![(1, 0)])
+                            .await
+                            .unwrap();
+                    }
+                    Ok(page)
+                }
+
                 async fn begin_export(
                     &self,
                 ) -> Result<Option<Box<dyn ExportFilter>>, EnterpriseSyncError> {
@@ -3576,6 +3616,7 @@ mod imp {
                     _: u32,
                     _: u32,
                 ) -> Result<Vec<FrameRow>, EnterpriseSyncError> {
+                    assert_ne!(self.change, 5, "protected exports must use certified pages");
                     let first = self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
                     let ids = if first { vec![1, 2] } else { vec![1, 2, 3] };
                     let payloads = self
@@ -3640,7 +3681,7 @@ mod imp {
                     Ok(Vec::new())
                 }
             }
-            for (change, hybrid) in (0..5).flat_map(|change| [(change, false), (change, true)]) {
+            for (change, hybrid) in (0..6).flat_map(|change| [(change, false), (change, true)]) {
                 let dir = tempfile::tempdir().unwrap();
                 let db = Arc::new(if hybrid {
                     // Synthetic export fixture; disk admission is covered by
@@ -3663,8 +3704,27 @@ mod imp {
                     .unwrap()
                 });
                 db.execute_raw_sql_write("INSERT INTO frames(id,timestamp,full_text) VALUES(1,'2026-10-09','pending upload'),(2,'2026-10-09','surviving record')").await.unwrap();
-                if change == 4 {
+                if change >= 4 {
                     db.execute_raw_sql_write("UPDATE frames SET snapshot_path='redacted.jpg',full_text_redacted_at=1,image_redacted_at=1 WHERE id=1").await.unwrap();
+                }
+                if change == 5 {
+                    db.configure_release(&screenpipe_db::privacy_release::ReleasePolicy {
+                        identity: "compaction-image-v1".into(),
+                        text: true,
+                        images: true,
+                    })
+                    .await
+                    .unwrap();
+                    for job in db.release_pending("frames", 10).await.unwrap() {
+                        assert!(db.publish_release(&job, &job.values).await.unwrap());
+                    }
+                    let images = db.release_pending("image", 10).await.unwrap();
+                    let mut ids: Vec<_> = images.iter().map(|image| image.id.as_str()).collect();
+                    ids.sort_unstable();
+                    assert_eq!(ids, ["1", "2"]);
+                    for image in images {
+                        assert!(db.publish_image_release(&image).await.unwrap());
+                    }
                 }
                 let server = wiremock::MockServer::start().await;
                 wiremock::Mock::given(wiremock::matchers::path("/ingest"))
@@ -3674,8 +3734,22 @@ mod imp {
                     .await;
                 let cfg = sync::tests::test_cfg(&dir, format!("{}/ingest", server.uri()));
                 let mut cursor = sync::Cursor::default();
+                if change == 5 {
+                    cursor.privacy.insert(
+                        "frames".into(),
+                        sync::PrivacyCursor {
+                            sequence: 0,
+                            cutoff: "2026-10-09T00:00:00Z".into(),
+                        },
+                    );
+                }
                 let local = CapturingLocal {
                     db: db.clone(),
+                    protected: if change == 5 {
+                        Some(db.protected_reads().await.unwrap())
+                    } else {
+                        None
+                    },
                     change,
                     reads: std::sync::atomic::AtomicUsize::new(0),
                 };
@@ -3687,12 +3761,12 @@ mod imp {
                     _ => 2,
                 };
                 assert_eq!(result.unwrap().frames, expected);
-                assert_eq!(
-                    sync::Cursor::load(&cfg.cursor_path)
-                        .last_frame_ts
-                        .as_deref(),
-                    Some("2026-10-09T00:00:00Z")
-                );
+                let saved = sync::Cursor::load(&cfg.cursor_path);
+                if change == 5 {
+                    assert!(saved.privacy["frames"].sequence > 0);
+                } else {
+                    assert_eq!(saved.last_frame_ts.as_deref(), Some("2026-10-09T00:00:00Z"));
+                }
                 let requests = server.received_requests().await.unwrap();
                 if change != 3 {
                     let body = String::from_utf8_lossy(&requests[0].body);
@@ -3701,10 +3775,10 @@ mod imp {
                         !body.contains("new capture"),
                         "new rows belong to the next page"
                     );
-                    assert_eq!(body.contains("pending upload"), matches!(change, 0 | 4));
+                    assert_eq!(body.contains("pending upload"), matches!(change, 0 | 4 | 5));
                     assert_eq!(body.contains("[REDACTED]"), change == 2);
                 }
-                if hybrid && change == 4 {
+                if (hybrid && change == 4) || change == 5 {
                     assert_eq!(
                         local.reads.load(std::sync::atomic::Ordering::SeqCst),
                         1,

@@ -303,10 +303,38 @@ impl DatabaseManager {
                 } else {
                     mutation
                 };
-                let create = format!("CREATE TRIGGER privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
+                let create_trigger = |when: &str| {
+                    format!("CREATE TRIGGER privacy_{kind}_{event} AFTER {clause} ON {table} {when} BEGIN
                   UPDATE _privacy_policy SET epoch=epoch+1,revocation=revocation+1 WHERE EXISTS(SELECT 1 FROM _privacy_release WHERE kind='{kind}' AND id=CAST({id} AS TEXT) AND policy IS NOT NULL);
                   {mutation}
-                  END");
+                  END")
+                };
+                let old_image_update =
+                    (kind == "image" && event == "UPDATE").then(|| create_trigger(&when));
+                let create = if old_image_update.is_some() {
+                    let changed = watched
+                        .iter()
+                        .map(|column| {
+                            let changed = format!("NEW.\"{column}\" IS NOT OLD.\"{column}\"");
+                            if *column == "snapshot_path" {
+                                format!(
+                                    "({changed} AND NOT ({} AND EXISTS(SELECT 1 FROM _privacy_release r JOIN _privacy_policy p ON CAST(p.receipt_key AS TEXT)=r.policy WHERE r.kind='image' AND r.id=CAST(NEW.id AS TEXT))))",
+                                    crate::storage::read_schema::SNAPSHOT_MEDIA_RELOCATION
+                                )
+                            } else {
+                                changed
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" OR ");
+                    // Relocation preserves the image receipt. A simultaneous
+                    // name or timestamp edit still invalidates that receipt.
+                    // Pending inference must restart against the new locator:
+                    // it may still be processing the JPEG that compaction moved.
+                    create_trigger(&format!("WHEN {active} AND ({changed}){maintenance}"))
+                } else {
+                    create_trigger(&when)
+                };
                 let existing: Option<String> = sqlx::query_scalar(
                     "SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?",
                 )
@@ -317,7 +345,11 @@ impl DatabaseManager {
                 // triggers invalidates cached FTS/write statements in other
                 // pooled connections and adds needless schema-lock work.
                 if existing.as_deref() != Some(create.as_str()) {
-                    changed_contract |= existing.is_some();
+                    // This exact installed image contract already certified all
+                    // watched values. Removing its relocation false positive
+                    // adds no coverage and needs no historical reprocessing.
+                    changed_contract |=
+                        existing.is_some() && existing.as_deref() != old_image_update.as_deref();
                     schema_changed = true;
                     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
                         "DROP TRIGGER IF EXISTS privacy_{kind}_{event}; {create};"
